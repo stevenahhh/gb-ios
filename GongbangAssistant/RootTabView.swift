@@ -1,15 +1,23 @@
 import SwiftUI
 
-enum AppTab: Hashable {
+enum AppTab: String, Hashable {
     case today
     case calendar
     case operations
-    case more
+    case settings
+}
+
+enum AssistantLaunch: String, Identifiable {
+    case text
+    case voice
+
+    var id: Self { self }
 }
 
 struct RootTabView: View {
-    @State private var selection: AppTab = .today
-    @State private var isAssistantPresented = false
+    @SceneStorage("root.tab") private var selection: AppTab = .today
+    @State private var assistant: AssistantLaunch?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TabView(selection: $selection) {
@@ -22,19 +30,21 @@ struct RootTabView: View {
             Tab("운영", systemImage: "square.grid.2x2", value: AppTab.operations) {
                 OperationsView()
             }
-            Tab("더보기", systemImage: "ellipsis", value: AppTab.more) {
-                MoreView()
+            .badge(SampleData.attentionCount)
+            Tab("설정", systemImage: "gearshape", value: AppTab.settings) {
+                SettingsView()
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory(isEnabled: selection == .today) {
-            AssistantAccessory {
-                isAssistantPresented = true
-            }
+        .tabBarMinimizeBehavior(reduceMotion ? .never : .onScrollDown)
+        .tabViewBottomAccessory {
+            AssistantAccessory(
+                openText: { assistant = .text },
+                openVoice: { assistant = .voice }
+            )
         }
-        .sheet(isPresented: $isAssistantPresented) {
-            AssistantSheet()
+        .sheet(item: $assistant) { launch in
+            AssistantSheet(launch: launch)
         }
     }
 }

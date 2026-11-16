@@ -1,11 +1,11 @@
 import XCTest
 
 final class TabNavigationUITests: XCTestCase {
-    private let tabs: [(label: String, title: String)] = [
-        ("오늘", "사장님, 좋은 아침이에요"),
+    private let tabs: [(label: String, titlePrefix: String)] = [
+        ("오늘", "사장님"),
         ("캘린더", "캘린더"),
         ("운영", "운영"),
-        ("더보기", "더보기"),
+        ("설정", "설정"),
     ]
 
     override func setUpWithError() throws {
@@ -21,7 +21,8 @@ final class TabNavigationUITests: XCTestCase {
             let button = app.tabBars.buttons[tab.label]
             XCTAssertTrue(button.waitForExistence(timeout: 5), "tab \(tab.label) is missing")
             button.tap()
-            XCTAssertTrue(app.navigationBars[tab.title].waitForExistence(timeout: 5), "navigation title \(tab.title) is missing")
+            let title = app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH %@", tab.titlePrefix)).firstMatch
+            XCTAssertTrue(title.waitForExistence(timeout: 5), "navigation title starting with \(tab.titlePrefix) is missing")
             keepScreenshot(of: app, named: "tab-\(tab.label)")
         }
     }
@@ -33,6 +34,9 @@ final class TabNavigationUITests: XCTestCase {
 
         app.tabBars.buttons["운영"].tap()
         let bookingsRow = app.buttons["operations.bookings"]
+        if !bookingsRow.waitForExistence(timeout: 3) {
+            app.swipeUp()
+        }
         XCTAssertTrue(bookingsRow.waitForExistence(timeout: 5))
         bookingsRow.tap()
 
@@ -47,7 +51,40 @@ final class TabNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testAssistantAccessoryBelongsToTodayTab() throws {
+    func testStatusFilterAndSearchNarrowTheList() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.tabBars.buttons["운영"].tap()
+        let deliveriesRow = app.buttons["operations.deliveries"]
+        if !deliveriesRow.waitForExistence(timeout: 3) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(deliveriesRow.waitForExistence(timeout: 5))
+        deliveriesRow.tap()
+
+        let packing = element(labelled: "머그컵 2종 세트", in: app)
+        let delivered = element(labelled: "핸드메이드 머그컵", in: app)
+        XCTAssertTrue(packing.waitForExistence(timeout: 5))
+
+        app.segmentedControls.buttons["완료"].tap()
+        XCTAssertTrue(delivered.waitForExistence(timeout: 5))
+        XCTAssertTrue(packing.waitForNonExistence(timeout: 5))
+
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("없는주문")
+        XCTAssertTrue(delivered.waitForNonExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func element(labelled text: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    @MainActor
+    func testAssistantIsReachableFromEveryTab() throws {
         let app = XCUIApplication()
         app.launch()
 
@@ -56,10 +93,9 @@ final class TabNavigationUITests: XCTestCase {
 
         app.tabBars.buttons["캘린더"].tap()
         XCTAssertTrue(app.navigationBars["캘린더"].waitForExistence(timeout: 5))
-        XCTAssertFalse(accessory.exists)
-
-        app.tabBars.buttons["오늘"].tap()
         XCTAssertTrue(accessory.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["assistant.voice"].exists)
+
         accessory.tap()
         XCTAssertTrue(app.navigationBars["비서"].waitForExistence(timeout: 5))
         keepScreenshot(of: app, named: "assistant-sheet")

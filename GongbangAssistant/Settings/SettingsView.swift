@@ -1,24 +1,26 @@
 import SwiftUI
 
-struct MoreView: View {
+struct SettingsView: View {
     private struct Row: Identifiable {
         let title: String
         let systemImage: String
         var id: String { title }
     }
 
-    private let workRows = [
-        Row(title: "기회", systemImage: "sparkles"),
-        Row(title: "리포트", systemImage: "chart.bar.xaxis"),
+    private let studioRows = [
+        Row(title: "공방 정보", systemImage: "storefront"),
+        Row(title: "예약·환불 규정", systemImage: "doc.text"),
+        Row(title: "고객 안내 문구", systemImage: "text.bubble"),
+        Row(title: "채널 연결", systemImage: "link"),
     ]
 
-    private let settingRows = [
-        Row(title: "공방 정보", systemImage: "storefront"),
-        Row(title: "규정", systemImage: "doc.text"),
-        Row(title: "알림 문구", systemImage: "text.bubble"),
-        Row(title: "연결", systemImage: "link"),
+    private let teamRows = [
         Row(title: "직원·권한", systemImage: "person.2"),
-        Row(title: "내 계정", systemImage: "person.crop.circle"),
+    ]
+
+    private let personalRows = [
+        Row(title: "알림", systemImage: "bell"),
+        Row(title: "계정", systemImage: "person.crop.circle"),
     ]
 
     var body: some View {
@@ -38,14 +40,19 @@ struct MoreView: View {
                             .font(.largeTitle)
                             .foregroundStyle(.tint)
                     }
+                    .accessibilityElement(children: .combine)
                 }
 
-                Section("공방 운영") {
-                    rows(workRows)
+                Section("공방") {
+                    rows(studioRows)
                 }
 
-                Section("설정") {
-                    rows(settingRows)
+                Section("팀") {
+                    rows(teamRows)
+                }
+
+                Section("나") {
+                    rows(personalRows)
                 }
 
                 Section {
@@ -53,7 +60,7 @@ struct MoreView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("더보기")
+            .navigationTitle("설정")
         }
     }
 
@@ -69,5 +76,5 @@ struct MoreView: View {
 }
 
 #Preview {
-    MoreView()
+    SettingsView()
 }

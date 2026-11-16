@@ -1,12 +1,12 @@
 # 공방 AI 비서 iOS 목업
 
-공방 AI 비서 사장님용 대시보드를 SwiftUI로 옮긴 화면 골격입니다. 탭 바와 내비게이션 바, 화면 배치를 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)대로 짰습니다. 데이터는 Figma 프레임에서 옮긴 고정 샘플이고 업무 로직, 서버, AI는 아직 붙이지 않았습니다. 버튼은 눌러도 아직 아무 동작이 없는 껍데기입니다. Swift Package나 CocoaPods 같은 외부 의존성은 하나도 없습니다.
+공방 AI 비서 사장님용 대시보드를 SwiftUI로 옮긴 화면 골격입니다. 탭 바와 내비게이션 바, 화면 배치를 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)대로 짰습니다. 데이터는 Figma 프레임에서 옮긴 고정 샘플이고 업무 로직, 서버, AI는 아직 붙이지 않았습니다. Swift Package나 CocoaPods 같은 외부 의존성은 0개입니다.
 
 ## 스크린샷
 
-| 오늘 | 캘린더 | 운영 | 예약 관리 |
+| 오늘 | 캘린더 (주간) | 운영 | 예약 관리 |
 |---|---|---|---|
-| <img src="docs/screenshots/today.png" alt="오늘 탭 화면" width="200"> | <img src="docs/screenshots/calendar.png" alt="캘린더 탭 월간 화면" width="200"> | <img src="docs/screenshots/operations.png" alt="운영 탭 전체 현황 화면" width="200"> | <img src="docs/screenshots/bookings.png" alt="예약 관리 화면" width="200"> |
+| <img src="docs/screenshots/today.png" alt="오늘 탭 화면" width="200"> | <img src="docs/screenshots/calendar.png" alt="캘린더 탭 주간 화면" width="200"> | <img src="docs/screenshots/operations.png" alt="운영 탭 전체 현황 화면" width="200"> | <img src="docs/screenshots/bookings.png" alt="예약 관리 화면" width="200"> |
 
 | iPad | 다크 모드 |
 |---|---|
@@ -33,16 +33,51 @@
 
 | 탭 | SF Symbol | 내용 |
 |---|---|---|
-| 오늘 | house | 큰 제목 "사장님, 좋은 아침이에요", 날짜 부제, 숫자 3개, 오늘 할 일 / SNS·스토어 / 배송 / AI 추천 세그먼트, 그룹 목록 |
-| 캘린더 | calendar | 월간/주간 전환, 시스템 월 달력(UICalendarView), 선택한 날의 일정 목록 |
-| 운영 | square.grid.2x2 | 75% 링, 숫자 4개, 전월 대비 수치, "먼저 확인해주세요", "전체 업무 관리" 목록 |
-| 더보기 | ellipsis | 설정 화면 같은 목록. 항목을 누르면 빈 화면이 열립니다 |
+| 오늘 | house | 시간대에 맞춘 인사 제목, 날짜와 마지막 업데이트 시각 부제, 숫자 3개, 할 일 / 채널 / 배송 / 비서 추천 세그먼트, 그룹 목록 |
+| 캘린더 | calendar | 주간 보기가 기본이고 한 번 누르면 월간 보기, 선택한 날의 일정 |
+| 운영 | square.grid.2x2 | 배지 7, "먼저 확인해주세요", 11월 운영 현황, 전체 업무 관리, 공방 성장 |
+| 설정 | gearshape | 공방 정보, 예약·환불 규정, 고객 안내 문구, 채널 연결, 직원·권한, 알림, 계정, 도움말 |
 
-오늘 탭에만 탭 바 위로 "AI에게 물어보세요" 막대가 붙습니다. 이 막대를 누르면 비서 시트가 올라옵니다. 캘린더의 점 색은 일정 종류를 나타냅니다. 예약은 파랑, 주문은 주황, 배송은 초록, 할 일은 보라입니다.
+### 오늘
 
-운영 탭의 "전체 업무 관리"에서는 예약 관리, 주문 관리, 배송 관리, SNS·스토어 관리 화면으로 넘어갑니다. 네 화면 모두 검색창과 상태 필터, 카드 목록을 갖췄습니다. 더보기 탭은 아직 Figma 프레임이 없어서 임시로 만든 화면입니다.
+제목 인사말은 시간대에 따라 바뀝니다. 아침에는 "사장님, 좋은 아침이에요"라고 인사합니다. 화면을 아래로 당기면 새로 고침이 일어납니다. 예약 행의 체크 버튼을 누르거나 행을 오른쪽으로 밀면 완료로 바꾸면서 햅틱을 울립니다.
 
-iPad에서는 탭이 화면 위쪽 막대로 올라갑니다. 다크 모드에서는 시스템 색을 그대로 씁니다.
+### 비서 막대
+
+"비서에게 물어보세요" 막대는 모든 탭에서 탭 바 위에 붙어 있습니다. 막대를 누르면 비서 시트가 올라옵니다. 시트가 열리면 커서가 바로 입력창에 놓이고 추천 질문 세 개가 보입니다. 입력창 아래에는 "비서가 틀릴 수 있어요"라는 문구를 넣었습니다. 막대의 마이크 버튼은 시트를 음성 모드로 엽니다. 이 모드에서는 키보드의 받아쓰기 키를 쓰라고 안내합니다. 질문에 답하는 기능은 아직 연결하지 않았습니다.
+
+### 캘린더
+
+일정 종류는 색과 기호로 구분합니다.
+
+| 종류 | 색 | SF Symbol |
+|---|---|---|
+| 예약 | 파랑 | calendar |
+| 주문 | 갈색 | bag |
+| 배송 | 청록 | shippingbox |
+| 할 일 | 보라 | checklist |
+
+일정이 있는 날을 고르면 요약이 나옵니다. 일정이 없는 날에는 "이 날은 일정이 없어요" 문구와 일정 추가하기가 뜹니다.
+
+### 운영
+
+운영 탭 아이콘에는 배지 7이 붙습니다. 맨 위 "먼저 확인해주세요"에는 누를 수 있는 행이 셋 있습니다. 예약금 미확인 2건, 미답변 문의 3건, 발송 마감 2건입니다. 행을 누르면 맞는 관리 화면이 필터를 미리 건 채로 열립니다.
+
+그 아래 11월 운영 현황에는 처리율이라고 적힌 75% 링과 숫자 4개, 전월 대비 수치 한 쌍이 있습니다. 기간 메뉴에서 11월이나 10월을 고르면 고른 쪽에 체크 표시가 붙습니다. 이어서 행 네 개로 된 전체 업무 관리, 기회와 리포트를 담은 공방 성장 순으로 나옵니다.
+
+전체 업무 관리에서는 예약 관리, 주문 관리, 배송 관리, SNS·스토어 관리 화면으로 넘어갑니다. 상태 필터와 검색창은 이제 목록을 실제로 걸러 냅니다. SNS·스토어 관리의 필터는 전체, 채널, 문의, 콘텐츠 네 가지입니다. 맞는 항목이 없을 때는 빈 상태 안내를 띄웁니다. 주문 관리와 배송 관리에는 순서 두 가지를 고르는 정렬 메뉴도 있습니다.
+
+상태 배지는 기호와 글자를 함께 보여 줍니다. 주황은 처리가 필요한 일, 초록은 끝난 일, 회색은 진행 중인 일입니다.
+
+### 설정
+
+설정 항목을 누르면 모두 "준비 중" 화면이 열립니다. 이 탭은 아직 Figma 프레임이 없어서 임시로 만들었습니다.
+
+### 화면 공통
+
+화면마다 채워진(prominent) 버튼은 하나만 둡니다. 무언가를 열기만 하는 카드는 행 전체를 누를 수 있게 했습니다.
+
+iPad에서는 탭이 화면 위쪽 막대로 올라갑니다. 다크 모드에서는 시스템 색을 그대로 씁니다. 글자 크기를 접근성 크기까지 키우면 숫자 줄은 세로로 쌓이고 세그먼트 컨트롤은 메뉴로 바뀝니다.
 
 ## 준비물
 
@@ -85,6 +120,21 @@ Xcode를 처음 여는 분도 아래 순서를 그대로 따라 하면 됩니다
 
 화면 파일에는 모두 `#Preview`를 넣어 두었습니다. 아무 뷰 파일이나 연 다음 **Editor > Canvas**(⌥⌘↩)를 켜면 시뮬레이터 없이도 화면이 바로 뜹니다.
 
+### 로딩·빈 화면·오류 화면 보기
+
+앱은 실행 인자 `-screenState loading`, `-screenState empty`, `-screenState error`를 받습니다. 각각 로딩 자리 표시, 빈 화면, 다시 시도 버튼이 있는 오류 화면을 보여 줍니다.
+
+1. 메뉴에서 **Product > Scheme > Edit Scheme…**를 엽니다.
+2. 왼쪽에서 **Run**을 고르고 **Arguments** 탭으로 갑니다.
+3. **Arguments Passed On Launch**에 `-screenState empty`를 추가합니다.
+4. **⌘R**로 다시 실행하면 빈 화면이 뜹니다.
+
+명령줄에서는 앱을 설치한 뒤 이렇게 실행합니다.
+
+```bash
+xcrun simctl launch booted com.stevenahhh.GongbangAssistant -screenState empty
+```
+
 ## 시뮬레이터 사용 팁
 
 | 하고 싶은 일 | 방법 |
@@ -118,14 +168,16 @@ Xcode에서 **Product > Test**(⌘U)를 누르면 GongbangAssistantUITests가 �
 |---|---|---|
 | TabNavigationUITests | testEveryTabShowsItsNavigationTitle | 탭을 모두 눌러 각 탭의 제목을 확인 |
 | TabNavigationUITests | testOperationsPushesAreaScreenAndGoesBack | 운영 > 예약 관리로 들어갔다가 돌아오기 |
-| TabNavigationUITests | testAssistantAccessoryBelongsToTodayTab | AI 막대가 오늘 탭에만 보이고 비서 시트를 여는지 |
-| ScreenshotTourUITests | testCaptureEveryScreen | 모든 화면을 돌며 스크린샷을 테스트 첨부물로 저장 |
+| TabNavigationUITests | testStatusFilterAndSearchNarrowTheList | 배송 관리에서 완료 필터와 검색어가 목록을 실제로 줄이는지 |
+| TabNavigationUITests | testAssistantIsReachableFromEveryTab | 캘린더 탭에서도 AI 막대와 마이크가 보이고 비서 시트를 여는지 |
+| ScreenshotTourUITests | testCaptureEveryScreen | 모든 화면과 스크롤 끝, 완료 필터 화면, 검색 결과가 없는 화면을 찍어 테스트 첨부물로 저장 |
+| ScreenshotTourUITests | testCaptureScreenStates | 오늘, 캘린더, 예약 관리의 로딩·빈 화면·오류 화면을 찍어 저장 |
 
 결과는 Test navigator(⌘6)에 뜹니다. 스크린샷은 Report navigator(⌘9)에서 해당 실행 아래에 있습니다.
 
 ## 명령줄로 빌드·테스트하기
 
-아래 명령은 [준비물](#준비물)의 환경에서 모두 실행해 봤습니다. 저장소 최상위 폴더에서 실행합니다.
+아래 명령은 [준비물](#준비물)의 환경에서 실행해 봤습니다. `sudo xcode-select` 한 줄만 예외입니다. 저장소 최상위 폴더에서 실행합니다.
 
 먼저 Xcode 버전을 확인합니다.
 
@@ -145,7 +197,7 @@ xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer dire
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 ```
 
-시스템 설정을 건드리기 싫다면 명령마다 앞에 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`를 붙여도 됩니다.
+이 명령은 관리자 암호를 묻기 때문에 작업 중에는 실행하지 않았습니다. 시스템 설정을 건드리기 싫다면 명령마다 앞에 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`를 붙여도 됩니다. 이 문서의 다른 명령은 모두 이 접두어를 붙여 확인했습니다.
 
 스킴 목록과 쓸 수 있는 시뮬레이터를 확인합니다.
 
@@ -186,6 +238,9 @@ xcrun xcresulttool export attachments --path build/TestResults.xcresult --output
 | "Signing for "GongbangAssistant" requires a development team" | 실제 기기로 빌드할 때만 생김 | [실제 iPhone](#실제-iphone에서-실행하기-검증하지-않음) 절의 2단계대로 Team을 지정합니다 |
 | Xcode 버전을 바꾼 뒤 이상한 빌드 오류 | 이전 빌드 산출물이 남아 있음 | Product > Clean Build Folder(⇧⌘K)를 누르거나 `~/Library/Developer/Xcode/DerivedData/GongbangAssistant-*`를 지웁니다 |
 | VS Code나 Cursor에 "No such module 'UIKit'" 또는 "No such module 'XCTest'" | 편집기의 Swift 언어 서버가 Command Line Tools를 씀 | Xcode나 xcodebuild로 빌드합니다 |
+| `xcrun simctl boot`에서 "Unable to boot device in current state: Booted" | 그 시뮬레이터가 이미 켜져 있음 | 오류가 아니므로 다음 명령으로 넘어갑니다 |
+| `open -a Simulator`에서 "Unable to find application named 'Simulator'" | 이 Mac에 Simulator 앱이 없음. 확인한 Mac도 이 경우였음 | 시뮬레이터는 화면 없이 돌아가므로 install과 launch는 그대로 됩니다. 화면은 `xcrun simctl io booted screenshot screen.png`로 저장해 확인합니다 |
+| `install booted`나 `launch booted`가 엉뚱한 기기에 들어감 | 시뮬레이터를 두 대 이상 켜 둠 | `booted` 대신 `xcrun simctl list devices booted`에서 찾은 UDID를 씁니다 |
 | 기기 언어를 바꿔도 화면이 한국어 | 원래 그렇게 만듦. 달력 로케일은 ko_KR로 고정 | 고칠 것 없음 |
 
 ## 프로젝트 구조
@@ -202,16 +257,17 @@ GongbangAssistant/
 ├── Operations/
 │   ├── OperationsView.swift
 │   └── OperationAreaView.swift
-├── More/MoreView.swift
+├── Settings/SettingsView.swift
 ├── Assistant/AssistantViews.swift AI 막대와 비서 시트
 ├── Shared/
 │   ├── Components.swift           숫자 줄, 행, 카드, 배지
 │   └── SampleData.swift           샘플 데이터
-└── Assets.xcassets                AccentColor, 임시 AppIcon
+└── Assets.xcassets                AccentColor, AppIcon (라이트, 다크, 틴트)
 GongbangAssistantUITests/
 ├── TabNavigationUITests.swift
 └── ScreenshotTourUITests.swift
 docs/screenshots/                  README 이미지
+DESIGN.md                          화면별 목표와 배치 원칙
 ```
 
 ## Figma 화면과 코드 대응표
@@ -223,7 +279,7 @@ docs/screenshots/                  README 이미지
 | 운영-전체 현황 | 1054:394 | `Operations/OperationsView.swift` |
 | 운영-예약/주문/배송/SNS·스토어 관리 | 1016:331, 1016:570, 1016:809, 1016:1048 | `Operations/OperationAreaView.swift` |
 | 하단 메뉴 + AI Chat Input | | `RootTabView.swift`, `Assistant/AssistantViews.swift` |
-| 더보기 | 프레임 없음 | `More/MoreView.swift` |
+| 설정 | 프레임 없음 | `Settings/SettingsView.swift` |
 
 ## 사용한 iOS 기본 구성 요소
 
@@ -231,16 +287,21 @@ docs/screenshots/                  README 이미지
 
 - `TabView`와 `Tab`, `.tabViewStyle(.sidebarAdaptable)`, `.tabBarMinimizeBehavior(.onScrollDown)`, `.tabViewBottomAccessory`
 - 탭마다 `NavigationStack`을 두고 `navigationTitle`과 `navigationSubtitle`을 씀
-- `UICalendarView`, `Gauge`, `.searchable`, `.buttonStyle(.glassProminent)`
+- `UICalendarView`, `Gauge`, `.searchable`, `ContentUnavailableView`
+- `.refreshable`, `.badge`, `.sensoryFeedback`
+- `@SceneStorage`로 마지막 탭과 오늘 세그먼트, 캘린더 보기 방식을 기억함
 - SF Symbols, 시스템 색, Dynamic Type 글꼴 스타일
 
-AccentColor는 라이트 모드에서 #18181B, 다크 모드에서 #FAFAFA입니다. Figma의 검은 버튼 색에 맞춘 값입니다.
+카드 안에서는 주된 동작 하나에만 `.borderedProminent`를 쓰고 나머지 버튼은 `.bordered`로 그립니다. 글라스 효과는 탭 바와 도구 막대, AI 막대, 비서 입력창에만 남겼습니다. 동작 줄이기를 켜 두면 스크롤해도 탭 바가 줄어들지 않습니다.
+
+AccentColor는 라이트 모드에서 #18181B, 다크 모드에서 #FAFAFA입니다. Figma의 검은 버튼 색에 맞춘 값입니다. 고대비 모드용으로 #000000과 #FFFFFF도 따로 넣었습니다.
 
 ## 아직 넣지 않은 것
 
 - 업무 로직
 - 데이터 저장
 - 서버 호출과 AI 호출
-- 실제로 걸러 주는 검색
-- 더보기의 상세 화면
-- 앱 아이콘 그림
+- 설정의 상세 화면
+- 승인·문의 탭
+- 앱 전체 검색
+- 75%와 전월 대비 두 수치의 정의. Figma에도 정의가 없습니다

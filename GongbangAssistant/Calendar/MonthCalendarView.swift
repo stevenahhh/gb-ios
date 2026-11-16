@@ -3,7 +3,7 @@ import UIKit
 
 struct MonthCalendarView: UIViewRepresentable {
     @Binding var selectedDay: Int
-    let events: [Int: [EventKind]]
+    let events: [Int: [DayEvent]]
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -32,7 +32,7 @@ struct MonthCalendarView: UIViewRepresentable {
               selection.selectedDate?.day != selectedDay else { return }
         selection.setSelected(
             DateComponents(calendar: uiView.calendar, year: 2026, month: 11, day: selectedDay),
-            animated: true
+            animated: !context.environment.accessibilityReduceMotion
         )
     }
 
@@ -55,20 +55,34 @@ struct MonthCalendarView: UIViewRepresentable {
 
         func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
             guard dateComponents.year == 2026, dateComponents.month == 11,
-                  let day = dateComponents.day, let kinds = parent.events[day] else { return nil }
+                  let day = dateComponents.day, let dayEvents = parent.events[day] else { return nil }
+            let kinds = dayEvents.map(\.kind)
             if kinds.count == 1 {
-                return .default(color: kinds[0].uiColor, size: .small)
+                return .image(UIImage(systemName: kinds[0].symbol), color: kinds[0].uiColor, size: .small)
             }
-            let dot: CGFloat = 5
+            let pointSize = min(UIFontMetrics(forTextStyle: .caption2).scaledValue(for: 7), 10)
+            let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+            let symbols = kinds.compactMap { kind in
+                UIImage(systemName: kind.symbol, withConfiguration: configuration)?
+                    .withTintColor(kind.uiColor, renderingMode: .alwaysOriginal)
+            }
             let gap: CGFloat = 2
-            let size = CGSize(width: CGFloat(kinds.count) * (dot + gap) - gap, height: dot)
-            let image = UIGraphicsImageRenderer(size: size).image { _ in
-                for (index, kind) in kinds.enumerated() {
-                    kind.uiColor.setFill()
-                    UIBezierPath(ovalIn: CGRect(x: CGFloat(index) * (dot + gap), y: 0, width: dot, height: dot)).fill()
+            let width = symbols.reduce(0) { $0 + $1.size.width } + gap * CGFloat(max(symbols.count - 1, 0))
+            let height = symbols.map(\.size.height).max() ?? 0
+            let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height)).image { _ in
+                var x: CGFloat = 0
+                for symbol in symbols {
+                    symbol.draw(at: CGPoint(x: x, y: (height - symbol.size.height) / 2))
+                    x += symbol.size.width + gap
                 }
             }
-            return .customView { UIImageView(image: image) }
+            let label = dayEvents.map { "\($0.kind.rawValue) \($0.count)건" }.joined(separator: ", ")
+            return .customView {
+                let view = UIImageView(image: image)
+                view.isAccessibilityElement = true
+                view.accessibilityLabel = label
+                return view
+            }
         }
 
         func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
