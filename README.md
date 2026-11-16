@@ -1,6 +1,8 @@
 # 공방 AI 비서 iOS 목업
 
-공방 AI 비서 사장님용 대시보드를 SwiftUI로 옮긴 화면 골격입니다. 탭 바와 내비게이션 바, 화면 배치를 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)대로 짰습니다. 데이터는 Figma 프레임에서 옮긴 고정 샘플이고 업무 로직, 서버, AI는 아직 붙이지 않았습니다. Swift Package나 CocoaPods 같은 외부 의존성은 0개입니다.
+공방 AI 비서 사장님용 대시보드를 SwiftUI로 옮긴 화면 골격입니다. 탭 바와 내비게이션 바, 화면 배치를 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)대로 짰습니다. 데이터는 Figma 프레임에서 옮긴 고정 샘플이고 업무 로직, 서버, AI는 아직 붙이지 않았습니다. iOS 앱은 Swift Package나 CocoaPods 같은 외부 의존성을 하나도 쓰지 않습니다.
+
+Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보기)로 바로 넘어가면 됩니다. 같은 화면을 브라우저에서 띄웁니다.
 
 ## 스크린샷
 
@@ -15,6 +17,7 @@
 ## 목차
 
 - [화면 구성](#화면-구성)
+- [웹 버전으로 보기](#웹-버전으로-보기)
 - [준비물](#준비물)
 - [시뮬레이터에서 실행하기](#시뮬레이터에서-실행하기)
 - [시뮬레이터 사용 팁](#시뮬레이터-사용-팁)
@@ -78,6 +81,56 @@
 화면마다 채워진(prominent) 버튼은 하나만 둡니다. 무언가를 열기만 하는 카드는 행 전체를 누를 수 있게 했습니다.
 
 iPad에서는 탭이 화면 위쪽 막대로 올라갑니다. 다크 모드에서는 시스템 색을 그대로 씁니다. 글자 크기를 접근성 크기까지 키우면 숫자 줄은 세로로 쌓이고 세그먼트 컨트롤은 메뉴로 바뀝니다.
+
+## 웹 버전으로 보기
+
+Xcode를 열지 않고도 브라우저에서 같은 화면을 보려고 `web/` 폴더에 웹 버전을 만들었습니다. 화면은 React로 다시 짰고 문구와 샘플 데이터는 iOS 앱에서 그대로 가져왔습니다.
+
+앱 화면 전체를 402×871px 세로 창 하나에 고정했습니다. 비율은 19.5:9이고 폭은 iPhone 17과 같은 402px입니다. 브라우저 크기를 바꾸면 창 전체가 같은 비율로 커지거나 작아질 뿐 배치는 그대로입니다. 스크롤도 창 안의 목록에서만 일어납니다.
+
+<img src="docs/screenshots/web.png" alt="브라우저 가운데에 19.5:9 세로 창으로 뜬 웹 버전의 오늘 탭" width="640">
+
+### 웹 버전 실행하기
+
+[Bun](https://bun.sh)이 필요합니다. macOS와 Bun 1.4.0에서 확인했고 Windows와 Linux에서는 아직 돌려 보지 않았습니다. 저장소를 받은 뒤 최상위 폴더에서 아래 명령을 차례로 실행하면 됩니다.
+
+```bash
+cd web
+bun install
+bun run dev
+```
+
+터미널에 `gb-web: http://localhost:3000/`이 찍히면 그 주소를 브라우저로 엽니다. 3000번 포트를 다른 프로그램이 쓰고 있다면 `PORT=4317 bun run dev`처럼 포트 번호를 바꿔 띄웁니다. 서버는 터미널에서 `Ctrl+C`로 끕니다.
+
+### 주소 뒤에 붙이는 옵션
+
+| 옵션 | 화면 |
+|---|---|
+| `?theme=dark`, `?theme=light` | 시스템 설정과 상관없이 다크 모드나 라이트 모드로 엽니다. 붙이지 않으면 시스템 설정을 따릅니다 |
+| `?state=loading` | 회색 자리 표시만 보이는 로딩 화면 |
+| `?state=empty` | 데이터가 하나도 없을 때 나오는 빈 화면 |
+| `?state=error` | 불러오지 못했을 때 나오는 오류 화면 |
+
+state 옵션은 iOS 앱의 `-screenState` 실행 인자와 같은 일을 합니다. 오늘 탭, 캘린더 탭, 운영 탭 안의 관리 화면 네 개가 이 값을 읽습니다. 두 옵션을 `?theme=dark&state=empty`처럼 함께 붙여도 됩니다.
+
+### 그 밖의 명령
+
+`web/` 폴더에서 실행합니다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `bun run typecheck` | TypeScript 타입 검사 |
+| `bun run build` | 배포용 정적 파일을 `web/dist/`에 묶음 |
+| `bun run start` | `--hot` 없이 서버를 띄움 |
+
+### iOS 앱과 다른 점
+
+- 당겨서 새로고침은 없습니다. 비서 시트도 끌어서 크기를 바꾸지 못하고 위쪽 손잡이를 눌러야 커지거나 작아집니다.
+- 큰 글자 설정(Dynamic Type)과 iPad 배치는 옮기지 않았습니다.
+- 아이콘은 SF Symbols를 본떠 SVG로 직접 그렸기 때문에 모양이 조금 다릅니다.
+- 마이크 버튼은 음성 안내 문구가 담긴 비서 시트를 엽니다. 실제 음성 입력은 받지 않습니다.
+
+iOS 앱과 웹 버전은 코드를 공유하지 않습니다. 화면이나 문구를 바꿀 때는 양쪽을 함께 고쳐야 합니다.
 
 ## 준비물
 
@@ -266,6 +319,17 @@ GongbangAssistant/
 GongbangAssistantUITests/
 ├── TabNavigationUITests.swift
 └── ScreenshotTourUITests.swift
+web/                               브라우저용 웹 버전 (Bun, React)
+├── index.html                     진입 HTML
+├── server.ts                      개발 서버
+├── package.json, bun.lock
+└── src/
+    ├── main.tsx                   폰 창 크기 맞춤, 탭과 화면 이동
+    ├── screens.tsx                탭별 화면과 비서 시트
+    ├── ui.tsx                     카드, 행, 배지 같은 공통 요소
+    ├── data.ts                    iOS 앱과 같은 샘플 데이터
+    ├── icons.tsx                  SF Symbols를 본떠 그린 SVG 아이콘
+    └── styles.css                 iOS 시스템 색과 다크 모드
 docs/screenshots/                  README 이미지
 DESIGN.md                          화면별 목표와 배치 원칙
 ```
