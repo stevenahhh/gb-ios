@@ -47,6 +47,7 @@ exit 0
 - DB 설정은 릴리스의 `db.env`에 mode 0600으로 저장했다. DB의 TLS 미지원이 확인돼 `DATABASE_SSLMODE=disable`을 명시했다.
 - `uv sync --frozen --group dev` 후 실제 DB를 지정한 `uv run --no-sync pytest -q`: **36 passed in 1.68s**. 테스트별 UUID 스키마를 생성/삭제하며 공개 업무 테이블은 건드리지 않는다.
 - `uv run --no-sync python init_db.py`: 테이블 생성 및 가상 문의 3건 초기화 성공. 재실행 시 기존 상태를 덮어쓰지 않는다.
+  - 당시 실행 기록이다. 지금은 `init_db.py`가 없다. 스키마는 `uv run alembic upgrade head`로 적용하고 초기 데이터가 필요하면 `uv run python seed.py`를 실행한다.
 - 배포 후 인증서 검증과 API 키를 적용한 `/health/ready`, `/inquiries`: **200**.
 - 실제 API에서 빈 승인 **422**, 없는 문의 수정 **404**, 이미 승인한 문의의 반복 승인 **409**를 확인했다.
 - 문의 테이블 저장 트랜잭션, 행 잠금, revision 충돌 검사는 서버 책임이다. 입력은 Pydantic 모델에서 파싱하며 앱은 성공 응답 후 상태를 갱신한다. 승인으로 메시지 발송이나 예약 생성은 수행하지 않는다.

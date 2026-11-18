@@ -1,10 +1,12 @@
-# 공방 AI 비서 iOS 목업
+# 공방 AI 비서 iOS 앱
 
-공방 AI 비서 사장님용 대시보드를 SwiftUI로 옮긴 화면 골격입니다. 탭 바와 내비게이션 바, 화면 배치를 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)대로 짰습니다. 데이터는 Figma 프레임에서 옮긴 고정 샘플이고 업무 로직, 서버, AI는 아직 붙이지 않았습니다. iOS 앱은 Swift Package나 CocoaPods 같은 외부 의존성을 하나도 쓰지 않습니다.
+공방 사장님이 예약, 주문, 배송, 문의를 한곳에서 처리하는 SwiftUI 앱입니다. 화면 배치는 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)을 기준으로 짰습니다. iOS 앱은 Swift Package나 CocoaPods 같은 외부 의존성을 쓰지 않고 저장소 안의 `RoundupCore` 패키지만 씁니다.
 
-문의 답변은 NCP의 FastAPI·PostgreSQL과 연결되어 있습니다. 초안을 저장하거나 승인·반려하면 서버에 기록되고 앱 재실행 후에도 유지됩니다. 오늘, 운영, SNS·스토어 관리의 대기 건수가 함께 바뀝니다. AI 초안은 HyperCLOVA X에 연결되어 있으며 승인해도 손님께 발송되지는 않습니다. 웹 버전에는 이 흐름이 없습니다. 배포와 검증 범위는 [DB 연동 기록](docs/2026-11-18-db-integration.md)을 참고하세요.
+화면의 업무 데이터는 `Server/`의 FastAPI 서버가 PostgreSQL에서 읽어 줍니다. 건수, 배지, 처리율도 서버가 DB 행으로 계산합니다. 입금 확인, 포장, 답변 승인 같은 동작은 DB에 저장되므로 앱을 다시 켜도 유지됩니다. 답변을 승인해도 손님께 메시지가 가지는 않습니다.
 
-Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보기)로 바로 넘어가면 됩니다. 같은 화면을 브라우저에서 띄웁니다.
+앱을 실행하기 전에 [서버 연결 설정](#서버-연결-설정)을 먼저 해 주세요. 서버 배포 방법은 [운영 서버](#운영-서버)에 있습니다.
+
+Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으로-보기)로 넘어가면 됩니다. 웹 버전은 서버에 연결되지 않습니다.
 
 ## 스크린샷
 
@@ -21,11 +23,13 @@ Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보
 - [화면 구성](#화면-구성)
 - [웹 버전으로 보기](#웹-버전으로-보기)
 - [준비물](#준비물)
+- [서버 연결 설정](#서버-연결-설정)
 - [시뮬레이터에서 실행하기](#시뮬레이터에서-실행하기)
 - [시뮬레이터 사용 팁](#시뮬레이터-사용-팁)
 - [실제 iPhone에서 실행하기 (검증하지 않음)](#실제-iphone에서-실행하기-검증하지-않음)
 - [테스트 실행하기](#테스트-실행하기)
 - [명령줄로 빌드·테스트하기](#명령줄로-빌드테스트하기)
+- [운영 서버](#운영-서버)
 - [문제 해결](#문제-해결)
 - [프로젝트 구조](#프로젝트-구조)
 - [Figma 화면과 코드 대응표](#figma-화면과-코드-대응표)
@@ -40,8 +44,8 @@ Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보
 |---|---|---|
 | 오늘 | house | 시간대에 맞춘 인사 제목, 날짜와 마지막 업데이트 시각 부제, 숫자 3개, 할 일 / 채널 / 배송 / 비서 추천 세그먼트, 그룹 목록 |
 | 캘린더 | calendar | 주간 보기가 기본이고 한 번 누르면 월간 보기, 선택한 날의 일정 |
-| 운영 | square.grid.2x2 | 배지 7, "먼저 확인해주세요", 11월 운영 현황, 전체 업무 관리, 공방 성장 |
-| 설정 | gearshape | 공방 정보, 예약·환불 규정, 고객 안내 문구, 채널 연결, 직원·권한, 알림, 계정, 도움말 |
+| 운영 | square.grid.2x2 | 처리할 일 배지, "먼저 확인해주세요", 이번 달 운영 현황, 전체 업무 관리, 공방 성장 |
+| 설정 | gearshape | 공방 정보, 예약·환불 규정, 고객 안내 문구, 채널 연결, 도움말 |
 
 ### 오늘
 
@@ -49,7 +53,7 @@ Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보
 
 ### 비서 막대
 
-"비서에게 물어보세요" 막대는 모든 탭에서 탭 바 위에 붙어 있습니다. 막대를 누르면 비서 시트가 올라옵니다. 시트가 열리면 커서가 바로 입력창에 놓이고 추천 질문 세 개가 보입니다. 입력창 아래에는 "비서가 틀릴 수 있어요"라는 문구를 넣었습니다. 막대의 마이크 버튼은 시트를 음성 모드로 엽니다. 이 모드에서는 키보드의 받아쓰기 키를 쓰라고 안내합니다. 질문에 답하는 기능은 아직 연결하지 않았습니다.
+"비서에게 물어보세요" 막대는 모든 탭에서 탭 바 위에 붙어 있습니다. 막대를 누르면 비서 시트가 올라옵니다. 시트가 열리면 커서가 바로 입력창에 놓이고 추천 질문 세 개가 보입니다. 입력창 아래에는 "비서가 틀릴 수 있어요"라는 문구를 넣었습니다. 마이크 버튼은 말을 녹음해 서버의 음성 인식으로 글자로 바꿉니다. 질문을 보내면 서버가 DB 현황을 근거로 HyperCLOVA X의 답을 돌려줍니다.
 
 ### 캘린더
 
@@ -66,9 +70,9 @@ Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보
 
 ### 운영
 
-운영 탭 아이콘에는 배지 7이 붙습니다. 맨 위 "먼저 확인해주세요"에는 누를 수 있는 행이 셋 있습니다. 예약금 미확인 2건, 미답변 문의 3건, 발송 마감 2건입니다. 행을 누르면 맞는 관리 화면이 필터를 미리 건 채로 열립니다. 미답변 문의 건수와 배지 숫자는 문의 답변을 승인하거나 반려할 때마다 줄어듭니다.
+운영 탭 아이콘의 배지는 지금 처리할 일의 수를 보여 줍니다. 맨 위 "먼저 확인해주세요"에는 누를 수 있는 행이 셋 있습니다. 예약금 미확인, 미답변 문의, 발송 대기입니다. 행을 누르면 맞는 관리 화면이 필터를 미리 건 채로 열립니다. 미답변 문의 건수와 배지 숫자는 문의 답변을 승인하거나 반려할 때마다 줄어듭니다.
 
-그 아래 11월 운영 현황에는 처리율이라고 적힌 75% 링과 숫자 4개, 전월 대비 수치 한 쌍이 있습니다. 기간 메뉴에서 11월이나 10월을 고르면 고른 쪽에 체크 표시가 붙습니다. 이어서 행 네 개로 된 전체 업무 관리, 기회와 리포트를 담은 공방 성장 순으로 나옵니다.
+그 아래 운영 현황에는 처리율 링과 예약, 주문, 배송, 콘텐츠 건수, 전월 대비 수치가 있습니다. 처리율은 그달의 예약, 주문, 배송, 문의 가운데 처리를 마친 비율입니다. 기간 메뉴로 달을 바꿀 수 있습니다. 이어서 전체 업무 관리와 공방 성장이 나옵니다.
 
 전체 업무 관리에서는 예약 관리, 주문 관리, 배송 관리, SNS·스토어 관리 화면으로 넘어갑니다. 상태 필터와 검색창은 이제 목록을 실제로 걸러 냅니다. SNS·스토어 관리의 필터는 전체, 채널, 문의, 콘텐츠 네 가지입니다. 맞는 항목이 없을 때는 빈 상태 안내를 띄웁니다. 주문 관리와 배송 관리에는 순서 두 가지를 고르는 정렬 메뉴도 있습니다.
 
@@ -76,11 +80,11 @@ Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보
 
 ### 문의 답변
 
-오늘 탭의 할 일 맨 위 "답변 대기 문의"와 SNS·스토어 관리의 문의 목록에서 문의를 누르면 문의 답변 화면이 열립니다. 손님 문의, 답변 근거, 답변 초안 순으로 보여 줍니다. 초안 저장 버튼으로 저장하거나, 현재 편집 내용을 포함해 승인·반려할 수 있습니다. 처리한 문의는 다시 고칠 수 없습니다. 빈 초안은 승인할 수 없고 반려만 됩니다. 승인해도 손님께 발송되지는 않습니다. 앱을 다시 켜도 서버에 저장한 상태가 유지됩니다. 테스트·미리보기용 샘플 모드는 `-sampleInquiries`로 명시하며 서버 실패 시 샘플로 전환하지 않습니다.
+오늘 탭의 할 일 맨 위 "답변 대기 문의"와 SNS·스토어 관리의 문의 목록에서 문의를 누르면 문의 답변 화면이 열립니다. 손님 문의, 답변 근거, 답변 초안 순으로 보여 줍니다. 초안 저장 버튼으로 저장하거나, 현재 편집 내용을 포함해 승인·반려할 수 있습니다. 처리한 문의는 다시 고칠 수 없습니다. 빈 초안은 승인할 수 없고 반려만 됩니다. 승인해도 손님께 발송되지는 않습니다. 앱을 다시 켜도 서버에 저장한 상태가 유지됩니다. 서버에 연결하지 못하면 다시 시도 안내를 띄웁니다.
 
 ### 설정
 
-설정 항목을 누르면 모두 "준비 중" 화면이 열립니다. 이 탭은 아직 Figma 프레임이 없어서 임시로 만들었습니다.
+공방 정보와 예약·환불 규정, 고객 안내 문구는 서버에 저장됩니다. 채널 연결 화면은 등록된 채널을 보여 주며 자동 연동은 아직 지원하지 않습니다.
 
 ### 화면 공통
 
@@ -90,7 +94,7 @@ iPad에서는 탭이 화면 위쪽 막대로 올라갑니다. 다크 모드에�
 
 ## 웹 버전으로 보기
 
-Xcode를 열지 않고도 브라우저에서 같은 화면을 보려고 `web/` 폴더에 웹 버전을 만들었습니다. 화면은 React로 다시 짰고 문구와 샘플 데이터는 iOS 앱에서 그대로 가져왔습니다.
+Xcode를 열지 않고도 브라우저에서 화면 시안을 보려고 `web/` 폴더에 웹 버전을 만들었습니다. 화면은 React로 다시 짰고 데이터는 `web/src/data.ts`의 고정 샘플입니다. 서버나 DB에는 연결되지 않습니다.
 
 앱 화면 전체를 402×871px 세로 창 하나에 고정했습니다. 비율은 19.5:9이고 폭은 iPhone 17과 같은 402px입니다. 브라우저 크기를 바꾸면 창 전체가 같은 비율로 커지거나 작아질 뿐 배치는 그대로입니다. 스크롤도 창 안의 목록에서만 일어납니다.
 
@@ -117,7 +121,7 @@ bun run dev
 | `?state=empty` | 데이터가 하나도 없을 때 나오는 빈 화면 |
 | `?state=error` | 불러오지 못했을 때 나오는 오류 화면 |
 
-state 옵션은 iOS 앱의 `-screenState` 실행 인자와 같은 일을 합니다. 오늘 탭, 캘린더 탭, 운영 탭 안의 관리 화면 네 개가 이 값을 읽습니다. 두 옵션을 `?theme=dark&state=empty`처럼 함께 붙여도 됩니다.
+오늘 탭, 캘린더 탭, 운영 탭 안의 관리 화면 네 개가 이 값을 읽습니다. 두 옵션을 `?theme=dark&state=empty`처럼 함께 붙여도 됩니다.
 
 ### 그 밖의 명령
 
@@ -150,6 +154,19 @@ iOS 앱과 웹 버전은 코드를 공유하지 않습니다. 화면이나 문�
 
 앱의 배포 대상은 iOS 26.1입니다. 그래서 iOS SDK 26.1 이상을 담은 Xcode라면 빌드할 수 있어야 합니다. 다만 실제로 시험한 버전은 Xcode 27.2뿐입니다.
 
+## 서버 연결 설정
+
+앱은 서버 주소와 앱 키를 `GongbangAssistant/RoundupSecrets.plist`에서 읽습니다. 이 파일은 Git에서 제외되어 있어서 저장소를 받은 뒤 한 번 만들어야 합니다. 저장소 최상위 폴더에서 실행합니다.
+
+```bash
+cp Config/RoundupSecrets.example.plist GongbangAssistant/RoundupSecrets.plist
+open GongbangAssistant/RoundupSecrets.plist
+```
+
+`APIKey` 값을 서버 담당자에게 따로 받은 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다. 저장소가 공개되어 있으므로 앱 키를 커밋하거나 채팅방에 남기지 마세요.
+
+운영 서버의 8787번 포트는 NCP 접근 제어(ACG)에 등록한 곳에서만 열립니다. 앱에 "서버에 연결하지 못했어요"가 뜨면 서버 담당자에게 지금 쓰는 공인 IP를 등록해 달라고 요청합니다.
+
 ## 시뮬레이터에서 실행하기
 
 Xcode를 처음 여는 분도 아래 순서를 그대로 따라 하면 됩니다.
@@ -174,25 +191,6 @@ Xcode를 처음 여는 분도 아래 순서를 그대로 따라 하면 됩니다
 5. Xcode 창 맨 위 도구 막대를 봅니다. 스킴은 **GongbangAssistant**로 고르고 실행 대상은 **iPhone 17 (iOS 27.2)**로 고릅니다.
 6. **⌘R**을 누르거나 도구 막대의 **▶** 버튼을 누릅니다. Simulator가 열리고 앱이 오늘 탭에서 시작합니다.
 7. 실행을 멈출 때는 **⌘.**을 누릅니다.
-
-### SwiftUI 미리보기
-
-화면 파일에는 모두 `#Preview`를 넣어 두었습니다. 아무 뷰 파일이나 연 다음 **Editor > Canvas**(⌥⌘↩)를 켜면 시뮬레이터 없이도 화면이 바로 뜹니다.
-
-### 로딩·빈 화면·오류 화면 보기
-
-앱은 실행 인자 `-screenState loading`, `-screenState empty`, `-screenState error`를 받습니다. 각각 로딩 자리 표시, 빈 화면, 다시 시도 버튼이 있는 오류 화면을 보여 줍니다.
-
-1. 메뉴에서 **Product > Scheme > Edit Scheme…**를 엽니다.
-2. 왼쪽에서 **Run**을 고르고 **Arguments** 탭으로 갑니다.
-3. **Arguments Passed On Launch**에 `-screenState empty`를 추가합니다.
-4. **⌘R**로 다시 실행하면 빈 화면이 뜹니다.
-
-명령줄에서는 앱을 설치한 뒤 이렇게 실행합니다.
-
-```bash
-xcrun simctl launch booted com.stevenahhh.GongbangAssistant -screenState empty
-```
 
 ## 시뮬레이터 사용 팁
 
@@ -221,18 +219,15 @@ Apple Account가 있어야 합니다. 무료 Personal Team으로도 앱에 서�
 
 ## 테스트 실행하기
 
-Xcode에서 **Product > Test**(⌘U)를 누르면 GongbangAssistantUITests가 돕니다.
+UI 테스트는 운영 서버를 쓰지 않습니다. 로컬 PostgreSQL에 시드를 넣은 서버와 빈 서버를 하나씩 띄운 뒤 그 주소를 환경 변수로 넘깁니다. 서버 실행 방법은 [Server/README.md](Server/README.md)에 있습니다. 환경 변수가 없으면 UI 테스트는 건너뜁니다.
 
-| 테스트 클래스 | 테스트 | 확인하는 내용 |
+| 테스트 클래스 | 수 | 확인하는 내용 |
 |---|---|---|
-| TabNavigationUITests | testEveryTabShowsItsNavigationTitle | 탭을 모두 눌러 각 탭의 제목을 확인 |
-| TabNavigationUITests | testOperationsPushesAreaScreenAndGoesBack | 운영 > 예약 관리로 들어갔다가 돌아오기 |
-| TabNavigationUITests | testStatusFilterAndSearchNarrowTheList | 배송 관리에서 완료 필터와 검색어가 목록을 실제로 줄이는지 |
-| TabNavigationUITests | testAssistantIsReachableFromEveryTab | 캘린더 탭에서도 AI 막대와 마이크가 보이고 비서 시트를 여는지 |
-| ScreenshotTourUITests | testCaptureEveryScreen | 모든 화면과 스크롤 끝, 완료 필터 화면, 검색 결과가 없는 화면을 찍어 테스트 첨부물로 저장 |
-| ScreenshotTourUITests | testCaptureScreenStates | 오늘, 캘린더, 예약 관리의 로딩·빈 화면·오류 화면을 찍어 저장 |
+| TabNavigationUITests | 10 | 탭 이동, 관리 화면 이동, 필터와 검색, 비서 시트, 설정 누락 안내 |
+| ActionFlowUITests | 6 | 버튼 동작이 서버에 저장되는지 |
+| ScreenshotTourUITests | 2 | 모든 화면과 빈 화면을 찍어 테스트 첨부물로 저장 |
 
-문의 답변 규칙은 UI 테스트가 아니라 패키지 테스트로 확인합니다. 터미널에서 `swift test --package-path Packages/RoundupCore`를 실행하면 9개가 돕니다. 문의 답변 화면을 누르는 UI 테스트는 아직 없습니다.
+문의 처리 규칙은 패키지 테스트로 확인합니다. 터미널에서 `swift test --package-path Packages/RoundupCore`를 실행하면 10개가 돕니다.
 
 결과는 Test navigator(⌘6)에 뜹니다. 스크린샷은 Report navigator(⌘9)에서 해당 실행 아래에 있습니다.
 
@@ -277,19 +272,41 @@ xcodebuild -project GongbangAssistant.xcodeproj -scheme GongbangAssistant -desti
 
 ```bash
 xcrun simctl boot "iPhone 17"
-open -a Simulator
+open /Applications/Xcode.app/Contents/Applications/DeviceHub.app
 xcrun simctl install booted build/DerivedData/Build/Products/Debug-iphonesimulator/GongbangAssistant.app
 xcrun simctl launch booted com.stevenahhh.GongbangAssistant
 ```
 
-테스트를 돌려 결과 번들을 만들고 스크린샷을 꺼냅니다.
+UI 테스트를 돌려 결과 번들을 만들고 스크린샷을 꺼냅니다. 주소와 키는 직접 띄운 로컬 서버 값으로 바꿉니다.
 
 ```bash
-xcodebuild test -project GongbangAssistant.xcodeproj -scheme GongbangAssistant -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.2' -derivedDataPath build/DerivedData -resultBundlePath build/TestResults.xcresult
+TEST_RUNNER_ROUNDUP_UITEST_API_URL=http://127.0.0.1:18787 TEST_RUNNER_ROUNDUP_UITEST_EMPTY_API_URL=http://127.0.0.1:18788 TEST_RUNNER_ROUNDUP_UITEST_API_KEY=local-test-key xcodebuild test -project GongbangAssistant.xcodeproj -scheme GongbangAssistant -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.2' -derivedDataPath build/DerivedData -resultBundlePath build/TestResults.xcresult
 xcrun xcresulttool export attachments --path build/TestResults.xcresult --output-path build/screenshots
 ```
 
 런타임이 여러 개 깔려 있으면 같은 이름의 기기가 둘 이상 생깁니다. 이럴 때는 위처럼 `OS=27.2`를 붙이거나 `simctl list`에서 찾은 `id=<UDID>`를 씁니다. `build/` 폴더는 `.gitignore`에 들어 있어 커밋에 섞이지 않습니다.
+
+## 운영 서버
+
+운영 환경은 NCP `KOSA_경진대회_09` 계정의 서버 하나로 고정합니다.
+
+| 항목 | 값 |
+|---|---|
+| API 주소 | `https://223.130.130.1:8787` |
+| 서버 | `roundup-api`, systemd 서비스 `roundup-api` |
+| 배포 위치 | `/opt/roundup/current` |
+| 서버 비밀값 | `/opt/roundup/server.env`, 릴리스 폴더의 `db.env` |
+| DB | Cloud DB for PostgreSQL `roundup`, VPC 내부 접속만 허용 |
+
+앱은 이 서버의 인증서 `GongbangAssistant/roundup-server.cer`만 신뢰합니다. 서버 인증서를 바꾸면 이 파일도 함께 바꿔서 앱을 다시 빌드해야 합니다.
+
+서버 코드가 앱보다 오래되면 화면에 오류가 뜹니다. 그때는 서버 SSH 키가 있는 담당자가 main을 받아 저장소 최상위 폴더에서 배포합니다.
+
+```bash
+ROUNDUP_SSH_TARGET=<사용자>@223.130.130.1 Server/deploy.sh
+```
+
+SSH 키는 기본으로 `~/.ssh/roundup_ed25519`를 쓰고 `ROUNDUP_SSH_KEY`로 바꿀 수 있습니다. 스크립트는 새 릴리스를 올리고 문의 데이터를 `/opt/roundup/backups`에 저장합니다. 이어서 DB 마이그레이션과 시드를 실행하고 서비스를 재시작합니다. 시드는 없는 행만 넣으므로 기존 데이터를 덮어쓰지 않습니다. 상태 확인에 실패하면 이전 릴리스로 되돌립니다.
 
 ## 문제 해결
 
@@ -300,7 +317,8 @@ xcrun xcresulttool export attachments --path build/TestResults.xcresult --output
 | Xcode 버전을 바꾼 뒤 이상한 빌드 오류 | 이전 빌드 산출물이 남아 있음 | Product > Clean Build Folder(⇧⌘K)를 누르거나 `~/Library/Developer/Xcode/DerivedData/GongbangAssistant-*`를 지웁니다 |
 | VS Code나 Cursor에 "No such module 'UIKit'" 또는 "No such module 'XCTest'" | 편집기의 Swift 언어 서버가 Command Line Tools를 씀 | Xcode나 xcodebuild로 빌드합니다 |
 | `xcrun simctl boot`에서 "Unable to boot device in current state: Booted" | 그 시뮬레이터가 이미 켜져 있음 | 오류가 아니므로 다음 명령으로 넘어갑니다 |
-| `open -a Simulator`에서 "Unable to find application named 'Simulator'" | 이 Mac에 Simulator 앱이 없음. 확인한 Mac도 이 경우였음 | 시뮬레이터는 화면 없이 돌아가므로 install과 launch는 그대로 됩니다. 화면은 `xcrun simctl io booted screenshot screen.png`로 저장해 확인합니다 |
+| `open -a Simulator`에서 "Unable to find application named 'Simulator'" | Xcode 27.2에서는 시뮬레이터 화면 앱 이름이 Device Hub로 바뀜 | `open /Applications/Xcode.app/Contents/Applications/DeviceHub.app`으로 엽니다 |
+| 앱에 "서버 주소가 설정되지 않았어요" 또는 "서버 인증 키가 설정되지 않았어요" | `RoundupSecrets.plist`가 없거나 값이 비어 있음 | [서버 연결 설정](#서버-연결-설정)대로 만든 뒤 다시 빌드합니다 |
 | `install booted`나 `launch booted`가 엉뚱한 기기에 들어감 | 시뮬레이터를 두 대 이상 켜 둠 | `booted` 대신 `xcrun simctl list devices booted`에서 찾은 UDID를 씁니다 |
 | 기기 언어를 바꿔도 화면이 한국어 | 원래 그렇게 만듦. 달력 로케일은 ko_KR로 고정 | 고칠 것 없음 |
 
@@ -318,19 +336,25 @@ GongbangAssistant/
 ├── Operations/
 │   ├── OperationsView.swift
 │   └── OperationAreaView.swift
-├── Settings/SettingsView.swift
-├── Inquiries/InquiryViews.swift   문의 행, 문의 답변 화면
-├── Assistant/AssistantViews.swift AI 막대와 비서 시트
+├── Settings/                      설정, 공방 정보
+├── Inquiries/                     문의 행, 문의 답변 화면, 동기화 상태
+├── Assistant/                     AI 막대, 비서 시트, 음성 녹음
 ├── Shared/
-│   ├── Components.swift           숫자 줄, 행, 카드, 배지
-│   └── SampleData.swift           샘플 데이터
+│   ├── AppModel.swift             화면 상태와 서버 동기화
+│   ├── RoundupAPI.swift           서버 호출, 설정, 인증서 고정
+│   ├── ServerModels.swift         서버 응답 모델
+│   ├── ActionSheets.swift         동작 입력 시트
+│   └── Components.swift           숫자 줄, 행, 카드, 배지
 └── Assets.xcassets                AccentColor, AppIcon (라이트, 다크, 틴트)
 Packages/RoundupCore/              문의·승인 규칙 (로컬 Swift 패키지)
-├── Sources/RoundupCore/           DemoStore, 모델, 샘플 문의
-└── Tests/RoundupCoreTests/        규칙 테스트 9개
+├── Sources/RoundupCore/           InquiryStore, 모델, 저장 계약
+└── Tests/RoundupCoreTests/        규칙 테스트 10개
 GongbangAssistantUITests/
+├── RoundupUITestCase.swift
 ├── TabNavigationUITests.swift
+├── ActionFlowUITests.swift
 └── ScreenshotTourUITests.swift
+Server/                            FastAPI 서버, Alembic 마이그레이션, 시드, 배포 스크립트
 web/                               브라우저용 웹 버전 (Bun, React)
 ├── index.html                     진입 HTML
 ├── server.ts                      개발 서버
@@ -339,7 +363,7 @@ web/                               브라우저용 웹 버전 (Bun, React)
     ├── main.tsx                   폰 창 크기 맞춤, 탭과 화면 이동
     ├── screens.tsx                탭별 화면과 비서 시트
     ├── ui.tsx                     카드, 행, 배지 같은 공통 요소
-    ├── data.ts                    iOS 앱과 같은 샘플 데이터
+    ├── data.ts                    웹 버전 전용 고정 샘플 데이터
     ├── icons.tsx                  SF Symbols를 본떠 그린 SVG 아이콘
     └── styles.css                 iOS 시스템 색과 다크 모드
 docs/screenshots/                  README 이미지
@@ -374,10 +398,10 @@ AccentColor는 라이트 모드에서 #18181B, 다크 모드에서 #FAFAFA입니
 
 ## 아직 넣지 않은 것
 
-- 문의 답변을 뺀 나머지 업무 로직. 승인한 답변을 보내거나 예약으로 잇는 일도 아직 없습니다
-- 데이터 저장
-- 서버 호출과 AI 호출
-- 설정의 상세 화면
-- 승인·문의 탭
+- 주문과 수업을 앱에서 새로 만드는 기능
+- 스마트스토어, SNS 같은 채널 자동 연동
+- 답변 발송과 콘텐츠 게시, 택배 조회
+- 사용자 로그인과 권한 구분. 지금은 앱 키 하나를 함께 씁니다
 - 앱 전체 검색
-- 75%와 전월 대비 두 수치의 정의. Figma에도 정의가 없습니다
+
+DB의 예약, 주문, 고객은 시드로 넣은 예시 데이터입니다. 실제 운영에 쓰기 전에 교체해야 합니다.
