@@ -71,6 +71,11 @@ database needs no manual stamp. Revision `0002` adds the business tables, extend
 cannot edit; drafts, decisions, and revisions are preserved. Migrations run in one
 transaction under an advisory lock. Server startup never migrates.
 
+Revision `0003` permits rejected content drafts and recommendations. Deploying this
+release applies `0003` through the existing `alembic upgrade head` deployment step;
+readiness requires that revision. Downgrading to `0002` first maps rejected content
+back to `draft` and rejected recommendations back to `open`, preserving their text.
+
 `seed.py` inserts missing rows with `ON CONFLICT DO NOTHING` and links seeded
 inquiries to their customers only while that link is empty. It never changes
 existing data. Dates are relative to the first seeding day in Asia/Seoul; a later
@@ -86,23 +91,35 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `GET /today` | Today tab, all segments |
 | `GET /calendar?start&end` | Days with markers and agenda, inclusive, at most 62 days |
 | `POST /calendar/events` | Add `{title, kind, detail, startsAt}`; `startsAt` needs a UTC offset |
-| `GET /operations?month=YYYY-MM` | Attention counts, monthly summary, area totals |
-| `GET /bookings?status&q&limit&offset` | `status`: `all`, `confirmed`, `deposit_pending` |
+| `GET /operations?month=YYYY-MM` or `?start=YYYY-MM-DD&end=YYYY-MM-DD` | Monthly or inclusive custom range (up to 366 days); custom comparisons use the immediately preceding equal-length range; month and range cannot be combined |
+| `GET /bookings?status&q&session&limit&offset` | `status`: `all`, `confirmed`, `deposit_pending`; optional session ID filter |
+| `GET /bookings/{id}` | Booking details, masked customer, deposit state, actions, and class completion revision |
 | `POST /bookings` | `{sessionId, customerName, phone, partySize}` |
 | `POST /bookings/{id}/confirm-deposit` | Deposit received |
+| `POST /bookings/{id}/undo-deposit` | Return a confirmed booking with a deposit to deposit pending |
 | `GET /class-sessions` | Future classes with free seats |
+| `GET /class-sessions/{id}` | Class completion and active booking IDs in creation order |
 | `POST /class-sessions/{id}/completion` | `{done, expectedRevision}` |
 | `GET /orders?status&q&sort&limit&offset` | `status`: `all`, `paid`, `processing`; `sort`: `newest`, `oldest` |
 | `POST /orders/{id}/confirm` | Accept an order and open its shipment |
+| `POST /orders/{id}/undo-confirm` | Return to paid and remove the shipment only while it is still packing |
 | `GET /shipments?status&q&sort&limit&offset` | `status`: `all`, `scheduled`, `in_transit`, `delivered`; `sort`: `soonest`, `latest` |
 | `POST /shipments/{id}/pack`, `/invoice`, `/deliver` | Fulfilment steps; invoice takes `{carrier, trackingNumber}` |
+| `POST /shipments/{id}/undo` | Reverse one fulfilment step; delivered undo also reopens the completed order |
+| `GET /cards/{kind}/{id}` | One current card; kind is `order`, `shipment`, or `task` |
 | `GET /channels?section&q&limit&offset` | `section`: `all`, `channels`, `inquiries`, `content` |
 | `GET /content-drafts/{id}`, `POST /content-drafts/{id}/review` | Open a draft; approve `{body}` |
 | `POST /tasks/{id}/completion` | `{done, expectedRevision}` |
+| `POST /tasks/{id}/undo` | Reopen a completed task |
+| `GET /assistant-drafts/{kind}/{id}` | Editable text, facts, decision state, and reopening availability; kind is `content` or `recommendation` |
+| `PATCH /assistant-drafts/{kind}/{id}/draft` | Save nonblank pending text with `{draft, expectedRevision}` |
+| `POST /assistant-drafts/{kind}/{id}/decision` | `{decision: "approve" or "reject", draft, expectedRevision}`; content decisions update linked recommendations atomically |
+| `POST /assistant-drafts/{kind}/{id}/reopen` | Reopen decided text and linked recommendations with `{expectedRevision}` |
 | `POST /recommendations/{id}/acknowledge`, `GET /opportunities` | Recommendation state and list |
 | `GET /settings`, `PUT /workshop`, `PATCH /settings/{key}` | Profile and text settings; revision `0` creates the first profile |
 | `GET /inquiries?limit&offset` | Array ordered by ID, default limit 200 |
 | `PATCH /inquiries/{id}/draft`, `POST /inquiries/{id}/decision` | Existing inquiry contract |
+| `POST /inquiries/{id}/reopen` | Reopen an approved or rejected inquiry while keeping its draft |
 | `POST /draft`, `POST /ask`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
 
 `/ask` accepts `{question}` and reads workshop facts from PostgreSQL. A `context`
@@ -113,6 +130,18 @@ rows are 404. A stale revision or an action the current state does not allow is 
 invalid input is 422. Writes lock their row, and bookings lock the class so seats
 cannot be oversold. Approving an inquiry or reviewing a draft sends nothing outside
 this database.
+
+Cards add nullable `undo`, `draft`, and `booking` fields; existing `action` codes
+remain unchanged. `undo` is `{label, path}` and accepts POST `{expectedRevision}`
+at that path. `draft` is `{kind, id, status, preview}`, with status `pending`,
+`approved`, or `rejected`; linked recommendations target their content draft.
+Booking facts are `{day, dayTitle, time, customer, people}`. Calendar agenda rows
+add nullable `isDone` for class and task completion.
+
+Today suggestions retain open recommendations and decisions from the last seven
+days, while `openRecommendations` counts only open suggestions. Assistant draft
+approval never publishes, applies, sends, or books anything. The legacy content
+review and recommendation acknowledgement routes remain available.
 
 ## Production behavior
 

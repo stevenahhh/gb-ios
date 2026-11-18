@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bookings import SessionCompletion
 from common import Now, Session, invalid_transition, locked, matches
-from contracts import Card, CardAction, Status
+from contracts import Card, CardAction, CardUndo, Status
 from display import relative_moment
 from models import TaskRow
 
@@ -23,6 +23,7 @@ def task_card(task: TaskRow, today: date) -> Card:
         status=Status(text="완료", tone="done") if done else None,
         deadline=None if done else f"{relative_moment(task.due_at, today)}까지",
         action=None if done else CardAction(code="completeTask", label="완료 표시"),
+        undo=CardUndo(path=f"/tasks/{task.id}/undo") if done else None,
     )
 
 

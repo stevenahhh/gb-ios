@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Final, Literal, assert_never
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import Field
 from sqlalchemy import ColumnElement, Select, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ from common import (
     matches,
     required_text,
 )
-from contracts import ApiModel, ApiRequest, Card, CardAction, Page, Status
+from contracts import ApiModel, ApiRequest, Card, CardAction, CardBooking, CardUndo, Page, Status
 from display import clock, day_start, local, masked, month_day_weekday, relative_moment, won
 from metrics import load_counts, metric
 from models import BookingRow, ClassSessionRow, CustomerRow
@@ -112,13 +112,21 @@ def booking_card(record: BookingRecord, now: datetime) -> Card:
     booking, session, customer, taken = record
     who = f"{masked(customer.name)} · {booking.party_size}명"
     lines = [schedule_text(session)]
+    info = CardBooking(
+        day=local(session.starts_at).date(),
+        day_title=f"{month_day_weekday(local(session.starts_at).date())}요일",
+        time=clock(session.starts_at), customer=masked(customer.name), people=booking.party_size,
+    )
     match booking.status:
         case "confirmed":
             remaining = max(session.capacity - taken, 0)
             lines.append(f"{who} · 예약금 확인 완료 · 남은 자리 {remaining}개")
             return Card(
                 id=booking.id, kind="booking", title=session.title, lines=lines, tag="확정",
-                status=Status(text="확정", tone="done"), revision=booking.revision,
+                status=Status(text="수업 완료" if session.status == "completed" else "확정", tone="done"),
+                revision=booking.revision, booking=info,
+                undo=CardUndo(path=f"/bookings/{booking.id}/undo-deposit")
+                if booking.deposit_won > 0 else None,
             )
         case "deposit_pending":
             lines.append(f"{who} · 예약금 {won(booking.deposit_won)}")
@@ -129,12 +137,14 @@ def booking_card(record: BookingRecord, now: datetime) -> Card:
                 status=Status(text="예약금 대기", tone="attention"), revision=booking.revision,
                 deadline=f"입금 기한 {phrase}" if due >= now else f"입금 기한 지남 · {phrase}",
                 action=CardAction(code="confirmDeposit", label="입금 확인하기"),
+                booking=info,
             )
         case _:
             lines.append(who)
             return Card(
                 id=booking.id, kind="booking", title=session.title, lines=lines, tag="취소",
                 status=Status(text="취소", tone="neutral"), revision=booking.revision,
+                booking=info,
             )
 
 
@@ -164,9 +174,14 @@ def upcoming_first(today: date) -> tuple[ColumnElement[int], ColumnElement[datet
 
 
 @router.get("/bookings")
-async def list_bookings(db: Session, now: Now, paging: PageQuery, status: BookingFilter = "all") -> Page:
+async def list_bookings(
+    db: Session, now: Now, paging: PageQuery, status: BookingFilter = "all",
+    session: Annotated[str | None, Query()] = None,
+) -> Page:
     """Return one filtered page of bookings with screen totals."""
     conditions = list_conditions(BookingQuery(status, paging.text))
+    if session is not None:
+        conditions.append(BookingRow.session_id == session)
     records = await db.execute(
         booking_records().where(*conditions)
         .order_by(*upcoming_first(now.date()), BookingRow.id).limit(paging.limit).offset(paging.offset),

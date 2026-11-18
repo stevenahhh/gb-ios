@@ -21,6 +21,8 @@ from common import (
 )
 from contracts import ApiModel, Card, CardAction, Metric, Page, Status
 from display import count, day_start, next_day_start, won
+from draft_contracts import draft_reference
+from drafts import sync_linked
 from inquiries import Inquiry
 from metrics import Counts, channel_metric, counted, load_counts, metric
 from models import (
@@ -114,6 +116,7 @@ async def channel_cards(db: AsyncSession, today: date, text: str = "") -> list[C
 def content_card(draft: ContentDraftRow, channel: ChannelRow) -> Card:
     """Present a draft; reviewing does not publish it."""
     reviewed = draft.status == "reviewed"
+    pending = draft.status == "draft"
     closing = f"{channel.name}에는 직접 올려 주세요." if reviewed else draft.summary
     return Card(
         id=draft.id,
@@ -123,9 +126,11 @@ def content_card(draft: ContentDraftRow, channel: ChannelRow) -> Card:
         revision=draft.revision,
         status=Status(text="검토 완료", tone="done")
         if reviewed
-        else Status(text="초안 준비", tone="progress"),
+        else Status(text="초안 준비", tone="progress") if pending
+        else Status(text="반려함", tone="neutral"),
         lines=[f"{channel.name} 게시물", closing],
-        action=None if reviewed else CardAction(code="reviewContent", label="홍보 글 검토하기"),
+        action=CardAction(code="reviewContent", label="홍보 글 검토하기") if pending else None,
+        draft=draft_reference(draft),
     )
 
 
@@ -238,5 +243,6 @@ async def review_content(draft_id: str, body: ContentReview, db: Session, now: N
     draft.status = "reviewed"
     draft.reviewed_at = now
     draft.revision += 1
+    await sync_linked(db, draft)
     await db.flush()
     return content_card(draft, await db.get_one(ChannelRow, draft.channel_id))

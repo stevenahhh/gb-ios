@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common import Offset, Revision, Session
+from bookings import ExpectedRevision
+from common import Offset, Revision, Session, can_reopen, invalid_transition, require_revision
 from models import InquiryRow
 
 InquiryId = NewType("InquiryId", str)
@@ -90,6 +91,21 @@ async def decide(inquiry_id: InquiryId, body: Decision, db: Session) -> Inquiry:
         case _:
             assert_never(body.decision)
     row.draft = text
+    row.revision += 1
+    await db.flush()
+    return Inquiry.model_validate(row)
+
+
+@router.post("/inquiries/{inquiry_id}/reopen")
+async def reopen(inquiry_id: InquiryId, body: ExpectedRevision, db: Session) -> Inquiry:
+    """Reopen a recorded decision while preserving the reply draft."""
+    row = await db.scalar(select(InquiryRow).where(InquiryRow.id == inquiry_id).with_for_update())
+    if row is None:
+        raise HTTPException(404, "inquiry not found")
+    require_revision(row.revision, body.expected_revision)
+    if not can_reopen(is_decided=row.status in {"approved", "rejected"}):
+        raise invalid_transition()
+    row.status = "pending"
     row.revision += 1
     await db.flush()
     return Inquiry.model_validate(row)

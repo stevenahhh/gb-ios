@@ -191,7 +191,7 @@ class ContentDraftRow(Entity, Base):
 
     __tablename__: str = "content_drafts"
     __table_args__: TableArgs = (
-        CheckConstraint("status IN ('draft', 'reviewed')"), CheckConstraint("btrim(body) <> ''"),
+        CheckConstraint("status IN ('draft', 'reviewed', 'rejected')"), CheckConstraint("btrim(body) <> ''"),
         CheckConstraint(REVISION_CHECK), Index("ix_content_drafts_status", "status"),
     )
     channel_id: Mapped[str] = mapped_column(ForeignKey("channels.id", ondelete="RESTRICT"))
@@ -242,7 +242,7 @@ class RecommendationRow(Entity, Base):
     __tablename__: str = "assistant_recommendations"
     __table_args__: TableArgs = (
         CheckConstraint("kind IN ('seat_promotion', 'deposit_reminder', 'opportunity')"),
-        CheckConstraint("status IN ('open', 'acknowledged')"),
+        CheckConstraint("status IN ('open', 'acknowledged', 'rejected')"),
         CheckConstraint(REVISION_CHECK), Index("ix_recommendations_status", "status"),
     )
     kind: Mapped[str] = mapped_column(Text)
