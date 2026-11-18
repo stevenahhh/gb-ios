@@ -1,19 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import {
-  agenda, areaOrder, areas, assistantSuggestions, attentionCount, channelCards, channelTodos, eventCount, inTransit, kindInfo, kinds,
-  launchState, novemberEvents, settingsSections, shipToday, suggestions, todayDay, todayMetrics, todaySegments, todayTaskGroups,
-  type AreaId, type ScreenState, type TodaySegment, type WorkItem,
+  agenda, areaOrder, areas, assertNever, assistantSuggestions, channelCardIds, channelTodoDraftId, eventCount, inTransitIds, kindInfo, launchState,
+  novemberEvents, settingsSections, shipTodayIds, todayDay, todayMetrics, todaySegments, todaySuggestionIds, todayWorkGroups, weekdayName, workItems,
+  type AreaId, type ScreenState, type TodaySegment,
 } from "./data";
-import {
-  AgendaRow, EmptyState, LoadError, MenuButton, MetricStrip, PlaceholderBody, Row, Screen, Section, SectionHeader, Segmented,
-  StatusBadge, TaskRow, WorkCard, WorkCardRow, primaryId, useNav,
-} from "./ui";
-
-function Cards({ items }: { items: WorkItem[] }) {
-  const first = primaryId(items);
-  return <>{items.map((item) => <WorkCardRow key={item.id} item={item} primary={item.id === first} />)}</>;
-}
+import { AgendaRow, BookingTaskRow, WorkCards, WorkTaskRow } from "./cards";
+import { DraftCompact } from "./drafts";
+import { novemberRange, PeriodPicker, rangeHeading, rangeLabel, type DayRange } from "./period";
+import { attentionCount, liveCounts, todayBookings, useStore } from "./store";
+import { EmptyState, LoadError, MetricStrip, PlaceholderBody, Row, Screen, Section, SectionHeader, Segmented, useNav } from "./ui";
 
 function greeting(hour: number) {
   if (hour >= 5 && hour < 11) return "사장님, 좋은 아침이에요";
@@ -27,16 +23,72 @@ function koreanTime(d: Date) {
   return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+function TodayBody({ segment }: { segment: TodaySegment }) {
+  const { push } = useNav();
+  const { state } = useStore();
+  const counts = liveCounts(state);
+  switch (segment) {
+    case "할 일":
+      return (
+        <div className="cols">
+          <Section header={<SectionHeader title="예약" area="bookings" />}>
+            {todayBookings(state).map((b) => <BookingTaskRow key={b.id} booking={b} />)}
+          </Section>
+          {todayWorkGroups.map((group) => (
+            <Section key={group.title} header={<SectionHeader title={group.title} area={group.area} />}>
+              {group.ids.map((id) => <WorkTaskRow key={id} item={workItems[id]} kind={group.kind} />)}
+            </Section>
+          ))}
+        </div>
+      );
+    case "채널":
+      return (
+        <>
+          <Section header={<SectionHeader title="채널 현황" area="channels" />} bodyClass="cards"><WorkCards ids={channelCardIds} /></Section>
+          <Section header={<SectionHeader title="오늘 챙길 일 2건" />} bodyClass="cards">
+            <DraftCompact id={channelTodoDraftId} />
+            <Row chevron onClick={() => push({ kind: "area", area: "channels", filter: "콘텐츠" })}>
+              <div className="summary-title sk">SNS 콘텐츠 미리보기</div>
+              <div className="card-line sk">오늘 올릴 게시물을 확인해 주세요.</div>
+            </Row>
+          </Section>
+        </>
+      );
+    case "배송":
+      return (
+        <>
+          <Section header={<SectionHeader title={`오늘 발송할 물건 ${counts.ship}건`} area="deliveries" />} bodyClass="cards"><WorkCards ids={shipTodayIds} /></Section>
+          <Section header={<SectionHeader title="이동 중인 배송" />}>
+            <Row chevron onClick={() => push({ kind: "area", area: "deliveries", filter: "배송 중" })}>
+              <div className="summary-title sk">배송 중 2건 · 오늘 도착 1건</div>
+              <div className="card-line sk">배송 지연 없이 잘 이동하고 있어요.</div>
+            </Row>
+            <WorkCards ids={inTransitIds} />
+          </Section>
+        </>
+      );
+    case "비서 추천":
+      return (
+        <Section header={<SectionHeader title="오늘의 추천" />} footer="비서가 공방 현황을 보고 골랐어요. 틀릴 수 있으니 내용을 확인해 주세요." bodyClass="cards">
+          {todaySuggestionIds.map((id) => <DraftCompact key={id} id={id} />)}
+        </Section>
+      );
+    default:
+      return assertNever(segment);
+  }
+}
+
 export function TodayScreen() {
   const { push } = useNav();
+  const { state } = useStore();
   const [segment, setSegment] = useState<TodaySegment>("할 일");
-  const [state, setState] = useState<ScreenState>(launchState);
+  const [screenState, setScreenState] = useState<ScreenState>(launchState);
   const now = useMemo(() => new Date(), []);
   const title = greeting(now.getHours());
   const subtitle = `11월 4일 수요일 · ${koreanTime(now)} 기준`;
 
-  if (state === "error") return <Screen title={title} subtitle={subtitle} large><LoadError retry={() => setState("loaded")} /></Screen>;
-  if (state === "empty") {
+  if (screenState === "error") return <Screen title={title} subtitle={subtitle} large><LoadError retry={() => setScreenState("loaded")} /></Screen>;
+  if (screenState === "empty") {
     return (
       <Screen title={title} subtitle={subtitle} large>
         <EmptyState
@@ -51,38 +103,10 @@ export function TodayScreen() {
 
   return (
     <Screen title={title} subtitle={subtitle} large>
-      <div className={state === "loading" ? "redacted" : undefined}>
-        <Section><MetricStrip metrics={todayMetrics[segment]} /></Section>
+      <div className={screenState === "loading" ? "redacted" : undefined}>
+        <Section><MetricStrip metrics={todayMetrics(segment, liveCounts(state))} /></Section>
         <div className="segmented-wrap"><Segmented label="보기" options={todaySegments} value={segment} onChange={setSegment} /></div>
-        {segment === "할 일" &&
-          todayTaskGroups.map((group) => (
-            <Section key={group.title} header={<SectionHeader title={group.title} area={group.area} />}>
-              {group.items.map((item) => <TaskRow key={item.id} item={item} kind={group.kind} />)}
-            </Section>
-          ))}
-        {segment === "채널" && (
-          <>
-            <Section header={<SectionHeader title="채널 현황" area="channels" />}><Cards items={channelCards} /></Section>
-            <Section header={<SectionHeader title={`오늘 챙길 일 ${channelTodos.length}건`} />}><Cards items={channelTodos} /></Section>
-          </>
-        )}
-        {segment === "배송" && (
-          <>
-            <Section header={<SectionHeader title={`오늘 발송할 물건 ${shipToday.length}건`} area="deliveries" />}><Cards items={shipToday} /></Section>
-            <Section header={<SectionHeader title="이동 중인 배송" />}>
-              <Row chevron onClick={() => push({ kind: "area", area: "deliveries", filter: "배송 중" })}>
-                <div className="summary-title sk">배송 중 2건 · 오늘 도착 1건</div>
-                <div className="card-line sk">배송 지연 없이 잘 이동하고 있어요.</div>
-              </Row>
-              <Cards items={inTransit} />
-            </Section>
-          </>
-        )}
-        {segment === "비서 추천" && (
-          <Section header={<SectionHeader title="오늘의 추천" />} footer="비서가 공방 현황을 보고 골랐어요. 틀릴 수 있으니 내용을 확인해 주세요.">
-            <Cards items={suggestions} />
-          </Section>
-        )}
+        <TodayBody segment={segment} />
       </div>
     </Screen>
   );
@@ -90,22 +114,53 @@ export function TodayScreen() {
 
 const weekdays = ["월", "화", "수", "목", "금", "토", "일"];
 
+function EventDot({ day }: { day: number }) {
+  return <span className="dot-slot">{eventCount(day) > 0 ? <span className="dot" /> : null}</span>;
+}
+
+function WeekStrip({ day, onSelect }: { day: number; onSelect: (d: number) => void }) {
+  return (
+    <div className="week">
+      {[2, 3, 4, 5, 6, 7, 8].map((d, i) => (
+        <button key={d} className="week-day" onClick={() => onSelect(d)} aria-pressed={d === day} aria-label={`11월 ${d}일 ${weekdays[i]}요일, 일정 ${eventCount(d)}개`}>
+          <span className="week-name">{weekdays[i]}</span>
+          <span className={d === day ? "day-num day-on" : "day-num"}>{d}</span>
+          <EventDot day={d} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MonthGrid({ day, onSelect }: { day: number; onSelect: (d: number) => void }) {
+  const first = new Date(2026, 10, 1).getDay();
+  return (
+    <div className="month">
+      <div className="month-grid">
+        {["일", "월", "화", "수", "목", "금", "토"].map((w) => <span key={w} className="month-weekday">{w}</span>)}
+        {Array.from({ length: first }, (_, i) => <span key={`blank-${i}`} />)}
+        {Array.from({ length: 30 }, (_, i) => i + 1).map((d) => (
+          <button key={d} className="month-cell" onClick={() => onSelect(d)} aria-pressed={d === day} aria-label={`11월 ${d}일, 일정 ${eventCount(d)}개`}>
+            <span className={d === day ? "day-num day-on" : "day-num"}>{d}</span>
+            <EventDot day={d} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CalendarScreen() {
   const { push } = useNav();
   const [mode, setMode] = useState<"주간" | "월간">("주간");
   const [day, setDay] = useState(todayDay);
-  const [state, setState] = useState<ScreenState>(launchState);
+  const [screenState, setScreenState] = useState<ScreenState>(launchState);
   const addEvent = () => push({ kind: "placeholder", title: "일정 추가", symbol: "calendarPlus" });
-  const trailing = (
-    <>
-      <button className="glass-pill" onClick={() => setDay(todayDay)}>오늘</button>
-      <button className="glass-circle" aria-label="일정 추가" onClick={addEvent}><Icon name="plus" size={20} weight={2.2} /></button>
-    </>
-  );
-  const subtitle = state === "loaded" || state === "loading" ? `오늘 일정 ${eventCount(todayDay)}개` : undefined;
+  const trailing = <button className="glass-circle" aria-label="일정 추가" onClick={addEvent}><Icon name="plus" size={20} weight={2.2} /></button>;
+  const subtitle = screenState === "loaded" || screenState === "loading" ? `오늘 일정 ${eventCount(todayDay)}개` : undefined;
 
-  if (state === "error") return <Screen title="캘린더" subtitle={subtitle} large trailing={trailing}><LoadError retry={() => setState("loaded")} /></Screen>;
-  if (state === "empty") {
+  if (screenState === "error") return <Screen title="캘린더" subtitle={subtitle} large trailing={trailing}><LoadError retry={() => setScreenState("loaded")} /></Screen>;
+  if (screenState === "empty") {
     return (
       <Screen title="캘린더" subtitle={subtitle} large trailing={trailing}>
         <EmptyState symbol="calendar" title="아직 일정이 없어요" message={"예약과 할 일을 추가하면\n날짜별로 여기에 모여요."}
@@ -117,31 +172,28 @@ export function CalendarScreen() {
   const events = novemberEvents[day];
   const items = agenda[day];
   const count = eventCount(day);
-  const dayLabel = `11월 ${day}일 ${["일", "월", "화", "수", "목", "금", "토"][new Date(2026, 10, day).getDay()]}요일`;
+  const dayLabel = `11월 ${day}일 ${weekdayName(day)}요일`;
   return (
     <Screen title="캘린더" subtitle={subtitle} large trailing={trailing}>
-      <div className={state === "loading" ? "redacted" : undefined}>
+      <div className={screenState === "loading" ? "redacted" : undefined}>
         <div className="segmented-wrap"><Segmented label="보기" options={["주간", "월간"]} value={mode} onChange={setMode} /></div>
-        <Section header={mode === "주간" ? "11월 2일 – 8일" : undefined} footer={<Legend />}>
+        <Section spaced header={
+          <div className="section-header-row">
+            <span>{mode === "주간" ? "11월 2일 – 8일" : "2026년 11월"}</span>
+            {day !== todayDay ? <button className="link" onClick={() => setDay(todayDay)}>오늘로</button> : null}
+          </div>
+        }>
           {mode === "주간" ? <WeekStrip day={day} onSelect={setDay} /> : <MonthGrid day={day} onSelect={setDay} />}
         </Section>
-        <Section header={count > 0 ? `${dayLabel} · 일정 ${count}개` : dayLabel}>
+        <Section spaced header={count > 0 ? `${dayLabel} · 일정 ${count}개` : dayLabel}>
           {items ? (
-            items.map((a) => <AgendaRow key={a.id} time={a.time} title={a.title} detail={a.detail} kind={a.kind} />)
+            items.map((entry) => <AgendaRow key={`${entry.time}-${entry.kind}`} entry={entry} />)
           ) : events ? (
             events.map((e) => {
               const info = kindInfo[e.kind];
-              const body = (
-                <span className="summary-row">
-                  <Icon name={info.symbol} size={20} color={info.color} />
-                  <span className="summary-title">{info.label} {e.count}건</span>
-                </span>
-              );
-              return info.area ? (
-                <Row key={e.kind} chevron onClick={() => push({ kind: "area", area: info.area! })}>{body}</Row>
-              ) : (
-                <Row key={e.kind}>{body}</Row>
-              );
+              const area = info.area;
+              const body = <span className="summary-title sk">{info.label} {e.count}건</span>;
+              return area ? <Row key={e.kind} chevron onClick={() => push({ kind: "area", area })}>{body}</Row> : <Row key={e.kind}>{body}</Row>;
             })
           ) : (
             <EmptyState symbol="calendar" title="이 날은 일정이 없어요" message="필요하면 일정을 추가해 보세요."
@@ -153,200 +205,86 @@ export function CalendarScreen() {
   );
 }
 
-function KindSymbols({ day }: { day: number }) {
-  return (
-    <span className="kind-symbols">
-      {(novemberEvents[day] ?? []).map((e) => <Icon key={e.kind} name={kindInfo[e.kind].symbol} size={9} color={kindInfo[e.kind].color} weight={2.6} />)}
-    </span>
-  );
-}
-
-function WeekStrip({ day, onSelect }: { day: number; onSelect: (d: number) => void }) {
-  return (
-    <div className="week">
-      {[2, 3, 4, 5, 6, 7, 8].map((d, i) => (
-        <button key={d} className="week-day" onClick={() => onSelect(d)} aria-pressed={d === day}
-          aria-label={`11월 ${d}일 ${weekdays[i]}요일, ${(novemberEvents[d] ?? []).map((e) => `${kindInfo[e.kind].label} ${e.count}건`).join(", ") || "일정 없음"}`}>
-          <span className="week-name">{weekdays[i]}</span>
-          <span className={d === day ? "day-num day-on" : "day-num"}>{d}</span>
-          <KindSymbols day={d} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function MonthGrid({ day, onSelect }: { day: number; onSelect: (d: number) => void }) {
-  const first = new Date(2026, 10, 1).getDay();
-  const cells = [...Array(first).fill(0), ...Array.from({ length: 30 }, (_, i) => i + 1)];
-  return (
-    <div className="month">
-      <div className="month-head">
-        <span className="month-label">2026년 11월 <Icon name="chevronRight" size={14} weight={2.6} color="var(--accent)" /></span>
-        <span className="month-arrows"><Icon name="chevronLeft" size={20} weight={2.2} /><Icon name="chevronRight" size={20} weight={2.2} /></span>
-      </div>
-      <div className="month-grid">
-        {["일", "월", "화", "수", "목", "금", "토"].map((w) => <span key={w} className="month-weekday">{w}</span>)}
-        {cells.map((d, i) =>
-          d === 0 ? <span key={`b${i}`} /> : (
-            <button key={d} className="month-cell" onClick={() => onSelect(d)} aria-pressed={d === day}>
-              <span className={d === day ? "day-num day-on" : "day-num"}>{d}</span>
-              <KindSymbols day={d} />
-            </button>
-          ),
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Legend() {
-  return (
-    <span className="legend">
-      {kinds.map((k) => (
-        <span key={k} className="legend-item"><Icon name={kindInfo[k].symbol} size={15} color={kindInfo[k].color} />{kindInfo[k].label}</span>
-      ))}
-    </span>
-  );
-}
-
 export function OperationsScreen() {
   const { push } = useNav();
-  const [period, setPeriod] = useState<"11월" | "10월">("11월");
-  const attention: { title: string; count: number; symbol: string; area: AreaId; filter: string }[] = [
-    { title: "예약금 미확인", count: 2, symbol: "won", area: "bookings", filter: "예약금 대기" },
-    { title: "미답변 문의", count: 3, symbol: "bubble", area: "channels", filter: "문의" },
-    { title: "발송 마감", count: 2, symbol: "box", area: "deliveries", filter: "발송 예정" },
+  const { state } = useStore();
+  const counts = liveCounts(state);
+  const attention = attentionCount(state);
+  const [range, setRange] = useState<DayRange>(novemberRange);
+  const [picking, setPicking] = useState(false);
+  const checks: readonly { readonly title: string; readonly count: number; readonly area: AreaId; readonly filter: string }[] = [
+    { title: "예약금 미확인", count: counts.deposit, area: "bookings", filter: "예약금 대기" },
+    { title: "미답변 문의", count: counts.inquiry, area: "channels", filter: "문의" },
+    { title: "발송 마감", count: counts.ship, area: "deliveries", filter: "발송 예정" },
   ];
+  const picker = picking ? (
+    <PeriodPicker value={range} onApply={(r) => { setRange(r); setPicking(false); }} onCancel={() => setPicking(false)} />
+  ) : null;
   return (
-    <Screen title="운영" subtitle={`먼저 확인할 일 ${attention.length > 0 ? attentionCount : 0}건`} large>
-      <Section header={<div className="section-header-row"><span>먼저 확인해주세요</span><StatusBadge status={{ text: `${attentionCount}건`, tone: "attention" }} /></div>}>
-        {attention.map((a) => (
-          <Row key={a.title} chevron onClick={() => push({ kind: "area", area: a.area, filter: a.filter })}>
-            <span className="labeled"><Icon name={a.symbol} size={21} color="var(--accent)" /><span>{a.title}</span><b>{a.count}건</b></span>
-          </Row>
-        ))}
-      </Section>
-      <Section header={
-        <div className="section-header-row">
-          <span>{period} 운영 현황</span>
-          <MenuButton className="period-chip" ariaLabel={`기간 선택, ${period}`} options={["11월", "10월"] as ("11월" | "10월")[]} value={period} onChange={setPeriod}
-            label={<>{period === "11월" ? "11.01 – 11.30" : "10.01 – 10.31"} <Icon name="chevronDown" size={14} weight={2.4} /></>} />
-        </div>
-      }>
-        <div className="row summary-box">
-          <div className="gauge-wrap" aria-label={`${period} 처리율 75퍼센트`}>
-            <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-              <circle cx="32" cy="32" r="27" fill="none" stroke="var(--fill)" strokeWidth="6" />
-              <circle cx="32" cy="32" r="27" fill="none" stroke="var(--accent)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${2 * Math.PI * 27 * 0.75} ${2 * Math.PI * 27}`} transform="rotate(-90 32 32)" />
-              <text x="32" y="37" textAnchor="middle" className="gauge-text">75%</text>
-            </svg>
-            <span className="caption">처리율</span>
-          </div>
-          <div className="summary-grid">
-            {[["예약", "24건"], ["주문", "8건"], ["배송", "5건"], ["SNS", "2개"]].map(([l, v]) => (
-              <div key={l}><div className="caption">{l}</div><div className="summary-value">{v}</div></div>
+    <Screen title="운영" subtitle={`먼저 확인할 일 ${attention}건`} large overlay={picker}>
+      <div className="cols">
+        <div>
+          <Section spaced header={<div className="section-header-row"><span>먼저 확인해주세요</span><span>{attention}건</span></div>}>
+            {checks.map((a) => (
+              <Row key={a.title} chevron onClick={() => push({ kind: "area", area: a.area, filter: a.filter })}>
+                <span className="labeled"><span>{a.title}</span><b>{a.count}건</b></span>
+              </Row>
             ))}
-          </div>
-        </div>
-        <div className="row compare">
-          {["+12%", "+5%"].map((c, i) => (
-            <div key={c} className={i ? "compare-cell compare-right" : "compare-cell"}><div className="caption">전월 대비</div><div className="compare-value">{c}</div></div>
-          ))}
-        </div>
-      </Section>
-      <Section header="전체 업무 관리">
-        {areaOrder.map((id) => {
-          const a = areas[id];
-          return (
-            <Row key={id} chevron onClick={() => push({ kind: "area", area: id })}>
-              <span className="labeled">
-                <Icon name={a.symbol} size={21} color="var(--accent)" />
-                <span className="labeled-text"><span>{a.title}</span><small>{a.summary}</small></span>
-                <span className="secondary-value">{a.count}</span>
-              </span>
-            </Row>
-          );
-        })}
-      </Section>
-      <Section header="공방 성장">
-        <Row chevron onClick={() => push({ kind: "placeholder", title: "기회", symbol: "sparkles" })}>
-          <span className="labeled"><Icon name="sparkles" size={21} color="var(--accent)" /><span className="labeled-text"><span>기회</span><small>마켓·공모·지원사업 모집 공고</small></span></span>
-        </Row>
-        <Row chevron onClick={() => push({ kind: "placeholder", title: "리포트", symbol: "chart" })}>
-          <span className="labeled"><Icon name="chart" size={21} color="var(--accent)" /><span className="labeled-text"><span>리포트</span><small>주간·월간 숫자</small></span></span>
-        </Row>
-      </Section>
-    </Screen>
-  );
-}
-
-export function AreaScreen({ areaId, initialFilter }: { areaId: AreaId; initialFilter?: string }) {
-  const area = areas[areaId];
-  const { push } = useNav();
-  const [filter, setFilter] = useState(initialFilter ?? area.filters[0]!);
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState(area.sortOptions[0] ?? "");
-  const [state, setState] = useState<ScreenState>(launchState);
-  const visible = useMemo(() => {
-    const q = query.trim();
-    const list = area.items.filter((item) =>
-      (filter === area.filters[0] || item.tag === filter) &&
-      (!q || item.title.includes(q) || item.lines.some((l) => l.includes(q))));
-    return area.sortOptions.length > 1 && sort === area.sortOptions[1] ? [...list].reverse() : list;
-  }, [area, filter, query, sort]);
-  const first = primaryId(visible);
-
-  const trailing =
-    areaId === "bookings" ? (
-      <button className="glass-circle" aria-label="예약 등록" onClick={() => push({ kind: "placeholder", title: "예약 등록", symbol: "calendarPlus" })}><Icon name="plus" size={20} weight={2.2} /></button>
-    ) : areaId === "channels" ? (
-      <button className="glass-pill" onClick={() => push({ kind: "placeholder", title: "연결 관리", symbol: "link" })}>연결 관리</button>
-    ) : (
-      <MenuButton ariaLabel="정렬" options={area.sortOptions} value={sort} onChange={setSort} label={<Icon name="sort" size={20} weight={2} />} />
-    );
-  const search = (
-    <div className="searchbar">
-      <Icon name="search" size={17} color="var(--secondary)" weight={2.2} />
-      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={area.searchPrompt} aria-label={area.searchPrompt} />
-      {query ? <button className="search-clear" aria-label="지우기" onClick={() => setQuery("")}><Icon name="xmark" size={12} weight={3} /></button> : null}
-    </div>
-  );
-
-  return (
-    <Screen title={area.title} back trailing={trailing} accessory={state === "loaded" || state === "loading" ? search : undefined}>
-      {state === "error" ? (
-        <LoadError retry={() => setState("loaded")} />
-      ) : state === "empty" ? (
-        <EmptyState symbol={area.symbol} title={area.noDataTitle} message={area.noDataMessage}
-          action={area.noDataAction ? <button className="btn btn-prominent btn-pill" onClick={() => push({ kind: "placeholder", title: area.noDataAction!, symbol: area.symbol })}>{area.noDataAction}</button> : undefined} />
-      ) : (
-        <div className={state === "loading" ? "redacted" : undefined}>
-          <Section><MetricStrip metrics={area.metrics} /></Section>
-          <div className="segmented-wrap"><Segmented label="상태" options={area.filters} value={filter} onChange={setFilter} /></div>
-          <Section header={area.listTitle}>
-            {visible.length === 0 ? (
-              query ? (
-                <EmptyState symbol="search" title={`'${query}'에 대한 결과 없음`} message="검색어를 확인하거나 다른 검색어를 입력해 보세요." />
-              ) : (
-                <EmptyState symbol="tray" title={area.emptyTitle} message="지금 고른 상태에는 항목이 없어요."
-                  action={filter !== area.filters[0] ? <button className="btn btn-bordered btn-pill" onClick={() => setFilter(area.filters[0]!)}>전체 보기</button> : undefined} />
-              )
-            ) : (
-              visible.map((item) => <WorkCardRow key={item.id} item={item} primary={item.id === first} />)
-            )}
+          </Section>
+          <Section spaced header={
+            <div className="section-header-row">
+              <span className="ops-heading">{rangeHeading(range)}</span>
+              <button className="period-chip" aria-label={`기간 선택, ${rangeLabel(range)}`} aria-haspopup="dialog" onClick={() => setPicking(true)}>
+                {rangeLabel(range)} <Icon name="chevronDown" size={14} weight={2.4} />
+              </button>
+            </div>
+          }>
+            <div className="row summary-box">
+              <div className="gauge-wrap" aria-label="처리율 75퍼센트">
+                <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+                  <circle cx="32" cy="32" r="27" fill="none" stroke="var(--fill)" strokeWidth="6" />
+                  <circle cx="32" cy="32" r="27" fill="none" stroke="var(--accent)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${2 * Math.PI * 27 * 0.75} ${2 * Math.PI * 27}`} transform="rotate(-90 32 32)" />
+                  <text x="32" y="37" textAnchor="middle" className="gauge-text">75%</text>
+                </svg>
+                <span className="caption">처리율</span>
+              </div>
+              <div className="summary-grid">
+                {[["예약", "24건"], ["주문", "8건"], ["배송", "5건"], ["SNS", "2개"]].map(([l, v]) => (
+                  <div key={l}><div className="caption">{l}</div><div className="summary-value">{v}</div></div>
+                ))}
+              </div>
+            </div>
+            <div className="row compare">
+              {["+12%", "+5%"].map((c, i) => (
+                <div key={c} className={i ? "compare-cell compare-right" : "compare-cell"}><div className="caption">전월 대비</div><div className="compare-value">{c}</div></div>
+              ))}
+            </div>
           </Section>
         </div>
-      )}
-    </Screen>
-  );
-}
-
-export function DetailScreen({ item }: { item: WorkItem }) {
-  return (
-    <Screen title={item.title} back>
-      <Section><div className="row"><WorkCard item={item} showAction={false} /></div></Section>
-      <Section><Row><span className="labeled muted"><Icon name="hammer" size={20} color="var(--secondary)" /><span>세부 화면은 준비 중이에요.</span></span></Row></Section>
+        <div>
+          <Section spaced header="전체 업무 관리">
+            {areaOrder.map((id) => {
+              const a = areas[id];
+              return (
+                <Row key={id} chevron onClick={() => push({ kind: "area", area: id })}>
+                  <span className="labeled">
+                    <span className="labeled-text"><span>{a.title}</span><small>{a.summary}</small></span>
+                    <span className="secondary-value">{a.count}</span>
+                  </span>
+                </Row>
+              );
+            })}
+          </Section>
+          <Section spaced header="공방 성장">
+            <Row chevron onClick={() => push({ kind: "placeholder", title: "기회", symbol: "flag" })}>
+              <span className="labeled"><span className="labeled-text"><span>기회</span><small>마켓·공모·지원사업 모집 공고</small></span></span>
+            </Row>
+            <Row chevron onClick={() => push({ kind: "placeholder", title: "리포트", symbol: "chart" })}>
+              <span className="labeled"><span className="labeled-text"><span>리포트</span><small>주간·월간 숫자</small></span></span>
+            </Row>
+          </Section>
+        </div>
+      </div>
     </Screen>
   );
 }
@@ -358,7 +296,7 @@ export function PlaceholderScreen({ title, symbol }: { title: string; symbol: st
 export function SettingsScreen() {
   const { push } = useNav();
   return (
-    <Screen title="설정" large>
+    <Screen title="설정" subtitle="오롯 공방" large>
       <Section>
         <div className="row profile">
           <span className="profile-icon"><Icon name="storefront" size={26} color="var(--cell)" /></span>
