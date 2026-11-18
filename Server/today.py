@@ -188,7 +188,9 @@ async def today_screen(db: Session, now: Now) -> Today:
         await session_group(db, today), shipment_group(ship_today),
         await task_group(db, today, material=True), await task_group(db, today, material=False),
     ]
-    suggestions = await recommendation_cards(db, now, RecommendationRow.status == "open")
+    suggestions = await recommendation_cards(db, now, or_(
+        RecommendationRow.status == "open", RecommendationRow.acknowledged_at >= now - RECENT_WINDOW,
+    ))
     acknowledged = await db.scalar(select(counted(
         RecommendationRow, RecommendationRow.acknowledged_at >= now - RECENT_WINDOW,
     ))) or 0
@@ -219,7 +221,10 @@ async def today_screen(db: Session, now: Now) -> Today:
         ),
         suggestions=SuggestionsSegment(
             metrics=[
-                metric("openRecommendations", "오늘의 추천", len(suggestions)),
+                metric(
+                    "openRecommendations", "오늘의 추천",
+                    sum(card.action is not None for card in suggestions),
+                ),
                 metric("drafts", "준비된 초안", counts.drafts),
                 metric("acknowledgedThisWeek", "이번 주 확인", acknowledged),
             ],

@@ -1,5 +1,6 @@
 """JSON contracts shared by the read and action endpoints."""
 
+from datetime import date
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -8,6 +9,8 @@ from pydantic.alias_generators import to_camel
 type Tone = Literal["attention", "done", "progress", "neutral"]
 type EventKind = Literal["booking", "order", "delivery", "todo"]
 type CardKind = Literal["booking", "order", "shipment", "channel", "content", "task", "recommendation"]
+type DraftKind = Literal["content", "recommendation"]
+type DraftStatus = Literal["pending", "approved", "rejected"]
 type ActionCode = Literal[
     "confirmDeposit", "confirmOrder", "pack", "registerInvoice", "markDelivered",
     "reviewContent", "completeTask", "acknowledgeRecommendation",
@@ -53,6 +56,32 @@ class CardAction(ApiModel):
     label: str
 
 
+class CardUndo(ApiModel):
+    """A separate undo path that keeps installed action enums compatible."""
+
+    label: Literal["되돌리기"] = "되돌리기"
+    path: str
+
+
+class CardDraft(ApiModel):
+    """The editable assistant draft targeted by a card."""
+
+    kind: DraftKind
+    id: str
+    status: DraftStatus
+    preview: str
+
+
+class CardBooking(ApiModel):
+    """Structured booking facts for the redesigned booking row."""
+
+    day: date
+    day_title: str
+    time: str
+    customer: str
+    people: int
+
+
 class Card(ApiModel):
     """One list row, fully derived from database rows."""
 
@@ -65,6 +94,9 @@ class Card(ApiModel):
     tag: str | None = None
     revision: int
     action: CardAction | None = None
+    undo: CardUndo | None = None
+    draft: CardDraft | None = None
+    booking: CardBooking | None = None
 
 
 class Page(ApiModel):

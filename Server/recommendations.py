@@ -5,15 +5,16 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from fastapi import APIRouter
-from sqlalchemy import ColumnElement, extract, func, select
+from sqlalchemy import ColumnElement, Nullable, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bookings import ExpectedRevision, seats_taken
 from common import Now, Session, invalid_transition, locked
-from contracts import Card, CardAction, Status
+from contracts import Card, CardAction, CardDraft, Status
 from display import count, local, weekday
+from draft_contracts import draft_reference
 from metrics import Counts, load_counts
-from models import ClassSessionRow, RecommendationRow
+from models import ClassSessionRow, ContentDraftRow, RecommendationRow
 
 router = APIRouter()
 WEEKEND_WINDOW: Final = timedelta(days=14)
@@ -79,7 +80,7 @@ def recommendation_lines(
             return [line for line in (row.source_name, row.body) if line]
 
 
-def recommendation_card(row: RecommendationRow, lines: list[str]) -> Card:
+def recommendation_card(row: RecommendationRow, lines: list[str], draft: CardDraft | None = None) -> Card:
     """Present a recommendation and its acknowledgement state."""
     is_open = row.status == "open"
     return Card(
@@ -88,8 +89,10 @@ def recommendation_card(row: RecommendationRow, lines: list[str]) -> Card:
         title=row.title,
         lines=lines,
         revision=row.revision,
-        status=None if is_open else Status(text="확인함", tone="done"),
+        status=None if is_open else Status(text="반려함", tone="neutral")
+        if row.status == "rejected" else Status(text="확인함", tone="done"),
         action=CardAction(code="acknowledgeRecommendation", label="확인했어요") if is_open else None,
+        draft=draft or draft_reference(row),
     )
 
 
@@ -99,17 +102,20 @@ async def recommendation_cards(
     """Load recommendations whose basis is currently true."""
     counts = await load_counts(db, now.date())
     opening = await weekend_opening(db, now)
-    rows = await db.scalars(
-        select(RecommendationRow)
+    rows = await db.execute(
+        select(RecommendationRow, Nullable(ContentDraftRow))
+        .outerjoin(ContentDraftRow, ContentDraftRow.id == RecommendationRow.draft_id)
         .where(*conditions)
         .order_by(RecommendationRow.status.desc(), RecommendationRow.created_at, RecommendationRow.id)
         .limit(50),
     )
     cards: list[Card] = []
-    for row in rows:
+    for row, draft in rows.tuples():
         lines = recommendation_lines(row, counts, opening)
+        if lines is None and row.status != "open":
+            lines = [line for line in (row.source_name, row.body) if line]
         if lines is not None:
-            cards.append(recommendation_card(row, lines))
+            cards.append(recommendation_card(row, lines, draft_reference(draft or row)))
     return cards
 
 
@@ -129,4 +135,7 @@ async def acknowledge(recommendation_id: str, body: ExpectedRevision, db: Sessio
     row.acknowledged_at = now
     row.revision += 1
     await db.flush()
-    return recommendation_card(row, [line for line in (row.source_name, row.body) if line])
+    draft = await db.get(ContentDraftRow, row.draft_id) if row.draft_id else None
+    return recommendation_card(
+        row, [line for line in (row.source_name, row.body) if line], draft_reference(draft or row),
+    )

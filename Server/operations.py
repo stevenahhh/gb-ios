@@ -1,21 +1,22 @@
 """Operations tab: attention counts and monthly numbers with defined meanings."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated, Final, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common import Now, Session
 from contracts import ApiModel, Metric
-from display import count, day_start, month_start, next_month, previous_month
+from display import count, day_start, month_start, next_day_start, next_month, previous_month
 from metrics import counted, integers, load_counts, metric
 from models import BookingRow, ClassSessionRow, ContentDraftRow, InquiryRow, OrderRow, ShipmentRow
 
 router = APIRouter()
 MONTHS_SHOWN: Final = 6
+MAX_RANGE_DAYS: Final = 366
 type Area = Literal["bookings", "orders", "deliveries", "channels"]
 
 
@@ -99,9 +100,9 @@ def month_option(first: date) -> MonthOption:
     )
 
 
-async def month_numbers(db: AsyncSession, first: date) -> MonthNumbers:
-    """Count one month's work from its defining timestamps."""
-    begin, end = day_start(first), day_start(next_month(first))
+async def month_numbers(db: AsyncSession, first: date, stop: date | None = None) -> MonthNumbers:
+    """Count work in a half-open range, defaulting to one calendar month."""
+    begin, end = day_start(first), day_start(stop or next_month(first))
     in_month = (ClassSessionRow.starts_at >= begin, ClassSessionRow.starts_at < end)
     booked = (
         select(func.count())
@@ -141,6 +142,8 @@ async def operations(
     db: Session,
     now: Now,
     month: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
+    start: Annotated[date | None, Query()] = None,
+    end: Annotated[date | None, Query()] = None,
 ) -> Operations:
     """Build attention counts, the selected month, and area totals."""
     today = now.date()
@@ -150,8 +153,23 @@ async def operations(
         options.append(previous_month(options[-1]))
     selected = date.fromisoformat(f"{month}-01") if month else current_month
     counts = await load_counts(db, today)
-    numbers = await month_numbers(db, selected)
-    baseline = await month_numbers(db, previous_month(selected))
+    if (start is None) != (end is None) or (month is not None and start is not None):
+        raise HTTPException(422, "provide either month or both start and end")
+    option = month_option(selected)
+    comparison_period = "전월"
+    if start is not None and end is not None:
+        span = (end - start).days + 1
+        if span < 1 or span > MAX_RANGE_DAYS or start.toordinal() <= span or end == date.max:
+            raise HTTPException(422, "date range must be ascending and at most 366 days")
+        numbers = await month_numbers(db, start, next_day_start(end).date())
+        baseline = await month_numbers(db, start - timedelta(days=span), start)
+        option = MonthOption(
+            key="custom", title="선택 기간", range=f"{start:%m.%d} – {end:%m.%d}",  # noqa: RUF001
+        )
+        comparison_period = "이전 기간"
+    else:
+        numbers = await month_numbers(db, selected)
+        baseline = await month_numbers(db, previous_month(selected))
     rate = round(numbers.handled * 100 / numbers.total) if numbers.total else None
     return Operations(
         attention_count=counts.attention,
@@ -161,7 +179,7 @@ async def operations(
             metric("unshipped", "발송 대기", counts.unshipped),
         ],
         period=Period(
-            month=month_option(selected),
+            month=option,
             handled=numbers.handled,
             total=numbers.total,
             rate_percent=rate,
@@ -173,8 +191,13 @@ async def operations(
                 metric("drafts", "콘텐츠", numbers.drafts),
             ],
             comparisons=[
-                Comparison(label="예약 전월 대비", display=change(numbers.bookings, baseline.bookings)),
-                Comparison(label="주문 전월 대비", display=change(numbers.orders, baseline.orders)),
+                Comparison(
+                    label=f"예약 {comparison_period} 대비",
+                    display=change(numbers.bookings, baseline.bookings),
+                ),
+                Comparison(
+                    label=f"주문 {comparison_period} 대비", display=change(numbers.orders, baseline.orders),
+                ),
             ],
         ),
         months=[month_option(first) for first in options],

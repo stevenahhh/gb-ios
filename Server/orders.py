@@ -4,13 +4,13 @@ from datetime import datetime, time, timedelta
 from typing import Final, Literal, assert_never
 
 from fastapi import APIRouter
-from sqlalchemy import ColumnElement, Select, cast, func, or_, select
+from sqlalchemy import ColumnElement, Nullable, Select, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Text
 
 from bookings import ExpectedRevision
 from common import Now, PageQuery, Session, invalid_transition, locked, matches
-from contracts import Card, CardAction, Page, Status
+from contracts import Card, CardAction, CardUndo, Page, Status
 from display import SEOUL, local, masked, month_day, won
 from metrics import load_counts, metric, money_metric
 from models import ChannelRow, CustomerRow, OrderRow, ShipmentRow
@@ -20,21 +20,22 @@ PICKUP: Final = time(16)
 SAME_DAY_CUTOFF: Final = time(15)
 type OrderFilter = Literal["all", "paid", "processing"]
 type OrderSort = Literal["newest", "oldest"]
-type OrderRecord = tuple[OrderRow, CustomerRow, ChannelRow]
+type OrderRecord = tuple[OrderRow, CustomerRow, ChannelRow | None, str | None]
 
 
 def order_records() -> Select[OrderRecord]:
     """Join everything an order card displays."""
     return (
-        select(OrderRow, CustomerRow, ChannelRow)
+        select(OrderRow, CustomerRow, Nullable(ChannelRow), Nullable(ShipmentRow.status))
         .join(CustomerRow, CustomerRow.id == OrderRow.customer_id)
         .outerjoin(ChannelRow, ChannelRow.id == OrderRow.channel_id)
+        .outerjoin(ShipmentRow, ShipmentRow.order_id == OrderRow.id)
     )
 
 
-def order_card(record: tuple[OrderRow, CustomerRow, ChannelRow | None]) -> Card:
+def order_card(record: OrderRecord) -> Card:
     """Present one order and the action its state allows."""
-    order, customer, channel = record
+    order, customer, channel, shipment_status = record
     source = channel.name if channel else "직접 주문"
     lines = [
         f"#{order.order_number} · {month_day(local(order.ordered_at).date())} 주문 · {source}",
@@ -54,6 +55,8 @@ def order_card(record: tuple[OrderRow, CustomerRow, ChannelRow | None]) -> Card:
     return Card(
         id=order.id, kind="order", title=order.product_name, status=status, lines=lines,
         tag=status.text, revision=order.revision, action=action,
+        undo=CardUndo(path=f"/orders/{order.id}/undo-confirm")
+        if order.status == "processing" and shipment_status == "packing" else None,
     )
 
 
