@@ -1,6 +1,6 @@
-"""Inquiry HTTP contract; decisions persist replies without external side effects."""
+"""Inquiry HTTP contract; completed replies persist without external side effects."""
 
-from typing import Annotated, ClassVar, Literal, NewType, assert_never
+from typing import Annotated, ClassVar, Literal, NewType
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,12 +24,12 @@ class Inquiry(BaseModel):
     question: str
     facts: list[str]
     draft: str
-    status: Literal["pending", "approved", "rejected"]
+    status: Literal["pending", "approved"]
     revision: Revision
 
 
 class DraftEdit(BaseModel):
-    """A pending draft edit requires the revision the client observed."""
+    """A reply edit requires the revision the client observed."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid", strict=True)
     draft: str = Field(max_length=4000)
@@ -37,9 +37,9 @@ class DraftEdit(BaseModel):
 
 
 class Decision(DraftEdit):
-    """A decision carries the final draft and uses the same revision contract."""
+    """Completing a reply carries its final text and uses the same revision contract."""
 
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve"]
 
 
 async def locked_inquiry(
@@ -51,8 +51,8 @@ async def locked_inquiry(
     )
     if row is None:
         raise HTTPException(404, "inquiry not found")
-    if row.status != "pending" or row.revision != expected_revision:
-        raise HTTPException(409, "inquiry already decided or revision is stale")
+    if row.revision != expected_revision:
+        raise HTTPException(409, "inquiry revision is stale")
     return row
 
 
@@ -60,15 +60,17 @@ async def locked_inquiry(
 async def list_inquiries(
     db: Session, limit: Annotated[int, Query(ge=1, le=500)] = 200, offset: Offset = 0,
 ) -> list[Inquiry]:
-    """Return durable inquiries by ID, including already decided ones."""
+    """Return durable inquiries by ID, including answered ones."""
     rows = await db.scalars(select(InquiryRow).order_by(InquiryRow.id).limit(limit).offset(offset))
     return [Inquiry.model_validate(row) for row in rows]
 
 
 @router.patch("/inquiries/{inquiry_id}/draft")
 async def edit_draft(inquiry_id: InquiryId, body: DraftEdit, db: Session) -> Inquiry:
-    """Persist a pending edit without trimming the user's working draft."""
+    """Persist an edit without trimming the working text; a completed reply stays non-blank."""
     row = await locked_inquiry(inquiry_id, body.expected_revision, db)
+    if row.status == "approved" and not body.draft.strip():
+        raise HTTPException(422, "completed reply cannot be blank")
     row.draft = body.draft
     row.revision += 1
     await db.flush()
@@ -77,18 +79,12 @@ async def edit_draft(inquiry_id: InquiryId, body: DraftEdit, db: Session) -> Inq
 
 @router.post("/inquiries/{inquiry_id}/decision")
 async def decide(inquiry_id: InquiryId, body: Decision, db: Session) -> Inquiry:
-    """Persist a final reply decision without booking or sending a message."""
+    """Mark a reply complete, or update a completed one, without booking or sending a message."""
     row = await locked_inquiry(inquiry_id, body.expected_revision, db)
     text = body.draft.strip()
-    match body.decision:
-        case "approve":
-            if not text:
-                raise HTTPException(422, "blank draft cannot be approved")
-            row.status = "approved"
-        case "reject":
-            row.status = "rejected"
-        case _:
-            assert_never(body.decision)
+    if not text:
+        raise HTTPException(422, "blank reply cannot be completed")
+    row.status = "approved"
     row.draft = text
     row.revision += 1
     await db.flush()
