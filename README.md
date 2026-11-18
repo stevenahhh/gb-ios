@@ -251,14 +251,16 @@ Apple Account가 있어야 합니다. 무료 Personal Team으로도 앱에 서�
 
 ## Mac 없이 iPhone에 설치하기
 
-지금은 설치할 수 없습니다. iPhone 앱은 Apple 인증서로 서명해야 하는데 운영 Mac에는 서명 인증서와 개발팀이 없습니다. 유료 Apple Developer Program에 가입하면 Mac이 없는 팀원도 설치할 수 있습니다. 가입비는 [멤버십 1년에 99달러](https://developer.apple.com/programs/enroll/)이고 지역별 금액은 가입할 때 표시됩니다.
+TestFlight가 없어도 설치할 수 있습니다. Mac이 있는 팀원에게 iPhone을 가져가 케이블로 연결하면 됩니다. iPhone 주인의 무료 Apple 계정을 Xcode에 추가한 뒤 [실제 iPhone에서 실행하기](#실제-iphone에서-실행하기-검증하지-않음) 순서대로 진행합니다. 이렇게 설치한 앱은 7일 뒤 실행되지 않으므로 다시 연결해 설치해야 합니다. 무료 계정으로는 한 기기에 앱을 3개까지 설치할 수 있습니다.
+
+Mac에 연결하지 않고 원격으로 설치하려면 유료 Apple Developer Program이 필요합니다. 가입비는 [멤버십 1년에 99달러](https://developer.apple.com/programs/enroll/)이고 지역별 금액은 가입할 때 표시됩니다.
 
 | 방법 | 팀원이 할 일 | 조건 | 판단 |
 |---|---|---|---|
 | [TestFlight 내부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers/) | App Store Connect 초대 수락, TestFlight 앱에서 설치 | App Store Connect 사용자 최대 100명 | 추천 |
 | [TestFlight 외부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers) | 이메일이나 공개 링크로 TestFlight에서 설치 | 최대 10,000명, 베타 심사 정보 제출 필요 | 팀 밖 시연용 |
 | [Ad Hoc 배포](https://developer.apple.com/help/account/devices/devices-overview/) | 기기 식별자를 전달하고 설치 파일로 설치 | 제품군별 등록 기기 최대 100대 | 기기를 추가할 때마다 다시 빌드 |
-| [무료 Personal Team](https://developer.apple.com/library/archive/qa/qa1915/_index.html) | 사용할 수 없음 | 본인 기기용이고 배포용 서명이 안 됨 | 해당 없음 |
+| [무료 Personal Team](https://developer.apple.com/library/archive/qa/qa1915/_index.html) | iPhone을 Mac에 연결하고 개발자 모드 켜기 | 본인 기기용, 7일마다 다시 설치 | 지금 바로 가능 |
 
 TestFlight 빌드는 [최대 90일](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview) 동안 시험할 수 있으므로 그 전에 새 빌드를 올려야 합니다. 가입 뒤에는 운영 Mac에서 Xcode로 Archive를 만들어 App Store Connect에 올립니다. 이 빌드에는 `RoundupSecrets.plist`의 앱 키가 들어갑니다. 아직 실제 iPhone에서는 시험하지 않았습니다.
 
