@@ -73,11 +73,32 @@ public final class InquiryStore {
     }
 
     @MainActor
+    public func reopen(id: String, request: InquiryReopen) async throws {
+        let current = try reconciledInquiry(id: id)
+        guard current.canReopen else { throw ReplyError.notDecided }
+        guard current.revision == request.expectedRevision else { throw InquiryPersistenceError.conflict }
+        isSavingInquiry = true
+        defer { isSavingInquiry = false }
+        do {
+            replace(try await repository.reopen(id: id, request: request))
+        } catch {
+            requiresInquiryReload = true
+            throw error
+        }
+    }
+
+    @MainActor
     private func writableInquiry(id: String) throws -> Inquiry {
+        let current = try reconciledInquiry(id: id)
+        guard current.status == .pending else { throw ReplyError.alreadyDecided }
+        return current
+    }
+
+    @MainActor
+    private func reconciledInquiry(id: String) throws -> Inquiry {
         guard !isInquiryBusy else { throw InquiryPersistenceError.busy }
         guard !requiresInquiryReload else { throw InquiryPersistenceError.conflict }
         guard let current = inquiry(id: id) else { throw ReplyError.missingInquiry }
-        guard current.status == .pending else { throw ReplyError.alreadyDecided }
         return current
     }
 

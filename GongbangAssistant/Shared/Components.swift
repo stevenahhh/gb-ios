@@ -143,9 +143,11 @@ struct MetricStrip: View {
 
 struct StatusBadge: View {
     let status: Status
+    private let isPlain: Bool
 
-    init(_ status: Status) {
+    init(_ status: Status, isPlain: Bool = false) {
         self.status = status
+        self.isPlain = isPlain
     }
 
     var body: some View {
@@ -156,10 +158,10 @@ struct StatusBadge: View {
             Text(status.text)
                 .foregroundStyle(.primary)
         }
-        .font(.subheadline.weight(.semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(.fill.tertiary, in: .capsule)
+        .font(isPlain ? .footnote.weight(.semibold) : .subheadline.weight(.semibold))
+        .padding(.horizontal, isPlain ? 0 : 8)
+        .padding(.vertical, isPlain ? 0 : 4)
+        .background(isPlain ? AnyShapeStyle(.clear) : AnyShapeStyle(.fill.tertiary), in: .capsule)
         .fixedSize()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("상태 \(status.text)")
@@ -178,30 +180,22 @@ struct TaskRow: View {
     private var isRunning: Bool { app.isRunning(item.id) }
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 12) {
-                        info
-                        Spacer(minLength: 8)
-                        if item.isDone != nil {
-                            doneButton
-                        }
-                    }
+        HStack(spacing: 8) {
+            NavigationLink(value: item.route) {
+                HStack(spacing: 12) {
+                    info
+                    Spacer(minLength: 0)
                     if item.isDone == nil, let status = item.status {
                         StatusBadge(status)
                     }
                 }
-            } else {
-                HStack(spacing: 12) {
-                    info
-                    Spacer(minLength: 8)
-                    if item.isDone != nil {
-                        doneButton
-                    } else if let status = item.status {
-                        StatusBadge(status)
-                    }
-                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .navigationLinkIndicatorVisibility(item.isDone == nil ? .automatic : .hidden)
+            .accessibilityIdentifier("row.\(item.id)")
+            if item.isDone != nil {
+                doneButton
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -262,6 +256,8 @@ struct TaskRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(keepingWords: item.title)
                     .font(.body.weight(.medium))
+                    .strikethrough(isDone)
+                    .foregroundStyle(isDone ? .secondary : .primary)
                 PhraseText(text: item.detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -271,17 +267,64 @@ struct TaskRow: View {
     }
 }
 
-struct WorkCard: View {
+struct CardActionButton: View {
     private enum InputSheet: String, Identifiable {
         case invoice
-        case content
         var id: Self { self }
     }
 
     let item: WorkItem
+    let action: CardAction
     var isPrimary = false
     @State private var inputSheet: InputSheet?
     @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let isRunning = app.isRunning(item.id)
+        let button = Button {
+            start()
+        } label: {
+            Group {
+                if isRunning {
+                    ProgressView()
+                } else if isPrimary {
+                    Text(action.label)
+                        .foregroundStyle(Color(.systemBackground))
+                } else {
+                    Text(action.label)
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: 30)
+        }
+        .controlSize(.large)
+        .disabled(isRunning)
+        .accessibilityIdentifier("action.\(item.id)")
+        .sheet(item: $inputSheet) { _ in
+            InvoiceSheet(item: item)
+        }
+
+        if isPrimary {
+            button.buttonStyle(.borderedProminent)
+        } else {
+            button.buttonStyle(.bordered)
+        }
+    }
+
+    private func start() {
+        switch action.code {
+        case .registerInvoice:
+            inputSheet = .invoice
+        case .confirmDeposit, .confirmOrder, .pack, .markDelivered, .completeTask, .acknowledgeRecommendation, .reviewContent:
+            let (item, code) = (item, action.code)
+            Task { await app.run(id: item.id) { try await RoundupAPI.perform(code, on: item) } }
+        }
+    }
+}
+
+struct WorkCardContent: View {
+    let item: WorkItem
+    var selectable = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -300,7 +343,7 @@ struct WorkCard: View {
                 }
             }
             ForEach(item.lines, id: \.self) { line in
-                PhraseText(text: line, selectable: true)
+                PhraseText(text: line, selectable: selectable)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -314,63 +357,50 @@ struct WorkCard: View {
                 }
                 .font(.subheadline.weight(.semibold))
             }
-            if let action = item.action {
-                actionButton(action)
-                    .padding(.top, 8)
-            }
         }
         .padding(.vertical, 4)
-        .sheet(item: $inputSheet) { sheet in
-            switch sheet {
-            case .invoice: InvoiceSheet(item: item)
-            case .content: ContentReviewSheet(item: item)
-            }
-        }
     }
+}
 
-    private func start(_ action: CardAction) {
-        switch action.code {
-        case .registerInvoice: inputSheet = .invoice
-        case .reviewContent: inputSheet = .content
-        case .confirmDeposit, .confirmOrder, .pack, .markDelivered, .completeTask, .acknowledgeRecommendation:
-            let item = item
-            Task { await app.run(id: item.id) { try await RoundupAPI.perform(action.code, on: item) } }
-        }
-    }
+struct WorkCard: View {
+    let item: WorkItem
+    var isPrimary = false
 
-    @ViewBuilder
-    private func actionButton(_ action: CardAction) -> some View {
-        let isRunning = app.isRunning(item.id)
-        let button = Button {
-            start(action)
-        } label: {
-            Group {
-                if isRunning {
-                    ProgressView()
-                } else if isPrimary {
-                    Text(action.label)
-                        .foregroundStyle(Color(.systemBackground))
-                } else {
-                    Text(action.label)
+    var body: some View {
+        if let draft = item.draft {
+            AssistantDraftRow(title: item.title, reference: draft)
+        } else if let route = item.route {
+            if let action = item.action {
+                VStack(alignment: .leading, spacing: 8) {
+                    NavigationLink(value: route) {
+                        HStack(spacing: 8) {
+                            WorkCardContent(item: item)
+                            Image(systemName: "chevron.forward")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .navigationLinkIndicatorVisibility(.hidden)
+                    .accessibilityIdentifier("card.\(item.id)")
+                    CardActionButton(item: item, action: action, isPrimary: isPrimary)
                 }
+            } else {
+                NavigationLink(value: route) {
+                    WorkCardContent(item: item)
+                }
+                .accessibilityIdentifier("card.\(item.id)")
             }
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 30)
-        }
-        .controlSize(.large)
-        .disabled(isRunning)
-        .accessibilityIdentifier("action.\(item.id)")
-
-        if isPrimary {
-            button.buttonStyle(.borderedProminent)
         } else {
-            button.buttonStyle(.bordered)
+            WorkCardContent(item: item, selectable: true)
         }
     }
 }
 
 extension [WorkItem] {
-    var primaryActionID: WorkItem.ID? { first { $0.action != nil }?.id }
+    var primaryActionID: WorkItem.ID? { first { $0.action != nil && $0.draft == nil }?.id }
 }
 
 struct AgendaRow: View {
@@ -378,13 +408,15 @@ struct AgendaRow: View {
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    private var isDone: Bool { item.isDone ?? false }
+
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 6) {
                     time
                     titles
-                    KindTag(kind: item.kind)
+                    kind
                 }
             } else {
                 HStack(spacing: 12) {
@@ -392,7 +424,7 @@ struct AgendaRow: View {
                         .frame(minWidth: timeWidth, alignment: .leading)
                     titles
                     Spacer(minLength: 8)
-                    KindTag(kind: item.kind)
+                    kind
                 }
             }
         }
@@ -409,29 +441,19 @@ struct AgendaRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(keepingWords: item.title)
                 .font(.body.weight(.semibold))
+                .strikethrough(isDone)
+                .foregroundStyle(isDone ? .secondary : .primary)
             PhraseText(text: item.detail)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
     }
-}
 
-struct KindTag: View {
-    let kind: EventKind
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: kind.symbol)
-                .foregroundStyle(kind.color)
-                .accessibilityHidden(true)
-            Text(kind.label)
-                .foregroundStyle(.primary)
-        }
-        .font(.subheadline.weight(.semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(kind.color.opacity(0.14), in: .rect(cornerRadius: 6))
-        .fixedSize()
+    private var kind: some View {
+        Text(item.kind.label)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize()
     }
 }
 

@@ -1,17 +1,12 @@
 import SwiftUI
-import RoundupCore
-
-struct AreaRoute: Hashable {
-    let area: OperationArea
-    var filter: String?
-}
 
 struct OperationsView: View {
-    @State private var month: String?
+    @State private var period: OperationPeriod?
+    @State private var isPickingPeriod = false
     @State private var loader = Loader<OperationsData>()
     @Environment(AppModel.self) private var app
 
-    private var loadKey: String { "\(month ?? "current")|\(app.dataVersion)" }
+    private var loadKey: String { "\(period?.rangeText ?? "current")|\(app.dataVersion)" }
 
     var body: some View {
         NavigationStack {
@@ -20,75 +15,75 @@ struct OperationsView: View {
             }
             .navigationTitle("운영")
             .navigationSubtitle(loader.value.map { "먼저 확인할 일 \($0.attentionCount)건" } ?? "")
-            .navigationDestination(for: AreaRoute.self) { route in
-                OperationAreaView(area: route.area, initialFilter: route.filter)
+            .appDestinations()
+            .sheet(isPresented: $isPickingPeriod) {
+                PeriodPickerSheet(period: period ?? .currentMonth) { period = $0 }
             }
-            .inquiryDestination()
         }
         .task(id: loadKey) { await load() }
     }
 
     private func load() async {
-        let month = month
-        await loader.load { try await RoundupAPI.operations(month: month) }
+        let period = period
+        await loader.load { try await RoundupAPI.operations(period: period) }
         if let count = loader.value?.attentionCount { app.updateAttention(count) }
     }
 
     private func list(_ data: OperationsData) -> some View {
         List {
-            Section {
+            CardSection {
                 ForEach(data.attention) { metric in
                     attentionRow(metric)
                 }
             } header: {
                 HStack {
                     SectionHeader(title: "먼저 확인해주세요")
-                    StatusBadge(Status(text: "\(data.attentionCount)건", tone: .attention))
+                    Spacer()
+                    Text("\(data.attentionCount)건")
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
                 }
             }
 
             periodSection(data)
 
-            Section("전체 업무 관리") {
+            CardSection("전체 업무 관리") {
                 ForEach(data.areas, id: \.area) { summary in
                     NavigationLink(value: AreaRoute(area: summary.area)) {
                         LabeledContent {
                             Text(summary.display)
                                 .monospacedDigit()
                         } label: {
-                            Label {
-                                Text(summary.area.title)
-                                Text(summary.area.summary)
-                            } icon: {
-                                Image(systemName: summary.area.systemImage)
-                            }
+                            Text(summary.area.title)
+                            Text(summary.area.summary)
                         }
                     }
                     .accessibilityIdentifier("operations.\(summary.area.rawValue)")
                 }
             }
 
-            Section("공방 성장") {
+            CardSection("공방 성장") {
                 NavigationLink {
                     OpportunitiesView()
                 } label: {
-                    Label {
+                    VStack(alignment: .leading) {
                         Text("기회")
                         Text("저장해 둔 마켓·공모·지원사업")
-                    } icon: {
-                        Image(systemName: "sparkles")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .accessibilityIdentifier("operations.opportunities")
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList(separators: .hidden)
         .refreshable { await load() }
     }
 
     private func periodSection(_ data: OperationsData) -> some View {
         let period = data.period
-        return Section {
+        return CardSection {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 20) {
                     gauge(period)
@@ -100,62 +95,57 @@ struct OperationsView: View {
                 }
             }
             .padding(.vertical, 4)
-            HStack(spacing: 0) {
-                ForEach(Array(period.comparisons.enumerated()), id: \.element.id) { index, comparison in
-                    if index > 0 {
-                        Divider().frame(height: 36)
-                    }
-                    comparisonView(comparison)
-                }
+            HStack(spacing: 16) {
+                ForEach(period.comparisons) { comparisonView($0) }
             }
         } header: {
             ViewThatFits(in: .horizontal) {
                 HStack {
                     periodTitle(period)
                     Spacer()
-                    periodMenu(data)
+                    periodButton(period)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     periodTitle(period)
-                    periodMenu(data)
+                    periodButton(period)
                 }
             }
         } footer: {
-            Text("처리율은 이 달의 예약·주문·배송·문의 \(period.total)건 중 처리를 마친 \(period.handled)건의 비율이에요.")
+            Text("처리율은 이 기간의 예약·주문·배송·문의 \(period.total)건 중 처리를 마친 \(period.handled)건의 비율이에요.")
         }
     }
 
     private func periodTitle(_ period: OperationsData.Period) -> some View {
         Text("\(period.month.title) 운영 현황")
+            .tracking(0.6)
             .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("operations.periodTitle")
     }
 
-    private func periodMenu(_ data: OperationsData) -> some View {
-        Menu {
-            Picker("기간", selection: Binding(get: { data.period.month.key }, set: { month = $0 })) {
-                ForEach(data.months) { Text($0.title).tag($0.key) }
-            }
-            .pickerStyle(.inline)
+    private func periodButton(_ period: OperationsData.Period) -> some View {
+        Button {
+            isPickingPeriod = true
         } label: {
-            Label(data.period.month.range, systemImage: "chevron.down")
-                .labelStyle(.titleAndIcon)
-                .font(.footnote.weight(.semibold))
-                .padding(.horizontal, 10)
-                .frame(minHeight: 32)
-                .background(.fill.tertiary, in: .capsule)
+            HStack(spacing: 4) {
+                Text(period.month.range).monospacedDigit()
+                Image(systemName: "chevron.down").imageScale(.small)
+            }
+            .font(.footnote.weight(.semibold))
+            .padding(.horizontal, 10)
+            .frame(minHeight: 32)
+            .background(.fill.tertiary, in: .capsule)
         }
         .textCase(nil)
-        .accessibilityLabel("기간 선택, \(data.period.month.title)")
+        .accessibilityLabel("기간 선택, \(period.month.range)")
+        .accessibilityIdentifier("operations.period")
     }
 
     private func attentionRow(_ metric: Metric) -> some View {
         NavigationLink(value: route(for: metric)) {
-            LabeledContent {
+            LabeledContent(metric.label) {
                 Text(metric.display)
                     .font(.body.weight(.semibold))
                     .monospacedDigit()
-            } label: {
-                Label(metric.label, systemImage: symbol(for: metric))
             }
         }
     }
@@ -165,14 +155,6 @@ struct OperationsView: View {
         case "depositPending": AreaRoute(area: .bookings, filter: "deposit_pending")
         case "pendingInquiries": AreaRoute(area: .channels, filter: "inquiries")
         default: AreaRoute(area: .deliveries, filter: "scheduled")
-        }
-    }
-
-    private func symbol(for metric: Metric) -> String {
-        switch metric.key {
-        case "depositPending": "wonsign.circle"
-        case "pendingInquiries": "bubble.left"
-        default: "shippingbox"
         }
     }
 
@@ -198,7 +180,7 @@ struct OperationsView: View {
         let columns = stride(from: 0, to: period.metrics.count, by: 2).map {
             Array(period.metrics[$0..<min($0 + 2, period.metrics.count)])
         }
-        return Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
+        return Grid(alignment: .leading, horizontalSpacing: 40, verticalSpacing: 14) {
             ForEach(columns, id: \.first?.id) { row in
                 GridRow {
                     ForEach(row) { summary($0) }
@@ -222,7 +204,7 @@ struct OperationsView: View {
     }
 
     private func summary(_ metric: Metric) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(metric.label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -230,6 +212,7 @@ struct OperationsView: View {
                 .font(.headline)
                 .monospacedDigit()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 }
@@ -241,11 +224,15 @@ struct OpportunitiesView: View {
     var body: some View {
         LoadableContent(loader: loader, retry: load) { items in
             if items.isEmpty {
-                ContentUnavailableView("저장된 기회가 없어요", systemImage: "sparkles")
+                ContentUnavailableView("저장된 기회가 없어요", systemImage: "flag")
             } else {
-                List(items) { WorkCard(item: $0) }
-                    .listStyle(.insetGrouped)
-                    .refreshable { await load() }
+                List {
+                    CardSection {
+                        ForEach(items) { WorkCard(item: $0) }
+                    }
+                }
+                .cardList(separators: .hidden)
+                .refreshable { await load() }
             }
         }
         .navigationTitle("기회")

@@ -68,29 +68,11 @@ struct MonthCalendarView: UIViewRepresentable {
 
         func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
             guard let date = dateComponents.date, let dayEvents = parent.days[date.dayKey]?.events else { return nil }
-            let kinds = dayEvents.map(\.kind)
-            if kinds.count == 1 {
-                return .image(UIImage(systemName: kinds[0].symbol), color: kinds[0].uiColor, size: .small)
-            }
-            let pointSize = min(UIFontMetrics(forTextStyle: .caption2).scaledValue(for: 7), 10)
-            let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
-            let symbols = kinds.compactMap { kind in
-                UIImage(systemName: kind.symbol, withConfiguration: configuration)?
-                    .withTintColor(kind.uiColor, renderingMode: .alwaysOriginal)
-            }
-            let gap: CGFloat = 2
-            let width = symbols.reduce(0) { $0 + $1.size.width } + gap * CGFloat(max(symbols.count - 1, 0))
-            let height = symbols.map(\.size.height).max() ?? 0
-            let image = UIGraphicsImageRenderer(size: CGSize(width: width, height: height)).image { _ in
-                var x: CGFloat = 0
-                for symbol in symbols {
-                    symbol.draw(at: CGPoint(x: x, y: (height - symbol.size.height) / 2))
-                    x += symbol.size.width + gap
-                }
-            }
             let label = dayEvents.map { "\($0.kind.label) \($0.display)" }.joined(separator: ", ")
             return .customView {
-                let view = UIImageView(image: image)
+                let configuration = UIImage.SymbolConfiguration(pointSize: 6)
+                let view = UIImageView(image: UIImage(systemName: "circle.fill", withConfiguration: configuration))
+                view.tintColor = .secondaryLabel
                 view.isAccessibilityElement = true
                 view.accessibilityLabel = label
                 return view

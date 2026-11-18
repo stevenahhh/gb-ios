@@ -10,6 +10,7 @@ struct SettingsView: View {
                 list(data)
             }
             .navigationTitle("설정")
+            .navigationSubtitle(loader.value?.workshop?.name ?? "")
         }
         .task(id: app.dataVersion) { await load() }
     }
@@ -21,7 +22,7 @@ struct SettingsView: View {
     private func list(_ data: SettingsData) -> some View {
         let sections = Dictionary(grouping: data.items, by: \.section)
         return List {
-            Section {
+            CardSection {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(data.workshop?.name ?? "공방 정보를 입력해 주세요")
@@ -40,7 +41,7 @@ struct SettingsView: View {
                 .accessibilityElement(children: .combine)
             }
 
-            Section("공방") {
+            CardSection("공방") {
                 NavigationLink {
                     WorkshopInfoView(workshop: data.workshop)
                 } label: {
@@ -56,10 +57,10 @@ struct SettingsView: View {
             }
 
             if let support = sections["지원"] {
-                Section { rows(support) }
+                CardSection { rows(support) }
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList()
         .refreshable { await load() }
     }
 
@@ -79,13 +80,15 @@ struct ChannelStatusView: View {
 
     var body: some View {
         List {
-            Section {
+            CardSection {
                 ForEach(channels) { WorkCard(item: $0) }
+            } header: {
+                EmptyView()
             } footer: {
                 Text("채널 자동 연동은 아직 지원하지 않아요. 주문과 문의는 이 앱에 등록된 내용만 보여요.")
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList()
         .navigationTitle("채널 연결")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -106,17 +109,19 @@ struct SettingTextView: View {
 
     var body: some View {
         List {
-            if item.isEditable {
-                TextEditor(text: $text)
-                    .frame(minHeight: 200)
-                    .accessibilityLabel(item.title)
-                    .accessibilityIdentifier("setting.body")
-            } else {
-                Text(item.body)
-                    .textSelection(.enabled)
+            CardSection {
+                if item.isEditable {
+                    TextEditor(text: $text)
+                        .frame(minHeight: 200)
+                        .accessibilityLabel(item.title)
+                        .accessibilityIdentifier("setting.body")
+                } else {
+                    Text(item.body)
+                        .textSelection(.enabled)
+                }
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList()
         .navigationTitle(item.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

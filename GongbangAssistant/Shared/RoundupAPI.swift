@@ -49,13 +49,14 @@ enum RoundupConfiguration {
 enum RoundupAPI {
     private struct Revisioned: Encodable { let expectedRevision: Int }
     private struct Completion: Encodable { let done: Bool; let expectedRevision: Int }
+    private struct Acknowledged: Decodable {}
 
     // MARK: Screens
 
     static func today() async throws -> TodayScreenData { try await get("today") }
 
-    static func operations(month: String?) async throws -> OperationsData {
-        try await get("operations", query: month.map { ["month": $0] } ?? [:])
+    static func operations(period: OperationPeriod?) async throws -> OperationsData {
+        try await get("operations", query: period?.query ?? [:])
     }
 
     static func calendar(start: Date, end: Date) async throws -> CalendarRange {
@@ -73,7 +74,13 @@ enum RoundupAPI {
     static func settings() async throws -> SettingsData { try await get("settings") }
     static func opportunities() async throws -> [WorkItem] { try await get("opportunities") }
     static func classSessions() async throws -> [SessionOption] { try await get("class-sessions") }
-    static func contentDraft(id: String) async throws -> ContentDetail { try await get("content-drafts/\(id)") }
+    static func booking(id: String) async throws -> BookingDetail { try await get("bookings/\(id)") }
+    static func classSession(id: String) async throws -> ClassSessionDetail { try await get("class-sessions/\(id)") }
+    static func bookings(sessionID: String) async throws -> AreaPage { try await get("bookings", query: ["session": sessionID]) }
+    static func card(kind: CardKind, id: String) async throws -> WorkItem { try await get("cards/\(kind.rawValue)/\(id)") }
+    static func assistantDraft(kind: DraftKind, id: String) async throws -> AssistantDraftDetail {
+        try await get("assistant-drafts/\(kind.rawValue)/\(id)")
+    }
 
     // MARK: Actions
 
@@ -90,7 +97,7 @@ enum RoundupAPI {
         case .completeTask:
             updated = try await post("tasks/\(item.id)/completion", Completion(done: true, expectedRevision: item.revision))
         case .registerInvoice, .reviewContent:
-            preconditionFailure("\(code) collects input in its own sheet")
+            preconditionFailure("\(code) is completed on its own screen")
         }
         _ = updated
     }
@@ -101,9 +108,31 @@ enum RoundupAPI {
             carrier: carrier, trackingNumber: trackingNumber, expectedRevision: item.revision))
     }
 
-    static func reviewContent(id: String, body: String, revision: Int) async throws {
-        struct Body: Encodable { let body: String; let expectedRevision: Int }
-        let _: WorkItem = try await post("content-drafts/\(id)/review", Body(body: body, expectedRevision: revision))
+    static func undo(_ undo: UndoAction, revision: Int) async throws {
+        let _: Acknowledged = try await post(undo.path, Revisioned(expectedRevision: revision))
+    }
+
+    static func confirmDeposit(bookingID: String, revision: Int) async throws {
+        let _: Acknowledged = try await post("bookings/\(bookingID)/confirm-deposit", Revisioned(expectedRevision: revision))
+    }
+
+    static func setSessionDone(id: String, done: Bool, revision: Int) async throws {
+        let _: Acknowledged = try await post("class-sessions/\(id)/completion", Completion(done: done, expectedRevision: revision))
+    }
+
+    static func saveAssistantDraft(kind: DraftKind, id: String, text: String, revision: Int) async throws {
+        let _: Acknowledged = try await send(
+            method: "PATCH", path: "assistant-drafts/\(kind.rawValue)/\(id)/draft",
+            body: InquiryDraft(draft: text, expectedRevision: revision))
+    }
+
+    static func decideAssistantDraft(kind: DraftKind, id: String, decision: InquiryDecision) async throws {
+        let _: Acknowledged = try await post("assistant-drafts/\(kind.rawValue)/\(id)/decision", decision)
+    }
+
+    static func reopenAssistantDraft(kind: DraftKind, id: String, revision: Int) async throws {
+        let _: Acknowledged = try await post(
+            "assistant-drafts/\(kind.rawValue)/\(id)/reopen", Revisioned(expectedRevision: revision))
     }
 
     static func setDone(_ item: TaskItem, done: Bool) async throws {
@@ -148,6 +177,10 @@ enum RoundupAPI {
 
     static func decideInquiry(id: String, decision: InquiryDecision) async throws -> Inquiry {
         try await post("inquiries/\(id)/decision", decision)
+    }
+
+    static func reopenInquiry(id: String, request: InquiryReopen) async throws -> Inquiry {
+        try await post("inquiries/\(id)/reopen", request)
     }
 
     // MARK: Provider proxies
@@ -305,6 +338,9 @@ struct APIInquiryRepository: InquiryRepository {
     }
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry {
         try await RoundupAPI.decideInquiry(id: id, decision: decision)
+    }
+    func reopen(id: String, request: InquiryReopen) async throws -> Inquiry {
+        try await RoundupAPI.reopenInquiry(id: id, request: request)
     }
 }
 
