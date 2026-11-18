@@ -1,6 +1,6 @@
 import XCTest
 
-final class TabNavigationUITests: XCTestCase {
+final class TabNavigationUITests: RoundupUITestCase {
     private let tabs: [(label: String, titlePrefix: String)] = [
         ("오늘", "사장님"),
         ("캘린더", "캘린더"),
@@ -14,9 +14,7 @@ final class TabNavigationUITests: XCTestCase {
 
     @MainActor
     func testEveryTabShowsItsNavigationTitle() throws {
-        let app = XCUIApplication()
-        app.launchArguments += ["-sampleInquiries"]
-        app.launch()
+        let app = try launch()
 
         for tab in tabs {
             let button = app.tabBars.buttons[tab.label]
@@ -30,17 +28,8 @@ final class TabNavigationUITests: XCTestCase {
 
     @MainActor
     func testOperationsPushesAreaScreenAndGoesBack() throws {
-        let app = XCUIApplication()
-        app.launchArguments += ["-sampleInquiries"]
-        app.launch()
-
-        app.tabBars.buttons["운영"].tap()
-        let bookingsRow = app.buttons["operations.bookings"]
-        if !bookingsRow.waitForExistence(timeout: 3) {
-            app.swipeUp()
-        }
-        XCTAssertTrue(bookingsRow.waitForExistence(timeout: 5))
-        bookingsRow.tap()
+        let app = try launch()
+        openArea("bookings", in: app)
 
         let detailBar = app.navigationBars["예약 관리"]
         XCTAssertTrue(detailBar.waitForExistence(timeout: 5))
@@ -54,43 +43,27 @@ final class TabNavigationUITests: XCTestCase {
 
     @MainActor
     func testStatusFilterAndSearchNarrowTheList() throws {
-        let app = XCUIApplication()
-        app.launchArguments += ["-sampleInquiries"]
-        app.launch()
-
-        app.tabBars.buttons["운영"].tap()
-        let deliveriesRow = app.buttons["operations.deliveries"]
-        if !deliveriesRow.waitForExistence(timeout: 3) {
-            app.swipeUp()
-        }
-        XCTAssertTrue(deliveriesRow.waitForExistence(timeout: 5))
-        deliveriesRow.tap()
+        let app = try launch()
+        openArea("deliveries", in: app)
 
         let packing = element(labelled: "머그컵 2종 세트", in: app)
         let delivered = element(labelled: "핸드메이드 머그컵", in: app)
-        XCTAssertTrue(packing.waitForExistence(timeout: 5))
+        XCTAssertTrue(packing.waitForExistence(timeout: 10))
 
         app.segmentedControls.buttons["완료"].tap()
-        XCTAssertTrue(delivered.waitForExistence(timeout: 5))
-        XCTAssertTrue(packing.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(delivered.waitForExistence(timeout: 10))
+        XCTAssertTrue(packing.waitForNonExistence(timeout: 10))
 
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("없는주문")
-        XCTAssertTrue(delivered.waitForNonExistence(timeout: 5))
-    }
-
-    @MainActor
-    private func element(labelled text: String, in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+        XCTAssertTrue(delivered.waitForNonExistence(timeout: 10))
     }
 
     @MainActor
     func testAssistantIsReachableFromEveryTab() throws {
-        let app = XCUIApplication()
-        app.launchArguments += ["-sampleInquiries"]
-        app.launch()
+        let app = try launch()
 
         let accessory = app.buttons["assistant.accessory"]
         XCTAssertTrue(accessory.waitForExistence(timeout: 5))
@@ -106,10 +79,74 @@ final class TabNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    private func keepScreenshot(of app: XCUIApplication, named name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+    func testDepositConfirmationSurvivesRelaunch() throws {
+        var app = try launch()
+        openArea("bookings", in: app)
+        let action = app.buttons["action.booking-jieun"]
+        XCTAssertTrue(scrollTo(action, in: app))
+        action.tap()
+        XCTAssertTrue(action.waitForNonExistence(timeout: 10))
+
+        app.terminate()
+        app = try launch()
+        openArea("bookings", in: app)
+        XCTAssertTrue(scrollTo(element(labelled: "박*은 · 2명 · 예약금 확인 완료", in: app), in: app))
+        XCTAssertFalse(app.buttons["action.booking-jieun"].exists)
+    }
+
+    @MainActor
+    func testInvoiceRegistrationMovesParcelIntoTransit() throws {
+        let app = try launch()
+        openArea("deliveries", in: app)
+        let action = app.buttons["action.shipment-order-1041"]
+        XCTAssertTrue(scrollTo(action, in: app))
+        action.tap()
+        let number = app.textFields["invoice.number"]
+        XCTAssertTrue(number.waitForExistence(timeout: 5))
+        number.tap()
+        number.typeText("682100042841")
+        app.buttons["form.save"].tap()
+        XCTAssertTrue(number.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(element(labelled: "CJ대한통운 682100042841", in: app), in: app))
+    }
+
+    @MainActor
+    func testCalendarEventIsSavedToTheSelectedDay() throws {
+        let app = try launch()
+        app.tabBars.buttons["캘린더"].tap()
+        let add = app.buttons["calendar.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+        let title = app.textFields["event.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        title.typeText("공방 대청소")
+        app.buttons["form.save"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(element(labelled: "공방 대청소", in: app), in: app))
+    }
+
+    @MainActor
+    func testUnreachableServerShowsRetryInsteadOfData() throws {
+        let app = try launch(apiURL: "http://127.0.0.1:9")
+        XCTAssertTrue(app.buttons["screen.retry"].waitForExistence(timeout: 30))
+        XCTAssertTrue(element(labelled: "서버에 연결하지 못했어요", in: app).exists)
+        XCTAssertFalse(element(labelled: "도자기 원데이 클래스", in: app).exists)
+    }
+
+    @MainActor
+    func testMissingServerAddressExplainsConfiguration() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["ROUNDUP_API_URL"] = ""
+        app.launch()
+        XCTAssertTrue(element(labelled: "서버 주소가 설정되지 않았어요", in: app).waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    func testEmptyDatabaseShowsEmptyStates() throws {
+        let app = try launchEmptyServer()
+        XCTAssertTrue(app.descendants(matching: .any)["today.empty"].waitForExistence(timeout: 10))
+        openArea("orders", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["area.empty"].waitForExistence(timeout: 10))
     }
 }

@@ -7,140 +7,137 @@ struct AreaRoute: Hashable {
 }
 
 struct OperationsView: View {
-    enum Period: String, CaseIterable, Identifiable {
-        case november = "11월"
-        case october = "10월"
+    @State private var month: String?
+    @State private var loader = Loader<OperationsData>()
+    @Environment(AppModel.self) private var app
 
-        var id: Self { self }
-
-        var range: String {
-            switch self {
-            case .november: "11.01 – 11.30"
-            case .october: "10.01 – 10.31"
-            }
-        }
-    }
-
-    @State private var period = Period.november
-    @Environment(DemoStore.self) private var store
-
-    private var attentionCount: Int {
-        SampleData.attentionCount(pendingInquiries: store.pendingCount)
-    }
+    private var loadKey: String { "\(month ?? "current")|\(app.dataVersion)" }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    attentionRow("예약금 미확인", count: 2, systemImage: "wonsign.circle", route: AreaRoute(area: .bookings, filter: "예약금 대기"))
-                    attentionRow("미답변 문의", count: store.pendingCount, systemImage: "bubble.left", route: AreaRoute(area: .channels, filter: "문의"))
-                    attentionRow("발송 마감", count: 2, systemImage: "shippingbox", route: AreaRoute(area: .deliveries, filter: "발송 예정"))
-                } header: {
-                    HStack {
-                        SectionHeader(title: "먼저 확인해주세요")
-                        StatusBadge(Status(text: "\(attentionCount)건", tone: .attention))
-                    }
-                }
-
-                Section {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 20) {
-                            gauge
-                            summaryGrid
-                        }
-                        VStack(alignment: .leading, spacing: 12) {
-                            gauge
-                            summaryGrid
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    HStack(spacing: 0) {
-                        comparison("+12%")
-                        Divider().frame(height: 36)
-                        comparison("+5%")
-                    }
-                } header: {
-                    ViewThatFits(in: .horizontal) {
-                        HStack {
-                            periodTitle
-                            Spacer()
-                            periodMenu
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            periodTitle
-                            periodMenu
-                        }
-                    }
-                }
-
-                Section("전체 업무 관리") {
-                    ForEach(OperationArea.allCases) { area in
-                        NavigationLink(value: AreaRoute(area: area)) {
-                            LabeledContent {
-                                Text(area.count)
-                                    .monospacedDigit()
-                            } label: {
-                                Label {
-                                    Text(area.title)
-                                    Text(area.summary)
-                                } icon: {
-                                    Image(systemName: area.systemImage)
-                                }
-                            }
-                        }
-                        .accessibilityIdentifier("operations.\(area.rawValue)")
-                    }
-                }
-
-                Section("공방 성장") {
-                    NavigationLink {
-                        PlaceholderScreen(title: "기회", systemImage: "sparkles")
-                    } label: {
-                        Label {
-                            Text("기회")
-                            Text("마켓·공모·지원사업 모집 공고")
-                        } icon: {
-                            Image(systemName: "sparkles")
-                        }
-                    }
-                    NavigationLink {
-                        PlaceholderScreen(title: "리포트", systemImage: "chart.bar.xaxis")
-                    } label: {
-                        Label {
-                            Text("리포트")
-                            Text("주간·월간 숫자")
-                        } icon: {
-                            Image(systemName: "chart.bar.xaxis")
-                        }
-                    }
-                }
+            LoadableContent(loader: loader, retry: load) { data in
+                list(data)
             }
-            .listStyle(.insetGrouped)
             .navigationTitle("운영")
-            .navigationSubtitle("먼저 확인할 일 \(attentionCount)건")
+            .navigationSubtitle(loader.value.map { "먼저 확인할 일 \($0.attentionCount)건" } ?? "")
             .navigationDestination(for: AreaRoute.self) { route in
                 OperationAreaView(area: route.area, initialFilter: route.filter)
             }
-            .navigationDestination(for: WorkItem.self) { item in
-                WorkDetailView(item: item)
-            }
             .inquiryDestination()
+        }
+        .task(id: loadKey) { await load() }
+    }
+
+    private func load() async {
+        let month = month
+        await loader.load { try await RoundupAPI.operations(month: month) }
+        if let count = loader.value?.attentionCount { app.updateAttention(count) }
+    }
+
+    private func list(_ data: OperationsData) -> some View {
+        List {
+            Section {
+                ForEach(data.attention) { metric in
+                    attentionRow(metric)
+                }
+            } header: {
+                HStack {
+                    SectionHeader(title: "먼저 확인해주세요")
+                    StatusBadge(Status(text: "\(data.attentionCount)건", tone: .attention))
+                }
+            }
+
+            periodSection(data)
+
+            Section("전체 업무 관리") {
+                ForEach(data.areas, id: \.area) { summary in
+                    NavigationLink(value: AreaRoute(area: summary.area)) {
+                        LabeledContent {
+                            Text(summary.display)
+                                .monospacedDigit()
+                        } label: {
+                            Label {
+                                Text(summary.area.title)
+                                Text(summary.area.summary)
+                            } icon: {
+                                Image(systemName: summary.area.systemImage)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("operations.\(summary.area.rawValue)")
+                }
+            }
+
+            Section("공방 성장") {
+                NavigationLink {
+                    OpportunitiesView()
+                } label: {
+                    Label {
+                        Text("기회")
+                        Text("저장해 둔 마켓·공모·지원사업")
+                    } icon: {
+                        Image(systemName: "sparkles")
+                    }
+                }
+                .accessibilityIdentifier("operations.opportunities")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .refreshable { await load() }
+    }
+
+    private func periodSection(_ data: OperationsData) -> some View {
+        let period = data.period
+        return Section {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 20) {
+                    gauge(period)
+                    summaryGrid(period)
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    gauge(period)
+                    summaryGrid(period)
+                }
+            }
+            .padding(.vertical, 4)
+            HStack(spacing: 0) {
+                ForEach(Array(period.comparisons.enumerated()), id: \.element.id) { index, comparison in
+                    if index > 0 {
+                        Divider().frame(height: 36)
+                    }
+                    comparisonView(comparison)
+                }
+            }
+        } header: {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    periodTitle(period)
+                    Spacer()
+                    periodMenu(data)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    periodTitle(period)
+                    periodMenu(data)
+                }
+            }
+        } footer: {
+            Text("처리율은 이 달의 예약·주문·배송·문의 \(period.total)건 중 처리를 마친 \(period.handled)건의 비율이에요.")
         }
     }
 
-    private var periodTitle: some View {
-        Text("\(period.rawValue) 운영 현황")
+    private func periodTitle(_ period: OperationsData.Period) -> some View {
+        Text("\(period.month.title) 운영 현황")
             .accessibilityAddTraits(.isHeader)
     }
 
-    private var periodMenu: some View {
+    private func periodMenu(_ data: OperationsData) -> some View {
         Menu {
-            Picker("기간", selection: $period) {
-                ForEach(Period.allCases) { Text($0.rawValue).tag($0) }
+            Picker("기간", selection: Binding(get: { data.period.month.key }, set: { month = $0 })) {
+                ForEach(data.months) { Text($0.title).tag($0.key) }
             }
             .pickerStyle(.inline)
         } label: {
-            Label(period.range, systemImage: "chevron.down")
+            Label(data.period.month.range, systemImage: "chevron.down")
                 .labelStyle(.titleAndIcon)
                 .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 10)
@@ -148,27 +145,43 @@ struct OperationsView: View {
                 .background(.fill.tertiary, in: .capsule)
         }
         .textCase(nil)
-        .accessibilityLabel("기간 선택, \(period.rawValue)")
+        .accessibilityLabel("기간 선택, \(data.period.month.title)")
     }
 
-    private func attentionRow(_ title: String, count: Int, systemImage: String, route: AreaRoute) -> some View {
-        NavigationLink(value: route) {
+    private func attentionRow(_ metric: Metric) -> some View {
+        NavigationLink(value: route(for: metric)) {
             LabeledContent {
-                Text("\(count)건")
+                Text(metric.display)
                     .font(.body.weight(.semibold))
                     .monospacedDigit()
             } label: {
-                Label(title, systemImage: systemImage)
+                Label(metric.label, systemImage: symbol(for: metric))
             }
         }
     }
 
-    private var gauge: some View {
+    private func route(for metric: Metric) -> AreaRoute {
+        switch metric.key {
+        case "depositPending": AreaRoute(area: .bookings, filter: "deposit_pending")
+        case "pendingInquiries": AreaRoute(area: .channels, filter: "inquiries")
+        default: AreaRoute(area: .deliveries, filter: "scheduled")
+        }
+    }
+
+    private func symbol(for metric: Metric) -> String {
+        switch metric.key {
+        case "depositPending": "wonsign.circle"
+        case "pendingInquiries": "bubble.left"
+        default: "shippingbox"
+        }
+    }
+
+    private func gauge(_ period: OperationsData.Period) -> some View {
         VStack(spacing: 4) {
-            Gauge(value: 24, in: 0...32) {
+            Gauge(value: Double(period.ratePercent ?? 0), in: 0...100) {
                 Text("처리율")
             } currentValueLabel: {
-                Text("75%")
+                Text(period.rateDisplay)
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(.accentColor)
@@ -177,29 +190,29 @@ struct OperationsView: View {
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(period.rawValue) 처리율")
-        .accessibilityValue("75퍼센트")
+        .accessibilityLabel("\(period.month.title) 처리율")
+        .accessibilityValue(period.rateDisplay)
     }
 
-    private var summaryGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
-            GridRow {
-                summary("예약", "24건")
-                summary("주문", "8건")
-            }
-            GridRow {
-                summary("배송", "5건")
-                summary("SNS", "2개")
+    private func summaryGrid(_ period: OperationsData.Period) -> some View {
+        let columns = stride(from: 0, to: period.metrics.count, by: 2).map {
+            Array(period.metrics[$0..<min($0 + 2, period.metrics.count)])
+        }
+        return Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
+            ForEach(columns, id: \.first?.id) { row in
+                GridRow {
+                    ForEach(row) { summary($0) }
+                }
             }
         }
     }
 
-    private func comparison(_ change: String) -> some View {
+    private func comparisonView(_ comparison: OperationsData.Comparison) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("전월 대비")
+            Text(comparison.label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text(change)
+            Text(comparison.display)
                 .font(.title2.bold())
                 .monospacedDigit()
         }
@@ -208,12 +221,12 @@ struct OperationsView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func summary(_ label: String, _ value: String) -> some View {
+    private func summary(_ metric: Metric) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(label)
+            Text(metric.label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text(value)
+            Text(metric.display)
                 .font(.headline)
                 .monospacedDigit()
         }
@@ -221,7 +234,26 @@ struct OperationsView: View {
     }
 }
 
-#Preview {
-    OperationsView()
-        .environment(DemoStore())
+struct OpportunitiesView: View {
+    @State private var loader = Loader<[WorkItem]>()
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        LoadableContent(loader: loader, retry: load) { items in
+            if items.isEmpty {
+                ContentUnavailableView("저장된 기회가 없어요", systemImage: "sparkles")
+            } else {
+                List(items) { WorkCard(item: $0) }
+                    .listStyle(.insetGrouped)
+                    .refreshable { await load() }
+            }
+        }
+        .navigationTitle("기회")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: app.dataVersion) { await load() }
+    }
+
+    private func load() async {
+        await loader.load { try await RoundupAPI.opportunities() }
+    }
 }

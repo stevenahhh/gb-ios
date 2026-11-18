@@ -31,13 +31,11 @@ public protocol InquiryRepository {
 
 public enum InquiryPersistenceError: Error, LocalizedError {
     case busy
-    case sampleOnly
     case conflict
 
     public var errorDescription: String? {
         switch self {
         case .busy: return "문의를 처리 중이에요. 완료된 뒤 다시 시도해 주세요."
-        case .sampleOnly: return "서버 문의는 데모 초기화나 로컬 편집으로 바꿀 수 없어요."
         case .conflict: return "다른 곳에서 변경되었거나 이미 처리된 문의예요. 목록을 새로 불러온 뒤 확인해 주세요."
         }
     }

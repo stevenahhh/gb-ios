@@ -3,7 +3,8 @@ import RoundupCore
 
 struct InquiryDetailView: View {
     let id: String
-    @Environment(DemoStore.self) private var store
+    @Environment(InquiryStore.self) private var store
+    @Environment(AppModel.self) private var app
     @State private var errorMessage: String?
     @State private var isGenerating = false
     @State private var draft = ""
@@ -189,6 +190,7 @@ struct InquiryDetailView: View {
             savedDraft = draft
             self.editorRevision = store.inquiry(id: id)?.revision
             errorMessage = nil
+            app.dataDidChange()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -201,16 +203,10 @@ struct InquiryDetailView: View {
             do {
                 try await store.decide(id: id, decision: value)
                 errorMessage = nil
+                app.dataDidChange()
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
     }
-}
-
-#Preview {
-    NavigationStack {
-        InquiryDetailView(id: "inquiry-clay")
-    }
-    .environment(DemoStore())
 }

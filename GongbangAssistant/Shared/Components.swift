@@ -1,16 +1,5 @@
 import SwiftUI
 
-enum ScreenState: String {
-    case loaded
-    case loading
-    case empty
-    case error
-
-    static var launch: ScreenState {
-        ScreenState(rawValue: UserDefaults.standard.string(forKey: "screenState") ?? "") ?? .loaded
-    }
-}
-
 extension String {
     var keepingWords: String {
         var result = ""
@@ -122,7 +111,7 @@ struct MetricStrip: View {
                         Text(metric.label)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 8)
-                        Text(metric.value)
+                        Text(metric.display)
                             .font(.title3.bold())
                             .monospacedDigit()
                     }
@@ -136,7 +125,7 @@ struct MetricStrip: View {
                         Divider().frame(height: 32)
                     }
                     VStack(spacing: 2) {
-                        Text(metric.value)
+                        Text(metric.display)
                             .font(.title3.bold())
                             .monospacedDigit()
                         Text(metric.label)
@@ -180,16 +169,13 @@ struct StatusBadge: View {
 struct TaskRow: View {
     let item: TaskItem
     let kind: EventKind
-    @State private var isDone: Bool
+    @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
     @ScaledMetric(relativeTo: .body) private var iconSize = 36
 
-    init(item: TaskItem, kind: EventKind) {
-        self.item = item
-        self.kind = kind
-        _isDone = State(initialValue: item.isDone ?? false)
-    }
+    private var isDone: Bool { item.isDone ?? false }
+    private var isRunning: Bool { app.isRunning(item.id) }
 
     var body: some View {
         Group {
@@ -221,27 +207,39 @@ struct TaskRow: View {
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if item.isDone != nil {
                 Button(isDone ? "미완료" : "완료", systemImage: isDone ? "arrow.uturn.backward" : "checkmark") {
-                    isDone.toggle()
+                    toggle()
                 }
                 .tint(.green)
+                .disabled(isRunning)
             }
         }
     }
 
+    private func toggle() {
+        let item = item
+        let target = !isDone
+        Task { await app.run(id: item.id) { try await RoundupAPI.setDone(item, done: target) } }
+    }
+
     private var doneButton: some View {
-        Button {
-            isDone.toggle()
-        } label: {
-            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                .font(.title2)
-                .foregroundStyle(isDone ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(.rect)
+        Button(action: toggle) {
+            Group {
+                if isRunning {
+                    ProgressView()
+                } else {
+                    Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundStyle(isDone ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .disabled(isRunning)
         .accessibilityLabel("\(item.title) 완료 표시")
         .accessibilityValue(isDone ? "완료" : "미완료")
-        .sensoryFeedback(.success, trigger: isDone)
+        .accessibilityIdentifier("task.\(item.id)")
     }
 
     private var info: some View {
@@ -274,11 +272,16 @@ struct TaskRow: View {
 }
 
 struct WorkCard: View {
+    private enum InputSheet: String, Identifiable {
+        case invoice
+        case content
+        var id: Self { self }
+    }
+
     let item: WorkItem
     var isPrimary = false
-    var showsAction = true
-    var selectable = true
-    @State private var isCompleted = false
+    @State private var inputSheet: InputSheet?
+    @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -292,12 +295,14 @@ struct WorkCard: View {
                 if !dynamicTypeSize.isAccessibilitySize {
                     Spacer(minLength: 8)
                 }
-                if let status = currentStatus {
+                if let status = item.status {
                     StatusBadge(status)
                 }
             }
             ForEach(item.lines, id: \.self) { line in
-                lineText(line)
+                PhraseText(text: line, selectable: true)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
             if let deadline = item.deadline {
                 Label {
@@ -309,47 +314,54 @@ struct WorkCard: View {
                 }
                 .font(.subheadline.weight(.semibold))
             }
-            if showsAction, case .perform(let label) = item.action {
-                actionButton(label)
+            if let action = item.action {
+                actionButton(action)
                     .padding(.top, 8)
             }
         }
         .padding(.vertical, 4)
-        .sensoryFeedback(.success, trigger: isCompleted)
+        .sheet(item: $inputSheet) { sheet in
+            switch sheet {
+            case .invoice: InvoiceSheet(item: item)
+            case .content: ContentReviewSheet(item: item)
+            }
+        }
     }
 
-    private var currentStatus: Status? {
-        isCompleted ? Status(text: "처리 완료", tone: .done) : item.status
-    }
-
-    private func lineText(_ line: String) -> some View {
-        PhraseText(text: line, selectable: selectable)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+    private func start(_ action: CardAction) {
+        switch action.code {
+        case .registerInvoice: inputSheet = .invoice
+        case .reviewContent: inputSheet = .content
+        case .confirmDeposit, .confirmOrder, .pack, .markDelivered, .completeTask, .acknowledgeRecommendation:
+            let item = item
+            Task { await app.run(id: item.id) { try await RoundupAPI.perform(action.code, on: item) } }
+        }
     }
 
     @ViewBuilder
-    private func actionButton(_ label: String) -> some View {
+    private func actionButton(_ action: CardAction) -> some View {
+        let isRunning = app.isRunning(item.id)
         let button = Button {
-            isCompleted = true
+            start(action)
         } label: {
             Group {
-                if isCompleted {
-                    Label("처리했어요", systemImage: "checkmark")
+                if isRunning {
+                    ProgressView()
                 } else if isPrimary {
-                    Text(label)
+                    Text(action.label)
                         .foregroundStyle(Color(.systemBackground))
                 } else {
-                    Text(label)
+                    Text(action.label)
                 }
             }
             .font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity, minHeight: 30)
         }
         .controlSize(.large)
-        .disabled(isCompleted)
+        .disabled(isRunning)
+        .accessibilityIdentifier("action.\(item.id)")
 
-        if isPrimary && !isCompleted {
+        if isPrimary {
             button.buttonStyle(.borderedProminent)
         } else {
             button.buttonStyle(.bordered)
@@ -357,38 +369,8 @@ struct WorkCard: View {
     }
 }
 
-struct WorkCardRow: View {
-    let item: WorkItem
-    var isPrimary = false
-
-    var body: some View {
-        if case .open = item.action {
-            NavigationLink(value: item) {
-                WorkCard(item: item, selectable: false)
-            }
-        } else {
-            WorkCard(item: item, isPrimary: isPrimary)
-        }
-    }
-}
-
-struct WorkDetailView: View {
-    let item: WorkItem
-
-    var body: some View {
-        List {
-            Section {
-                WorkCard(item: item, showsAction: false)
-            }
-            Section {
-                Label("세부 화면은 준비 중이에요.", systemImage: "hammer")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle(item.title)
-        .navigationBarTitleDisplayMode(.inline)
-    }
+extension [WorkItem] {
+    var primaryActionID: WorkItem.ID? { first { $0.action != nil }?.id }
 }
 
 struct AgendaRow: View {
@@ -442,7 +424,7 @@ struct KindTag: View {
             Image(systemName: kind.symbol)
                 .foregroundStyle(kind.color)
                 .accessibilityHidden(true)
-            Text(kind.rawValue)
+            Text(kind.label)
                 .foregroundStyle(.primary)
         }
         .font(.subheadline.weight(.semibold))
@@ -498,25 +480,15 @@ extension View {
     }
 }
 
-struct PlaceholderScreen: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        ContentUnavailableView(title, systemImage: systemImage, description: Text("아직 준비 중인 화면이에요.\n곧 열어 드릴게요."))
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 struct LoadErrorView: View {
+    let message: String
     let retry: () -> Void
 
     var body: some View {
         ContentUnavailableView {
             Label("불러오지 못했어요", systemImage: "wifi.exclamationmark")
         } description: {
-            Text("인터넷 연결을 확인하고\n다시 시도해 주세요.")
+            Text(keepingWords: message)
         } actions: {
             Button(action: retry) {
                 Text("다시 시도")
@@ -524,6 +496,7 @@ struct LoadErrorView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .accessibilityIdentifier("screen.retry")
         }
     }
 }

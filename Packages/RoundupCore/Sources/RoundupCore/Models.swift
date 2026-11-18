@@ -48,20 +48,3 @@ public struct Inquiry: Identifiable, Codable, Equatable, Sendable {
         case id, customer, subject, question, facts, draft, status, revision
     }
 }
-
-public struct Reservation: Identifiable, Equatable, Sendable {
-    public let id: String
-    public let customer: String
-    public let people: Int
-}
-
-public struct WorkshopSession: Identifiable, Equatable, Sendable {
-    public let id: String
-    public let title: String
-    public let startsAt: Date
-    public let durationMinutes: Int
-    public let capacity: Int
-    public let reservations: [Reservation]
-
-    public var bookedPeople: Int { reservations.reduce(0) { $0 + $1.people } }
-}

@@ -8,7 +8,7 @@ final class InquiryPersistenceTests: XCTestCase {
         let server = MemoryInquiryRepository()
         server.records = Array(server.records.prefix(1))
         server.loadFails = true
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
 
         await store.loadInquiries()
 
@@ -25,39 +25,37 @@ final class InquiryPersistenceTests: XCTestCase {
     @MainActor
     func testSavedDraftSurvivesNewStoreAndDecisionUsesCurrentUnsavedTextAtomically() async throws {
         let server = MemoryInquiryRepository()
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
         await store.loadInquiries()
         try await store.saveDraft(id: "inquiry-clay", draft: InquiryDraft(draft: "저장한 초안", expectedRevision: 0))
         XCTAssertEqual(store.inquiry(id: "inquiry-clay")?.draft, "저장한 초안")
         XCTAssertEqual(store.inquiry(id: "inquiry-clay")?.revision, 1)
-        let restarted = DemoStore(repository: server)
+        let restarted = InquiryStore(repository: server)
         await restarted.loadInquiries()
         XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.draft, "저장한 초안")
         XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.revision, 1)
-        let sessions = restarted.sessions
 
         try await restarted.decide(id: "inquiry-clay", decision: InquiryDecision(
             decision: .approve, draft: InquiryDraft(draft: "  승인 순간 수정한 내용  ", expectedRevision: 1)))
         XCTAssertEqual(restarted.pendingCount, 2)
         XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.status, .approved)
 
-        let again = DemoStore(repository: server)
+        let again = InquiryStore(repository: server)
         await again.loadInquiries()
         XCTAssertEqual(again.inquiry(id: "inquiry-clay")?.draft, "승인 순간 수정한 내용")
         XCTAssertEqual(again.inquiry(id: "inquiry-clay")?.status, .approved)
         XCTAssertEqual(again.pendingCount, 2)
-        XCTAssertEqual(again.sessions, sessions)
     }
 
     @MainActor
     func testRejectionOfBlankDraftPersistsAndRefusesSubsequentEditsAndDecisions() async throws {
         let server = MemoryInquiryRepository()
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
         await store.loadInquiries()
         try await store.decide(id: "inquiry-group", decision: InquiryDecision(
             decision: .reject, draft: InquiryDraft(draft: " \n", expectedRevision: 0)))
         XCTAssertEqual(store.pendingCount, 2)
-        let restarted = DemoStore(repository: server)
+        let restarted = InquiryStore(repository: server)
         await restarted.loadInquiries()
 
         XCTAssertEqual(restarted.inquiry(id: "inquiry-group")?.status, .rejected)
@@ -77,7 +75,7 @@ final class InquiryPersistenceTests: XCTestCase {
     @MainActor
     func testBlankApprovalAndStaleEditorRevisionDoNotChangeServerState() async throws {
         let server = MemoryInquiryRepository()
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
         await store.loadInquiries()
         do {
             try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
@@ -97,7 +95,7 @@ final class InquiryPersistenceTests: XCTestCase {
     @MainActor
     func testFailedSavePreservesConfirmedDraftAndRequiresReconciliationBeforeRetry() async throws {
         let server = MemoryInquiryRepository()
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
         await store.loadInquiries()
         let original = store.inquiries
         server.writeFails = true
@@ -122,7 +120,7 @@ final class InquiryPersistenceTests: XCTestCase {
     @MainActor
     func testLostDecisionResponseIsNotReportedSavedUntilReloadRestoresCommittedDecision() async throws {
         let server = MemoryInquiryRepository()
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
         await store.loadInquiries()
         server.loseDecisionResponse = true
 
@@ -142,7 +140,7 @@ final class InquiryPersistenceTests: XCTestCase {
     func testInFlightSaveBlocksDuplicateSaveDecisionAndRefreshUntilCompletion() async throws {
         let server = MemoryInquiryRepository()
         server.pauseSave = true
-        let store = DemoStore(repository: server)
+        let store = InquiryStore(repository: server)
         await store.loadInquiries()
         let draft = InquiryDraft(draft: "저장 중", expectedRevision: 0)
         let saving = Task { try await store.saveDraft(id: "inquiry-clay", draft: draft) }
@@ -167,27 +165,10 @@ final class InquiryPersistenceTests: XCTestCase {
     }
 
     @MainActor
-    func testRemoteResetAndLegacyLocalMutatorsCannotChangePersistentState() async throws {
-        let server = MemoryInquiryRepository()
-        server.records = Array(server.records.prefix(1))
-        let store = DemoStore(repository: server)
-        await store.loadInquiries()
-        let original = store.inquiries
-
-        store.reset()
-
-        XCTAssertEqual(store.inquiries, original)
-        XCTAssertFalse(store.isSample)
-        XCTAssertThrowsError(try store.editDraft(id: "inquiry-clay", text: "로컬 덮어쓰기"))
-        XCTAssertThrowsError(try store.decide(id: "inquiry-clay", decision: .approve))
-        XCTAssertEqual(server.records, original)
-    }
-
-    @MainActor
     func testServerConflictAndMissingInquiryPreserveCountsUntilReload() async throws {
         for missing in [false, true] {
             let server = MemoryInquiryRepository()
-            let store = DemoStore(repository: server)
+            let store = InquiryStore(repository: server)
             await store.loadInquiries()
             if missing {
                 server.records.removeFirst()
@@ -208,9 +189,16 @@ final class InquiryPersistenceTests: XCTestCase {
         }
     }
 
+    func testStatusCodesStayStableAndSeparateFromLabels() {
+        XCTAssertEqual(ReplyStatus.pending.rawValue, "pending")
+        XCTAssertEqual(ReplyStatus.approved.rawValue, "approved")
+        XCTAssertEqual(ReplyStatus.rejected.rawValue, "rejected")
+        XCTAssertEqual(ReplyStatus.pending.label, "승인 대기")
+    }
+
     func testBackendJSONDecodesRevisionAndDecisionEncodesAtomicContract() throws {
         let data = Data("""
-        [{"id":"server-only","customer":"가상","subject":"문의","question":"질문",
+        [{"id":"server-only","customer":"손님","subject":"문의","question":"질문",
         "facts":["근거"],"draft":"서버 답변","status":"approved","revision":7}]
         """.utf8)
         let inquiries = try JSONDecoder().decode([Inquiry].self, from: data)

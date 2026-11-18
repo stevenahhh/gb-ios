@@ -2,38 +2,51 @@ import SwiftUI
 import UIKit
 
 struct MonthCalendarView: UIViewRepresentable {
-    @Binding var selectedDay: Int
-    let events: [Int: [DayEvent]]
+    @Binding var selectedDay: Date
+    let days: [String: CalendarDay]
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
+    private func components(_ date: Date) -> DateComponents {
+        Calendar.workshop.dateComponents([.calendar, .era, .year, .month, .day], from: date)
+    }
+
     func makeUIView(context: Context) -> UICalendarView {
         let view = UICalendarView()
-        let locale = Locale(identifier: "ko_KR")
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        view.calendar = calendar
-        view.locale = locale
-        view.visibleDateComponents = DateComponents(calendar: calendar, year: 2026, month: 11, day: 1)
+        view.calendar = Calendar.workshop
+        view.locale = Locale(identifier: "ko_KR")
+        view.timeZone = Calendar.workshop.timeZone
+        view.visibleDateComponents = components(selectedDay)
         view.delegate = context.coordinator
         view.wantsDateDecorations = true
 
         let selection = UICalendarSelectionSingleDate(delegate: context.coordinator)
-        selection.selectedDate = DateComponents(calendar: calendar, year: 2026, month: 11, day: selectedDay)
+        selection.selectedDate = components(selectedDay)
         view.selectionBehavior = selection
         return view
     }
 
     func updateUIView(_ uiView: UICalendarView, context: Context) {
+        let daysChanged = context.coordinator.parent.days != days
         context.coordinator.parent = self
-        guard let selection = uiView.selectionBehavior as? UICalendarSelectionSingleDate,
-              selection.selectedDate?.day != selectedDay else { return }
-        selection.setSelected(
-            DateComponents(calendar: uiView.calendar, year: 2026, month: 11, day: selectedDay),
-            animated: !context.environment.accessibilityReduceMotion
-        )
+        let target = components(selectedDay)
+        if let selection = uiView.selectionBehavior as? UICalendarSelectionSingleDate,
+           selection.selectedDate?.date != target.date {
+            selection.setSelected(target, animated: !context.environment.accessibilityReduceMotion)
+            uiView.setVisibleDateComponents(target, animated: !context.environment.accessibilityReduceMotion)
+        }
+        if daysChanged {
+            let loaded = days.keys.compactMap(Self.components(fromKey:))
+            uiView.reloadDecorations(forDateComponents: loaded, animated: false)
+        }
+    }
+
+    private static func components(fromKey key: String) -> DateComponents? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return DateComponents(calendar: Calendar.workshop, year: parts[0], month: parts[1], day: parts[2])
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UICalendarView, context: Context) -> CGSize? {
@@ -54,8 +67,7 @@ struct MonthCalendarView: UIViewRepresentable {
         }
 
         func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
-            guard dateComponents.year == 2026, dateComponents.month == 11,
-                  let day = dateComponents.day, let dayEvents = parent.events[day] else { return nil }
+            guard let date = dateComponents.date, let dayEvents = parent.days[date.dayKey]?.events else { return nil }
             let kinds = dayEvents.map(\.kind)
             if kinds.count == 1 {
                 return .image(UIImage(systemName: kinds[0].symbol), color: kinds[0].uiColor, size: .small)
@@ -76,7 +88,7 @@ struct MonthCalendarView: UIViewRepresentable {
                     x += symbol.size.width + gap
                 }
             }
-            let label = dayEvents.map { "\($0.kind.rawValue) \($0.count)건" }.joined(separator: ", ")
+            let label = dayEvents.map { "\($0.kind.label) \($0.display)" }.joined(separator: ", ")
             return .customView {
                 let view = UIImageView(image: image)
                 view.isAccessibilityElement = true
@@ -86,8 +98,18 @@ struct MonthCalendarView: UIViewRepresentable {
         }
 
         func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
-            if let day = dateComponents?.day {
-                parent.selectedDay = day
+            if let date = dateComponents?.date {
+                parent.selectedDay = Calendar.workshop.startOfDay(for: date)
+            }
+        }
+
+        func calendarView(_ calendarView: UICalendarView, didChangeVisibleDateComponentsFrom previous: DateComponents) {
+            // Paging months moves the selection so the screen loads that month's rows.
+            guard let visible = calendarView.visibleDateComponents.date else { return }
+            let calendar = Calendar.workshop
+            if !calendar.isDate(visible, equalTo: parent.selectedDay, toGranularity: .month),
+               let first = calendar.dateInterval(of: .month, for: visible)?.start {
+                parent.selectedDay = first
             }
         }
     }

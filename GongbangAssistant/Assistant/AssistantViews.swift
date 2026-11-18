@@ -1,5 +1,4 @@
 import SwiftUI
-import RoundupCore
 
 private struct ChatTurn: Identifiable {
     enum Role { case owner, assistant, failure }
@@ -50,7 +49,6 @@ struct AssistantSheet: View {
     let launch: AssistantLaunch
     @Environment(\.dismiss) private var dismiss
     @State private var message = ""
-    @Environment(DemoStore.self) private var store
     @State private var sent: [ChatTurn] = []
     @State private var isAnswering = false
     @State private var isConfirmingDiscard = false
@@ -244,23 +242,10 @@ struct AssistantSheet: View {
         isAnswering = true
         defer { isAnswering = false }
         do {
-            let reply = try await RoundupAPI.ask(question: question, context: workshopContext)
+            let reply = try await RoundupAPI.ask(question: question)
             sent.append(ChatTurn(role: .assistant, text: reply))
         } catch {
             sent.append(ChatTurn(role: .failure, text: error.localizedDescription))
         }
-    }
-
-    private var workshopContext: [String] {
-        let time = Date.FormatStyle(date: .omitted, time: .shortened).locale(Locale(identifier: "ko_KR"))
-        var lines = ["답변 대기 문의 \(store.pendingCount)건"]
-        lines += store.pendingInquiries.map { "답변 대기 문의: \($0.customer) · \($0.subject) · \($0.question)" }
-        lines += store.sessions(on: store.referenceDay).map {
-            "오늘 수업: \($0.startsAt.formatted(time)) \($0.title) · 예약 \($0.bookedPeople)/\($0.capacity)명"
-        }
-        lines += SampleData.shipToday.map { "오늘 발송: \($0.title) · \($0.status?.text ?? "") · \($0.lines.joined(separator: " · "))" }
-        lines += OperationArea.bookings.items.filter { $0.tag == "예약금 대기" }
-            .map { "예약금 대기: \($0.title) · \($0.lines.joined(separator: " · ")) · \($0.deadline ?? "")" }
-        return lines
     }
 }

@@ -1,6 +1,6 @@
 import XCTest
 
-final class ScreenshotTourUITests: XCTestCase {
+final class ScreenshotTourUITests: RoundupUITestCase {
     private var app: XCUIApplication!
     private var index = 0
 
@@ -10,11 +10,10 @@ final class ScreenshotTourUITests: XCTestCase {
 
     @MainActor
     func testCaptureEveryScreen() throws {
-        app = XCUIApplication()
-        app.launchArguments = ["-sampleInquiries"]
-        app.launch()
+        app = try launch()
 
         selectTab("오늘")
+        XCTAssertTrue(app.segmentedControls.firstMatch.waitForExistence(timeout: 10))
         for segment in ["할 일", "채널", "배송", "비서 추천"] {
             selectSegment(segment, menu: "today.segment")
             capture("today-\(segment)")
@@ -25,6 +24,7 @@ final class ScreenshotTourUITests: XCTestCase {
         selectSegment("할 일", menu: "today.segment")
 
         selectTab("캘린더")
+        XCTAssertTrue(app.segmentedControls.firstMatch.waitForExistence(timeout: 10))
         capture("calendar-week")
         scrollToEnd()
         capture("calendar-week-end")
@@ -38,6 +38,7 @@ final class ScreenshotTourUITests: XCTestCase {
         selectSegment("주간", menu: "calendar.mode")
 
         selectTab("운영")
+        XCTAssertTrue(app.buttons["operations.bookings"].waitForExistence(timeout: 10))
         capture("operations")
         scrollToEnd()
         capture("operations-end")
@@ -67,7 +68,7 @@ final class ScreenshotTourUITests: XCTestCase {
                 search.typeText("없는주문")
                 capture("operations-deliveries-search-empty")
                 app.terminate()
-                app.launch()
+                app = try launch()
             } else {
                 goBack()
             }
@@ -78,12 +79,12 @@ final class ScreenshotTourUITests: XCTestCase {
         scrollToEnd()
         capture("settings-end")
         scrollToTop()
-        let firstRow = app.buttons["공방 정보"].firstMatch
-        _ = firstRow.waitForExistence(timeout: 5)
+        let firstRow = app.buttons["settings.workshop"].firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
         if reveal(firstRow) {
             firstRow.tap()
             waitForPush(from: "설정")
-            capture("settings-placeholder")
+            capture("settings-workshop")
             goBack()
         } else {
             XCTFail("settings row 공방 정보 was not reachable")
@@ -98,24 +99,25 @@ final class ScreenshotTourUITests: XCTestCase {
     }
 
     @MainActor
-    func testCaptureScreenStates() throws {
-        for state in ["loading", "empty", "error"] {
-            app = XCUIApplication()
-            app.launchArguments = ["-sampleInquiries", "-screenState", state]
-            app.launch()
-            selectTab("오늘")
-            capture("state-\(state)-today")
-            selectTab("캘린더")
-            capture("state-\(state)-calendar")
-            selectTab("운영")
-            let row = app.buttons["operations.bookings"]
-            if reveal(row) {
-                row.tap()
-                waitForPush(from: "운영")
-                capture("state-\(state)-bookings")
-            }
-            app.terminate()
+    func testCaptureEmptyAndErrorStates() throws {
+        app = try launchEmptyServer()
+        XCTAssertTrue(app.descendants(matching: .any)["today.empty"].waitForExistence(timeout: 10))
+        capture("state-empty-today")
+        selectTab("운영")
+        let row = app.buttons["operations.bookings"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        if reveal(row) {
+            row.tap()
+            waitForPush(from: "운영")
+            XCTAssertTrue(app.descendants(matching: .any)["area.empty"].waitForExistence(timeout: 10))
+            capture("state-empty-bookings")
         }
+        app.terminate()
+
+        app = try launch(apiURL: "http://127.0.0.1:9")
+        XCTAssertTrue(app.buttons["screen.retry"].waitForExistence(timeout: 30))
+        capture("state-error-today")
+        app.terminate()
     }
 
     @MainActor

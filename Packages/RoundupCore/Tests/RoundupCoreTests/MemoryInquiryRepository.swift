@@ -4,7 +4,14 @@ import Foundation
 /// Stateful server substitute: revisions and completed decisions obey the backend contract.
 @MainActor
 final class MemoryInquiryRepository: InquiryRepository {
-    var records = DemoStore().inquiries
+    var records = [
+        Inquiry(id: "inquiry-clay", customer: "김하늘", subject: "도자기 체험 준비물", question: "준비물이 있을까요?",
+                facts: ["공방 안내 · 앞치마와 도구를 제공합니다."], draft: "준비되어 있습니다.", status: .pending),
+        Inquiry(id: "inquiry-group", customer: "이도윤", subject: "두 사람 함께 참여", question: "같이 참여할 수 있나요?",
+                facts: ["수업 정원 · 한 회차 최대 6명입니다."], draft: "함께 참여하실 수 있습니다.", status: .pending),
+        Inquiry(id: "inquiry-change", customer: "박서연", subject: "수업 일정 변경", question: "날짜를 바꾸고 싶어요.",
+                facts: ["변경 규정 · 수업 2일 전까지 가능합니다."], draft: "2일 전까지 가능합니다.", status: .pending),
+    ]
     var loadFails = false
     var writeFails = false
     var loseDecisionResponse = false

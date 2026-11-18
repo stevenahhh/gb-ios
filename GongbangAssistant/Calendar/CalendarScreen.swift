@@ -8,67 +8,62 @@ struct CalendarScreen: View {
     }
 
     @SceneStorage("calendar.mode") private var mode: Mode = .week
-    @State private var selectedDay = SampleData.today.day ?? 4
-    @State private var state = ScreenState.launch
+    @State private var selectedDay = Calendar.workshop.startOfDay(for: .now)
+    @State private var loader = Loader<[String: CalendarDay]>()
+    @State private var isAddingEvent = false
+    @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private let calendar = Calendar.workshop
+
+    /// One request covers the visible month plus the weeks that overlap it.
+    private var loadRange: (start: Date, end: Date) {
+        let interval = calendar.dateInterval(of: .month, for: selectedDay)
+        let first = interval?.start ?? selectedDay
+        let last = calendar.date(byAdding: .day, value: -1, to: interval?.end ?? selectedDay) ?? selectedDay
+        return (calendar.date(byAdding: .day, value: -7, to: first) ?? first,
+                calendar.date(byAdding: .day, value: 7, to: last) ?? last)
+    }
+
+    private var loadKey: String { "\(loadRange.start.dayKey)|\(app.dataVersion)" }
 
     var body: some View {
         NavigationStack {
-            content
-                .navigationTitle("캘린더")
-                .navigationSubtitle(subtitle)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("오늘") {
-                            selectedDay = SampleData.today.day ?? 4
-                        }
-                    }
-                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                    ToolbarItem(placement: .topBarTrailing) {
-                        NavigationLink {
-                            PlaceholderScreen(title: "일정 추가", systemImage: "calendar.badge.plus")
-                        } label: {
-                            Label("일정 추가", systemImage: "plus")
-                        }
-                    }
-                }
-                .navigationDestination(for: AreaRoute.self) { route in
-                    OperationAreaView(area: route.area, initialFilter: route.filter)
-                }
-                .navigationDestination(for: WorkItem.self) { item in
-                    WorkDetailView(item: item)
-                }
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch state {
-        case .error:
-            LoadErrorView { state = .loaded }
-        case .empty:
-            ContentUnavailableView {
-                Label("아직 일정이 없어요", systemImage: "calendar")
-            } description: {
-                Text(keepingWords: "예약과 할 일을 추가하면\n날짜별로 여기에 모여요.")
-            } actions: {
-                NavigationLink {
-                    PlaceholderScreen(title: "일정 추가", systemImage: "calendar.badge.plus")
-                } label: {
-                    Text("일정 추가하기")
-                        .foregroundStyle(Color(.systemBackground))
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            LoadableContent(loader: loader, retry: load) { days in
+                list(days)
             }
-        case .loading, .loaded:
-            list
-                .redacted(reason: state == .loading ? .placeholder : [])
-                .allowsHitTesting(state != .loading)
+            .navigationTitle("캘린더")
+            .navigationSubtitle(subtitle)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("오늘") {
+                        selectedDay = calendar.startOfDay(for: .now)
+                    }
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("일정 추가", systemImage: "plus") {
+                        isAddingEvent = true
+                    }
+                    .accessibilityIdentifier("calendar.add")
+                }
+            }
+            .sheet(isPresented: $isAddingEvent) {
+                EventFormSheet(day: selectedDay)
+            }
+        }
+        .task(id: loadKey) { await load() }
+    }
+
+    private func load() async {
+        let range = loadRange
+        await loader.load {
+            let days = try await RoundupAPI.calendar(start: range.start, end: range.end).days
+            return Dictionary(uniqueKeysWithValues: days.map { ($0.date, $0) })
         }
     }
 
-    private var list: some View {
+    private func list(_ days: [String: CalendarDay]) -> some View {
         List {
             Section {
                 Picker("보기", selection: $mode) {
@@ -83,52 +78,65 @@ struct CalendarScreen: View {
             Section {
                 switch mode {
                 case .week:
-                    WeekStrip(selectedDay: $selectedDay, events: SampleData.novemberEvents)
+                    WeekStrip(selectedDay: $selectedDay, days: days)
                         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 case .month:
-                    MonthCalendarView(selectedDay: $selectedDay, events: SampleData.novemberEvents)
+                    MonthCalendarView(selectedDay: $selectedDay, days: days)
                         .frame(maxWidth: 380)
                         .frame(maxWidth: .infinity)
                 }
             } header: {
                 if mode == .week {
-                    Text("11월 2일 – 8일")
+                    weekHeader
                 }
             } footer: {
                 EventLegend()
             }
 
             Section {
-                agenda
+                agenda(days[selectedDay.dayKey])
             } header: {
-                SectionHeader(title: dayTitle)
+                SectionHeader(title: dayTitle(days[selectedDay.dayKey]))
             }
         }
         .listStyle(.insetGrouped)
+        .refreshable { await load() }
+    }
+
+    private var weekHeader: some View {
+        let week = calendar.dateInterval(of: .weekOfYear, for: selectedDay)
+        let start = week?.start ?? selectedDay
+        let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
+        return HStack {
+            Button("이전 주", systemImage: "chevron.left") { moveWeek(-1) }
+                .labelStyle(.iconOnly)
+                .frame(minWidth: 44, minHeight: 44)
+            Spacer()
+            Text("\(start.koreanDay(weekday: false)) – \(end.koreanDay(weekday: false))")
+            Spacer()
+            Button("다음 주", systemImage: "chevron.right") { moveWeek(1) }
+                .labelStyle(.iconOnly)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .textCase(nil)
+    }
+
+    private func moveWeek(_ weeks: Int) {
+        selectedDay = calendar.date(byAdding: .weekOfYear, value: weeks, to: selectedDay) ?? selectedDay
     }
 
     @ViewBuilder
-    private var agenda: some View {
-        if let items = SampleData.agenda[selectedDay] {
-            ForEach(items) { AgendaRow(item: $0) }
-        } else if let events = SampleData.novemberEvents[selectedDay] {
-            ForEach(events, id: \.self) { event in
-                if let area = event.kind.area {
-                    NavigationLink(value: AreaRoute(area: area)) {
-                        summaryRow(event)
-                    }
-                } else {
-                    summaryRow(event)
-                }
-            }
+    private func agenda(_ day: CalendarDay?) -> some View {
+        if let day {
+            ForEach(day.items) { AgendaRow(item: $0) }
         } else {
             ContentUnavailableView {
                 Label("이 날은 일정이 없어요", systemImage: "calendar")
             } description: {
                 Text(keepingWords: "필요하면 일정을 추가해\u{00A0}보세요.")
             } actions: {
-                NavigationLink("일정 추가하기") {
-                    PlaceholderScreen(title: "일정 추가", systemImage: "calendar.badge.plus")
+                Button("일정 추가하기") {
+                    isAddingEvent = true
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -136,56 +144,45 @@ struct CalendarScreen: View {
         }
     }
 
-    private func summaryRow(_ event: DayEvent) -> some View {
-        Label {
-            Text("\(event.kind.rawValue) \(event.count)건")
-                .font(.body.weight(.semibold))
-        } icon: {
-            Image(systemName: event.kind.symbol)
-                .foregroundStyle(event.kind.color)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
     private var subtitle: String {
-        state == .loaded || state == .loading
-            ? "오늘 일정 \(SampleData.eventCount(on: SampleData.today.day ?? 4))개"
-            : ""
+        guard let days = loader.value else { return "" }
+        return "오늘 일정 \(days[Date.now.dayKey]?.items.count ?? 0)개"
     }
 
-    private var dayTitle: String {
-        var components = SampleData.today
-        components.day = selectedDay
-        guard let date = components.date else { return "" }
-        let label = date.formatted(.dateTime.month().day().weekday(.wide).locale(Locale(identifier: "ko_KR")))
-        let count = SampleData.eventCount(on: selectedDay)
-        guard count > 0 else { return label }
+    private func dayTitle(_ day: CalendarDay?) -> String {
+        let label = selectedDay.koreanDay()
+        guard let count = day?.items.count, count > 0 else { return label }
         return dynamicTypeSize.isAccessibilitySize ? "\(label)\n일정 \(count)개" : "\(label) · 일정 \(count)개"
     }
 }
 
 struct WeekStrip: View {
-    @Binding var selectedDay: Int
-    let events: [Int: [DayEvent]]
+    @Binding var selectedDay: Date
+    let days: [String: CalendarDay]
     @ScaledMetric(relativeTo: .body) private var circleSize = 36
     @ScaledMetric(relativeTo: .caption2) private var symbolSize = 8
 
-    private let days = Array(2...8)
+    private let calendar = Calendar.workshop
     private let weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+
+    private var weekDates: [Date] {
+        let start = calendar.dateInterval(of: .weekOfYear, for: selectedDay)?.start ?? selectedDay
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(days, id: \.self) { day in
-                let isSelected = day == selectedDay
-                let dayEvents = events[day] ?? []
+            ForEach(Array(weekDates.enumerated()), id: \.element) { index, date in
+                let isSelected = calendar.isDate(date, inSameDayAs: selectedDay)
+                let events = days[date.dayKey]?.events ?? []
                 Button {
-                    selectedDay = day
+                    selectedDay = date
                 } label: {
                     VStack(spacing: 6) {
-                        Text(weekdays[day - days[0]])
+                        Text(weekdays[index])
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("\(day)")
+                        Text("\(calendar.component(.day, from: date))")
                             .font(.body.weight(isSelected ? .bold : .regular))
                             .monospacedDigit()
                             .foregroundStyle(isSelected ? Color(.systemBackground) : .primary)
@@ -196,7 +193,7 @@ struct WeekStrip: View {
                                 }
                             }
                         HStack(spacing: 1) {
-                            ForEach(dayEvents, id: \.self) { event in
+                            ForEach(events, id: \.self) { event in
                                 Image(systemName: event.kind.symbol)
                                     .font(.system(size: symbolSize, weight: .semibold))
                                     .foregroundStyle(event.kind.color)
@@ -208,17 +205,16 @@ struct WeekStrip: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel(day: day, events: dayEvents))
+                .accessibilityLabel(accessibilityLabel(date: date, events: events))
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
         .padding(.vertical, 6)
     }
 
-    private func accessibilityLabel(day: Int, events: [DayEvent]) -> String {
-        let weekday = weekdays[day - days[0]]
-        let summary = events.isEmpty ? "일정 없음" : events.map { "\($0.kind.rawValue) \($0.count)건" }.joined(separator: ", ")
-        return "11월 \(day)일 \(weekday)요일, \(summary)"
+    private func accessibilityLabel(date: Date, events: [DayEvent]) -> String {
+        let summary = events.isEmpty ? "일정 없음" : events.map { "\($0.kind.label) \($0.display)" }.joined(separator: ", ")
+        return "\(date.koreanDay()), \(summary)"
     }
 }
 
@@ -246,14 +242,10 @@ struct EventLegend: View {
 
     private func item(_ kind: EventKind) -> some View {
         Label {
-            Text(kind.rawValue)
+            Text(kind.label)
         } icon: {
             Image(systemName: kind.symbol)
                 .foregroundStyle(kind.color)
         }
     }
-}
-
-#Preview {
-    CalendarScreen()
 }

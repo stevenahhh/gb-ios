@@ -1,7 +1,17 @@
 import SwiftUI
 import RoundupCore
 
-enum OperationArea: String, CaseIterable, Identifiable, Hashable {
+struct AreaFilter: Hashable {
+    let key: String
+    let label: String
+
+    init(_ key: String, _ label: String) {
+        self.key = key
+        self.label = label
+    }
+}
+
+enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
     case bookings
     case orders
     case deliveries
@@ -27,15 +37,6 @@ enum OperationArea: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var count: String {
-        switch self {
-        case .bookings: "32건"
-        case .orders: "38건"
-        case .deliveries: "5건"
-        case .channels: "2개"
-        }
-    }
-
     var systemImage: String {
         switch self {
         case .bookings: "calendar.badge.checkmark"
@@ -45,25 +46,29 @@ enum OperationArea: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var metrics: [Metric] {
+    var path: String {
         switch self {
-        case .bookings:
-            [Metric(value: "32건", label: "전체"), Metric(value: "24건", label: "확정"), Metric(value: "2건", label: "예약금 대기")]
-        case .orders:
-            [Metric(value: "38건", label: "전체 주문"), Metric(value: "8건", label: "처리 대기"), Metric(value: "126만원", label: "이번 달 매출")]
-        case .deliveries:
-            [Metric(value: "2건", label: "발송 예정"), Metric(value: "2건", label: "배송 중"), Metric(value: "1건", label: "배송 완료")]
-        case .channels:
-            [Metric(value: "2개", label: "연결 채널"), Metric(value: "3건", label: "미답변 문의"), Metric(value: "2건", label: "홍보 초안")]
+        case .bookings: "bookings"
+        case .orders: "orders"
+        case .deliveries: "shipments"
+        case .channels: "channels"
         }
     }
 
-    var filters: [String] {
+    var filterParameter: String { self == .channels ? "section" : "status" }
+
+    var filters: [AreaFilter] {
         switch self {
-        case .bookings: ["전체", "확정", "예약금 대기"]
-        case .orders: ["전체", "결제 완료", "처리 중"]
-        case .deliveries: ["전체", "발송 예정", "배송 중", "완료"]
-        case .channels: ["전체", "채널", "문의", "콘텐츠"]
+        case .bookings:
+            [AreaFilter("all", "전체"), AreaFilter("confirmed", "확정"), AreaFilter("deposit_pending", "예약금 대기")]
+        case .orders:
+            [AreaFilter("all", "전체"), AreaFilter("paid", "결제 완료"), AreaFilter("processing", "처리 중")]
+        case .deliveries:
+            [AreaFilter("all", "전체"), AreaFilter("scheduled", "발송 예정"),
+             AreaFilter("in_transit", "배송 중"), AreaFilter("delivered", "완료")]
+        case .channels:
+            [AreaFilter("all", "전체"), AreaFilter("channels", "채널"),
+             AreaFilter("inquiries", "문의"), AreaFilter("content", "콘텐츠")]
         }
     }
 
@@ -105,146 +110,58 @@ enum OperationArea: String, CaseIterable, Identifiable, Hashable {
 
     var noDataMessage: String {
         switch self {
-        case .bookings: "네이버 예약을 연결하거나\n직접 등록해\u{00A0}보세요."
-        case .orders: "스마트스토어를 연결하면\n주문이 여기에 모여요."
+        case .bookings: "예약을 직접 등록해\u{00A0}보세요."
+        case .orders: "주문이 등록되면\n여기에 모여요."
         case .deliveries: "주문이 들어오면\n발송할 물건이 여기에 생겨요."
-        case .channels: "인스타그램과 네이버 스마트스토어를\n연결해\u{00A0}보세요."
+        case .channels: "등록된 채널이 생기면\n여기에 모여요."
         }
     }
 
-    var noDataAction: String? {
+    var sortOptions: [AreaFilter] {
         switch self {
-        case .bookings: "예약 등록하기"
-        case .orders, .channels: "채널 연결하기"
-        case .deliveries: nil
-        }
-    }
-
-    var sortOptions: [String] {
-        switch self {
-        case .orders: ["최근 주문순", "오래된 주문순"]
-        case .deliveries: ["마감 임박순", "늦은 마감순"]
+        case .orders: [AreaFilter("newest", "최근 주문순"), AreaFilter("oldest", "오래된 주문순")]
+        case .deliveries: [AreaFilter("soonest", "마감 임박순"), AreaFilter("latest", "늦은 마감순")]
         case .bookings, .channels: []
-        }
-    }
-
-    var items: [WorkItem] {
-        Self.catalog[self] ?? []
-    }
-
-    private static let catalog: [OperationArea: [WorkItem]] = Dictionary(uniqueKeysWithValues: allCases.map { ($0, $0.makeItems()) })
-
-    private func makeItems() -> [WorkItem] {
-        switch self {
-        case .bookings:
-            [
-                WorkItem(title: "도자기 원데이 클래스", status: Status(text: "확정", tone: .done),
-                         lines: ["11월 4일 수 · 10:00–11:30", "김*연 외 3명 · 예약금 확인 완료"], tag: "확정", action: .open),
-                WorkItem(title: "나만의 머그컵 만들기", status: Status(text: "예약금 대기", tone: .attention),
-                         lines: ["11월 5일 목 · 14:00–16:00", "박*은 · 2명"], deadline: "입금 기한 오늘 18:00",
-                         tag: "예약금 대기", action: .perform("입금 확인하기")),
-                WorkItem(title: "원데이 물레 체험", status: Status(text: "예약금 대기", tone: .attention),
-                         lines: ["11월 8일 일 · 11:00–12:30", "최*우 · 1명"], deadline: "입금 기한 내일 12:00",
-                         tag: "예약금 대기", action: .perform("입금 확인하기")),
-                WorkItem(title: "주말 도자기 클래스", status: Status(text: "확정", tone: .done),
-                         lines: ["11월 7일 토 · 10:00–12:00", "이*진 외 5명 · 남은 자리 3개"], tag: "확정", action: .open),
-            ]
-        case .orders:
-            [
-                WorkItem(title: "머그컵 2종 세트", status: Status(text: "결제 완료", tone: .done),
-                         lines: ["#1042 · 11월 4일 주문 · 네이버 스토어", "김*연 · 1개 · 42,000원"], tag: "결제 완료",
-                         action: .perform("주문 확인하기")),
-                WorkItem(title: "오롯 세라믹 플레이트", status: Status(text: "처리 중", tone: .progress),
-                         lines: ["#1043 · 11월 4일 주문 · 네이버 스토어", "이*진 · 2개 · 56,000원"], tag: "처리 중", action: .open),
-                WorkItem(title: "핸드메이드 미니 화병", status: Status(text: "결제 완료", tone: .done),
-                         lines: ["#1044 · 11월 4일 주문 · 네이버 스토어", "정*우 · 1개 · 28,000원"], tag: "결제 완료",
-                         action: .perform("주문 확인하기")),
-            ]
-        case .deliveries:
-            [
-                WorkItem(title: "머그컵 2종 세트", status: Status(text: "포장 대기", tone: .attention),
-                         lines: ["#1042 · 김*연 · 1개", "깨지지 않게 포장 필요"], deadline: "오늘 16:00 택배 수거",
-                         tag: "발송 예정", action: .perform("포장 완료하기")),
-                WorkItem(title: "오롯 세라믹 플레이트", status: Status(text: "송장 대기", tone: .attention),
-                         lines: ["#1043 · 이*진 · 2개", "포장 완료 · 오늘 발송 예정"], tag: "발송 예정",
-                         action: .perform("송장 등록하기")),
-                WorkItem(title: "핸드메이드 커피잔", status: Status(text: "배송 중", tone: .progress),
-                         lines: ["#1038 · 최*서 · 1개", "택배사 인계 완료 · 내일 도착 예정"], tag: "배송 중", action: .open),
-                WorkItem(title: "도자기 찬기 3종 세트", status: Status(text: "배송 중", tone: .progress),
-                         lines: ["#1044 · 안*지 · 1개", "오늘 도착 예정"], tag: "배송 중", action: .open),
-                WorkItem(title: "핸드메이드 머그컵", status: Status(text: "배송 완료", tone: .done),
-                         lines: ["#1031 · 윤*아 · 1개", "11월 3일 도착"], tag: "완료", action: .open),
-            ]
-        case .channels:
-            [
-                WorkItem(title: "Instagram", status: Status(text: "연결됨", tone: .done),
-                         lines: ["@orot.studio · 팔로워 1,284", "이번 주 +24 · 게시물 초안 2건"], tag: "채널", action: .open),
-                WorkItem(title: "네이버 스마트스토어", status: Status(text: "연결됨", tone: .done),
-                         lines: ["오롯 공방 · 이번 달 주문 38건", "문의 3건 · 리뷰 답글 대기 2건"], tag: "채널", action: .open),
-                WorkItem(title: "주말 클래스 모집 글", status: Status(text: "초안 준비", tone: .progress),
-                         lines: ["Instagram 게시물 · 비서가 작성", "남은 3자리를 알릴 홍보 글이에요."], tag: "콘텐츠",
-                         action: .perform("홍보 글 검토하기")),
-                WorkItem(title: "거북이 키링 이벤트 결과 글", status: Status(text: "초안 준비", tone: .progress),
-                         lines: ["Instagram 게시물 · 비서가 작성", "당첨자 발표를 담은 글이에요."], tag: "콘텐츠",
-                         action: .perform("홍보 글 검토하기")),
-            ]
         }
     }
 }
 
 struct OperationAreaView: View {
+    private struct LoadKey: Hashable {
+        let filter: String
+        let query: String
+        let sort: String?
+        let version: Int
+    }
+
     let area: OperationArea
     @State private var filter: String
     @State private var query = ""
-    @State private var sort: String
-    @State private var state = ScreenState.launch
-    @Environment(DemoStore.self) private var store
+    @State private var sort: String?
+    @State private var loader = Loader<AreaPage>()
+    @State private var extraItems: [WorkItem] = []
+    @State private var extraInquiries: [Inquiry] = []
+    @State private var hasMore = false
+    @State private var nextOffset = 0
+    @State private var isLoadingMore = false
+    @State private var isAddingBooking = false
+    @Environment(AppModel.self) private var app
 
     init(area: OperationArea, initialFilter: String? = nil) {
         self.area = area
-        _filter = State(initialValue: initialFilter ?? area.filters[0])
-        _sort = State(initialValue: area.sortOptions.first ?? "")
+        _filter = State(initialValue: initialFilter ?? area.filters[0].key)
+        _sort = State(initialValue: area.sortOptions.first?.key)
     }
 
-    private var visibleItems: [WorkItem] {
-        let filtered = area.items.map { $0.withPendingInquiries(store.pendingCount) }.filter { item in
-            let matchesFilter = filter == area.filters[0] || item.tag == filter
-            let matchesQuery = query.isEmpty
-                || item.title.localizedStandardContains(query)
-                || item.lines.contains { $0.localizedStandardContains(query) }
-            return matchesFilter && matchesQuery
-        }
-        let isReversed = area.sortOptions.count > 1 && sort == area.sortOptions[1]
-        return isReversed ? Array(filtered.reversed()) : filtered
-    }
-
-    private var visibleInquiries: [Inquiry] {
-        guard area == .channels, filter == area.filters[0] || filter == "문의" else { return [] }
-        let matching = store.inquiries.filter { inquiry in
-            query.isEmpty
-                || inquiry.subject.localizedStandardContains(query)
-                || inquiry.question.localizedStandardContains(query)
-                || inquiry.customer.localizedStandardContains(query)
-        }
-        return matching.filter { $0.status == .pending } + matching.filter { $0.status != .pending }
-    }
-
-    private var primaryID: WorkItem.ID? {
-        visibleItems.first { item in
-            if case .perform = item.action { true } else { false }
-        }?.id
-    }
+    private var isUnfiltered: Bool { filter == area.filters[0].key && query.isEmpty }
+    private var loadKey: LoadKey { LoadKey(filter: filter, query: query, sort: sort, version: app.dataVersion) }
 
     var body: some View {
-        Group {
-            if state == .error {
-                LoadErrorView { state = .loaded }
-            } else if state == .empty {
+        LoadableContent(loader: loader, retry: load) { page in
+            if page.total == 0 && isUnfiltered {
                 noDataView
             } else {
-                list
-                    .redacted(reason: state == .loading ? .placeholder : [])
-                    .allowsHitTesting(state != .loading)
+                list(page)
             }
         }
         .navigationTitle(area.title)
@@ -254,17 +171,61 @@ struct OperationAreaView: View {
                 toolbarAction
             }
         }
+        .sheet(isPresented: $isAddingBooking) {
+            BookingFormSheet()
+        }
+        .task(id: loadKey) {
+            // Typing replaces this task, so only the settled query reaches the server.
+            if !query.isEmpty {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+            }
+            await load()
+        }
     }
 
-    private var list: some View {
-        List {
+    private func currentQuery(offset: Int = 0) -> AreaQuery {
+        AreaQuery(filter: filter, text: query.trimmingCharacters(in: .whitespaces), sort: sort, offset: offset)
+    }
+
+    private func load() async {
+        let (area, request) = (area, currentQuery())
+        await loader.load { try await RoundupAPI.area(area, query: request) }
+        extraItems = []
+        extraInquiries = []
+        hasMore = loader.value?.hasMore ?? false
+        nextOffset = request.limit
+    }
+
+    private func loadMore() async {
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        let request = currentQuery(offset: nextOffset)
+        do {
+            let next = try await RoundupAPI.area(area, query: request)
+            extraItems += next.items
+            extraInquiries += next.inquiries ?? []
+            hasMore = next.hasMore
+            nextOffset += request.limit
+        } catch is CancellationError {
+            return
+        } catch {
+            app.failureMessage = error.localizedDescription
+        }
+    }
+
+    private func list(_ page: AreaPage) -> some View {
+        let items = page.items + extraItems
+        let inquiries = (page.inquiries ?? []) + extraInquiries
+        let primaryID = items.primaryActionID
+        return List {
             Section {
-                MetricStrip(metrics: area.metrics.withPendingInquiries(store.pendingCount))
+                MetricStrip(metrics: page.metrics)
             }
 
             Section {
                 Picker("상태", selection: $filter) {
-                    ForEach(area.filters, id: \.self) { Text($0).tag($0) }
+                    ForEach(area.filters, id: \.key) { Text($0.label).tag($0.key) }
                 }
                 .adaptivePickerStyle()
                 .accessibilityIdentifier("area.filter")
@@ -273,18 +234,28 @@ struct OperationAreaView: View {
             }
 
             Section(area.listTitle) {
-                if visibleItems.isEmpty && visibleInquiries.isEmpty {
+                if items.isEmpty && inquiries.isEmpty {
                     emptyView
                 } else {
-                    ForEach(visibleInquiries) { InquiryRow(inquiry: $0) }
-                    ForEach(visibleItems) { item in
-                        WorkCardRow(item: item, isPrimary: item.id == primaryID)
+                    ForEach(inquiries) { InquiryRow(inquiry: $0) }
+                    ForEach(items) { item in
+                        WorkCard(item: item, isPrimary: item.id == primaryID)
+                    }
+                    if hasMore {
+                        Button {
+                            Task { await loadMore() }
+                        } label: {
+                            if isLoadingMore { ProgressView() } else { Text("더 보기") }
+                        }
+                        .disabled(isLoadingMore)
+                        .accessibilityIdentifier("area.more")
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: area.searchPrompt)
+        .refreshable { await load() }
     }
 
     private var noDataView: some View {
@@ -293,17 +264,18 @@ struct OperationAreaView: View {
         } description: {
             Text(keepingWords: area.noDataMessage)
         } actions: {
-            if let action = area.noDataAction {
-                NavigationLink {
-                    PlaceholderScreen(title: action, systemImage: area.systemImage)
+            if area == .bookings {
+                Button {
+                    isAddingBooking = true
                 } label: {
-                    Text(action)
+                    Text("예약 등록하기")
                         .foregroundStyle(Color(.systemBackground))
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
         }
+        .accessibilityIdentifier("area.empty")
     }
 
     @ViewBuilder
@@ -316,9 +288,9 @@ struct OperationAreaView: View {
             } description: {
                 Text(keepingWords: "지금 고른 상태에는 항목이 없어요.")
             } actions: {
-                if filter != area.filters[0] {
+                if filter != area.filters[0].key {
                     Button("전체 보기") {
-                        filter = area.filters[0]
+                        filter = area.filters[0].key
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
@@ -331,31 +303,21 @@ struct OperationAreaView: View {
     private var toolbarAction: some View {
         switch area {
         case .bookings:
-            NavigationLink {
-                PlaceholderScreen(title: "예약 등록", systemImage: "calendar.badge.plus")
-            } label: {
-                Label("예약 등록", systemImage: "plus")
+            Button("예약 등록", systemImage: "plus") {
+                isAddingBooking = true
             }
+            .accessibilityIdentifier("booking.add")
         case .orders, .deliveries:
             Menu {
                 Picker("정렬", selection: $sort) {
-                    ForEach(area.sortOptions, id: \.self) { Text($0).tag($0) }
+                    ForEach(area.sortOptions, id: \.key) { Text($0.label).tag(Optional($0.key)) }
                 }
                 .pickerStyle(.inline)
             } label: {
                 Label("정렬", systemImage: "arrow.up.arrow.down")
             }
         case .channels:
-            NavigationLink("연결 관리") {
-                PlaceholderScreen(title: "연결 관리", systemImage: "link")
-            }
+            EmptyView()
         }
     }
-}
-
-#Preview {
-    NavigationStack {
-        OperationAreaView(area: .bookings)
-    }
-    .environment(DemoStore())
 }

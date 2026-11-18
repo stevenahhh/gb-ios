@@ -8,73 +8,52 @@ enum TodaySegment: String, CaseIterable, Identifiable {
     case suggestions = "비서 추천"
 
     var id: Self { self }
-
-    var metrics: [Metric] {
-        switch self {
-        case .tasks:
-            [Metric(value: "8명", label: "예약"), Metric(value: "3건", label: "새 주문"), Metric(value: "2건", label: "발송 예정")]
-        case .channels:
-            [Metric(value: "1,284", label: "SNS 팔로워"), Metric(value: "3건", label: "새 주문"), Metric(value: "3건", label: "미답변 문의")]
-        case .delivery:
-            [Metric(value: "2건", label: "발송 예정"), Metric(value: "2건", label: "배송 중"), Metric(value: "1건", label: "배송 완료")]
-        case .suggestions:
-            [Metric(value: "3개", label: "오늘의 추천"), Metric(value: "2건", label: "준비된 초안"), Metric(value: "1건", label: "확인 필요")]
-        }
-    }
 }
 
 struct TodayView: View {
     @SceneStorage("today.segment") private var segment: TodaySegment = .tasks
-    @State private var state = ScreenState.launch
-    @State private var updatedAt = Date.now
-    @Environment(DemoStore.self) private var store
+    @State private var loader = Loader<TodayScreenData>()
+    @Environment(InquiryStore.self) private var store
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         NavigationStack {
-            content
-                .navigationTitle(greeting)
-                .navigationSubtitle(subtitle)
-                .navigationDestination(for: AreaRoute.self) { route in
-                    OperationAreaView(area: route.area, initialFilter: route.filter)
+            LoadableContent(loader: loader, retry: load) { today in
+                if today.hasNoWork && store.inquiries.isEmpty {
+                    emptyState
+                } else {
+                    list(today)
                 }
-                .navigationDestination(for: WorkItem.self) { item in
-                    WorkDetailView(item: item)
-                }
-                .inquiryDestination()
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch state {
-        case .empty:
-            ContentUnavailableView {
-                Label("아직 연결된 채널이 없어요", systemImage: "link")
-            } description: {
-                Text(keepingWords: "네이버 예약과 인스타그램을 연결하면\n오늘 할 일이 여기에 모여요.")
-            } actions: {
-                NavigationLink {
-                    PlaceholderScreen(title: "채널 연결", systemImage: "link")
-                } label: {
-                    Text("채널 연결하기")
-                        .foregroundStyle(Color(.systemBackground))
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             }
-        case .error:
-            LoadErrorView { state = .loaded }
-        case .loading, .loaded:
-            list
-                .redacted(reason: state == .loading ? .placeholder : [])
-                .allowsHitTesting(state != .loading)
+            .navigationTitle(greeting)
+            .navigationSubtitle(subtitle)
+            .navigationDestination(for: AreaRoute.self) { route in
+                OperationAreaView(area: route.area, initialFilter: route.filter)
+            }
+            .inquiryDestination()
         }
+        .task(id: app.dataVersion) { await load() }
     }
 
-    private var list: some View {
+    private func load() async {
+        await loader.load { try await RoundupAPI.today() }
+        if let count = loader.value?.attentionCount { app.updateAttention(count) }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("오늘 등록된 일이 없어요", systemImage: "checkmark.circle")
+        } description: {
+            Text(keepingWords: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
+        }
+        .accessibilityIdentifier("today.empty")
+        .refreshable { await load() }
+    }
+
+    private func list(_ today: TodayScreenData) -> some View {
         List {
             Section {
-                MetricStrip(metrics: segment.metrics.withPendingInquiries(store.pendingCount))
+                MetricStrip(metrics: metrics(today))
             }
 
             Section {
@@ -89,17 +68,26 @@ struct TodayView: View {
                 .listRowBackground(Color.clear)
             }
 
-            segmentContent
+            segmentContent(today)
         }
         .listStyle(.insetGrouped)
         .refreshable {
+            await load()
             await store.loadInquiries()
-            updatedAt = .now
+        }
+    }
+
+    private func metrics(_ today: TodayScreenData) -> [Metric] {
+        switch segment {
+        case .tasks: today.tasks.metrics
+        case .channels: today.channels.metrics
+        case .delivery: today.delivery.metrics
+        case .suggestions: today.suggestions.metrics
         }
     }
 
     @ViewBuilder
-    private var segmentContent: some View {
+    private func segmentContent(_ today: TodayScreenData) -> some View {
         switch segment {
         case .tasks:
             Section {
@@ -113,9 +101,9 @@ struct TodayView: View {
                     ForEach(store.pendingInquiries) { InquiryRow(inquiry: $0) }
                 }
             } header: {
-                SectionHeader(title: "답변 대기 문의 \(store.pendingCount)건", area: .channels, filter: "문의")
+                SectionHeader(title: "답변 대기 문의 \(store.pendingCount)건", area: .channels, filter: "inquiries")
             }
-            ForEach(SampleData.todayTaskGroups) { group in
+            ForEach(today.tasks.groups) { group in
                 Section {
                     ForEach(group.items) { item in
                         TaskRow(item: item, kind: group.kind)
@@ -126,58 +114,62 @@ struct TodayView: View {
             }
         case .channels:
             Section {
-                ForEach(SampleData.channelCards) { WorkCardRow(item: $0.withPendingInquiries(store.pendingCount)) }
+                ForEach(today.channels.cards) { WorkCard(item: $0) }
             } header: {
                 SectionHeader(title: "채널 현황", area: .channels)
             }
             Section {
-                cards(SampleData.channelTodos)
+                cards(today.channels.todos, empty: "오늘 챙길 채널 일이 없어요")
             } header: {
-                SectionHeader(title: "오늘 챙길 일 \(SampleData.channelTodos.count)건")
+                SectionHeader(title: "오늘 챙길 일 \(today.channels.todos.count)건")
             }
         case .delivery:
             Section {
-                cards(SampleData.shipToday)
+                cards(today.delivery.shipToday, empty: "오늘 발송할 물건이 없어요")
             } header: {
-                SectionHeader(title: "오늘 발송할 물건 \(SampleData.shipToday.count)건", area: .deliveries)
+                SectionHeader(title: "오늘 발송할 물건 \(today.delivery.shipToday.count)건", area: .deliveries)
             }
             Section {
-                NavigationLink(value: AreaRoute(area: .deliveries, filter: "배송 중")) {
+                NavigationLink(value: AreaRoute(area: .deliveries, filter: "in_transit")) {
                     VStack(alignment: .leading, spacing: 4) {
-                        PhraseText(text: "배송 중 2건 · 오늘 도착 1건")
+                        PhraseText(text: today.delivery.transitSummary)
                             .font(.headline)
-                        Text(keepingWords: "배송 지연 없이 잘 이동하고 있어요.")
+                        Text(keepingWords: today.delivery.transitDetail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 4)
                 }
-                ForEach(SampleData.inTransit) { WorkCardRow(item: $0) }
+                ForEach(today.delivery.inTransit) { WorkCard(item: $0) }
             } header: {
                 SectionHeader(title: "이동 중인 배송")
             }
         case .suggestions:
             Section {
-                cards(SampleData.suggestions)
+                cards(today.suggestions.items, empty: "지금은 새로운 추천이 없어요")
             } header: {
                 SectionHeader(title: "오늘의 추천")
             } footer: {
-                Text("비서가 공방 현황을 보고 골랐어요. 틀릴 수 있으니 내용을 확인해 주세요.")
+                Text("공방의 예약과 초안을 바탕으로 골랐어요. 내용을 확인해 주세요.")
             }
         }
     }
 
-    private func cards(_ items: [WorkItem]) -> some View {
-        let primaryID = items.first { item in
-            if case .perform = item.action { true } else { false }
-        }?.id
-        return ForEach(items) { item in
-            WorkCardRow(item: item, isPrimary: item.id == primaryID)
+    @ViewBuilder
+    private func cards(_ items: [WorkItem], empty: String) -> some View {
+        if items.isEmpty {
+            Text(empty)
+                .foregroundStyle(.secondary)
+        } else {
+            let primaryID = items.primaryActionID
+            ForEach(items) { item in
+                WorkCard(item: item, isPrimary: item.id == primaryID)
+            }
         }
     }
 
     private var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
+        switch Calendar.workshop.component(.hour, from: .now) {
         case 5..<11: "사장님, 좋은 아침이에요"
         case 11..<17: "사장님, 좋은 오후예요"
         case 17..<22: "사장님, 좋은 저녁이에요"
@@ -186,12 +178,10 @@ struct TodayView: View {
     }
 
     private var subtitle: String {
-        let time = updatedAt.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(Locale(identifier: "ko_KR")))
-        return "11월 4일 수요일 · \(time) 기준"
+        let date = Date.now.koreanDay()
+        guard let loadedAt = loader.loadedAt else { return date }
+        let style = Date.FormatStyle(date: .omitted, time: .shortened, locale: Locale(identifier: "ko_KR"),
+                                     timeZone: Calendar.workshop.timeZone)
+        return "\(date) · \(loadedAt.formatted(style)) 기준"
     }
-}
-
-#Preview {
-    TodayView()
-        .environment(DemoStore())
 }

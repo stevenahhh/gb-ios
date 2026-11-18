@@ -24,23 +24,6 @@ extension ReplyStatus {
     }
 }
 
-extension [Metric] {
-    func withPendingInquiries(_ count: Int) -> [Metric] {
-        map { $0.label == "미답변 문의" ? Metric(value: "\(count)건", label: $0.label) : $0 }
-    }
-}
-
-extension WorkItem {
-    func withPendingInquiries(_ count: Int) -> WorkItem {
-        var item = self
-        item.lines = lines.map { $0.replacingOccurrences(of: "문의 3건", with: "문의 \(count)건") }
-        if deadline?.contains("문의 3건") == true {
-            item.deadline = count == 0 ? nil : "문의 \(count)건이 답을 기다려요"
-        }
-        return item
-    }
-}
-
 struct InquiryRow: View {
     let inquiry: Inquiry
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
