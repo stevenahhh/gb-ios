@@ -1,37 +1,39 @@
 #!/usr/bin/env bash
-# Deploys this directory to the production API server (KOSA_경진대회_09).
-# Usage: ROUNDUP_SSH_TARGET=user@223.130.130.1 Server/deploy.sh
-# Optional: ROUNDUP_SSH_KEY, default ~/.ssh/roundup_ed25519.
+# Deploys this directory to the production API server (NCP sub-account scnu).
+# Usage: Server/deploy.sh
+# Optional: ROUNDUP_SSH_TARGET, default deploy@211.233.193.216.
+# Optional: ROUNDUP_SSH_KEY, default ~/.ssh/gongbang-prod.
 set -euo pipefail
 
-target="${ROUNDUP_SSH_TARGET:?Set ROUNDUP_SSH_TARGET to user@223.130.130.1}"
-key="${ROUNDUP_SSH_KEY:-$HOME/.ssh/roundup_ed25519}"
+target="${ROUNDUP_SSH_TARGET:-deploy@211.233.193.216}"
+key="${ROUNDUP_SSH_KEY:-$HOME/.ssh/gongbang-prod}"
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 release="r$(date -u +%Y%m%d%H%M%S)"
-remote() { ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 "$target" "$@"; }
+remote() {
+  ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$target" "$@"
+}
 
-remote "sudo install -d -m 750 /opt/roundup/releases/$release"
+remote "sudo install -d -o gongbang -g gongbang -m 750 /opt/gongbang/releases/$release"
 COPYFILE_DISABLE=1 tar --no-xattrs -C "$source_dir" \
   --exclude=.venv --exclude=__pycache__ --exclude=.pytest_cache --exclude=.ruff_cache \
   --exclude='*.env' --exclude=.env.example --exclude=tests -czf - . \
-  | remote "sudo tar --warning=no-unknown-keyword -xzf - -C /opt/roundup/releases/$release"
+  | remote "sudo tar --warning=no-unknown-keyword -xzf - -C /opt/gongbang/releases/$release"
 
 remote "sudo bash -s -- $release" <<'REMOTE'
 set -euo pipefail
-root=/opt/roundup
+root=/opt/gongbang
 dir="$root/releases/$1"
 previous="$(readlink -f "$root/current")"
 unit=/etc/systemd/system/roundup-api.service
-install -m 600 "$previous/db.env" "$dir/db.env"
+chown -R gongbang:gongbang "$dir"
 install -m 644 "$unit" "$dir/previous.service"
-install -d -m 700 "$root/backups"
-cd "$dir"
-/usr/local/bin/uv sync --frozen --no-dev -q
+install -d -m 700 -o root -g root "$root/backups"
+cd /tmp
+sudo -u gongbang -H env UV_PYTHON_PREFERENCE=only-system bash -c "cd '$dir' && /usr/local/bin/uv sync --frozen --no-dev -q"
 
 run() {
-  systemd-run --quiet --wait --pipe --collect \
-    -p EnvironmentFile="$root/server.env" -p EnvironmentFile="$dir/db.env" \
-    -p WorkingDirectory="$dir" "$@"
+  systemd-run --quiet --wait --pipe --collect --uid=gongbang --gid=gongbang \
+    -p EnvironmentFile="$root/server.env" -p WorkingDirectory="$dir" "$@"
 }
 
 run "$dir/.venv/bin/python" -c '
@@ -56,10 +58,9 @@ systemctl restart roundup-api
 
 ready() {
   run "$dir/.venv/bin/python" -c '
-import os, ssl, urllib.request
-context = ssl._create_unverified_context()
-request = urllib.request.Request("https://127.0.0.1:8787/health/ready", headers={"X-Roundup-Key": os.environ["ROUNDUP_API_KEY"]})
-urllib.request.urlopen(request, context=context, timeout=5)
+import os, urllib.request
+request = urllib.request.Request("http://127.0.0.1:8000/health/ready", headers={"X-Roundup-Key": os.environ["ROUNDUP_API_KEY"]})
+urllib.request.urlopen(request, timeout=5)
 ' 2>/dev/null
 }
 

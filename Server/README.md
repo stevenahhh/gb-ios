@@ -22,18 +22,18 @@ uv run --frozen --no-dev python seed.py   # optional, explicit, safe to repeat
 uv run --frozen --no-dev uvicorn main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Production is the `KOSA_경진대회_09` server at `https://223.130.130.1:8787`. Uvicorn serves TLS
-directly with the certificate in `/opt/roundup`. The systemd unit
-[roundup-api.service](roundup-api.service) runs from `/opt/roundup/current` and reads
-`/opt/roundup/server.env` and the release `db.env`. Deploy with:
+Production is `gongbang-api-001` in the NCP `scnu` sub-account, at
+`https://211.233.193.216`. nginx terminates TLS on 443 and proxies to `127.0.0.1:8000`.
+The systemd unit [roundup-api.service](roundup-api.service) runs as `gongbang` from
+`/opt/gongbang/current` and reads `/opt/gongbang/server.env`. Deploy with:
 
 ```sh
-ROUNDUP_SSH_TARGET=user@223.130.130.1 Server/deploy.sh
+Server/deploy.sh
 ```
 
-The script uploads a new release, backs up `inquiries`, migrates, seeds missing rows,
-switches `current`, restarts the service, and restores the previous release if
-`/health/ready` fails. Interactive API docs are disabled.
+The script uses `~/.ssh/gongbang-prod`, uploads a new release, backs up `inquiries`,
+migrates, seeds missing rows, switches `current`, restarts the service, and restores the
+previous release if `/health/ready` fails. Interactive API docs are disabled.
 
 Development checks:
 

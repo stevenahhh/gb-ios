@@ -165,7 +165,7 @@ open GongbangAssistant/RoundupSecrets.plist
 
 `APIKey` 값을 서버 담당자에게 따로 받은 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다. 저장소가 공개되어 있으므로 앱 키를 커밋하거나 채팅방에 남기지 마세요.
 
-운영 서버의 8787번 포트는 NCP 접근 제어(ACG)에 등록한 곳에서만 열립니다. 앱에 "서버에 연결하지 못했어요"가 뜨면 서버 담당자에게 지금 쓰는 공인 IP를 등록해 달라고 요청합니다.
+운영 서버는 HTTPS 443번 포트로 어느 네트워크에서나 접속할 수 있습니다. 모든 요청에는 앱 키가 필요합니다.
 
 ## 시뮬레이터에서 실행하기
 
@@ -288,25 +288,25 @@ xcrun xcresulttool export attachments --path build/TestResults.xcresult --output
 
 ## 운영 서버
 
-운영 환경은 NCP `KOSA_경진대회_09` 계정의 서버 하나로 고정합니다.
+운영 환경은 NCP `scnu` 서브 계정(국립순천대학교)의 서버 하나로 고정합니다.
 
 | 항목 | 값 |
 |---|---|
-| API 주소 | `https://223.130.130.1:8787` |
-| 서버 | `roundup-api`, systemd 서비스 `roundup-api` |
-| 배포 위치 | `/opt/roundup/current` |
-| 서버 비밀값 | `/opt/roundup/server.env`, 릴리스 폴더의 `db.env` |
-| DB | Cloud DB for PostgreSQL `roundup`, VPC 내부 접속만 허용 |
+| API 주소 | `https://211.233.193.216` |
+| 서버 | `gongbang-api-001`, nginx 뒤에서 도는 systemd 서비스 `roundup-api` |
+| 배포 위치 | `/opt/gongbang/current` |
+| 서버 비밀값 | `/opt/gongbang/server.env` |
+| DB | Cloud DB for PostgreSQL `gongbang-prod-db`, 서로 다른 존의 2대 구성, VPC 내부 접속만 허용 |
 
 앱은 이 서버의 인증서 `GongbangAssistant/roundup-server.cer`만 신뢰합니다. 서버 인증서를 바꾸면 이 파일도 함께 바꿔서 앱을 다시 빌드해야 합니다.
 
-서버 코드가 앱보다 오래되면 화면에 오류가 뜹니다. 그때는 서버 SSH 키가 있는 담당자가 main을 받아 저장소 최상위 폴더에서 배포합니다.
+서버 코드를 바꿨다면 main을 받아 저장소 최상위 폴더에서 배포합니다.
 
 ```bash
-ROUNDUP_SSH_TARGET=<사용자>@223.130.130.1 Server/deploy.sh
+Server/deploy.sh
 ```
 
-SSH 키는 기본으로 `~/.ssh/roundup_ed25519`를 쓰고 `ROUNDUP_SSH_KEY`로 바꿀 수 있습니다. 스크립트는 새 릴리스를 올리고 문의 데이터를 `/opt/roundup/backups`에 저장합니다. 이어서 DB 마이그레이션과 시드를 실행하고 서비스를 재시작합니다. 시드는 없는 행만 넣으므로 기존 데이터를 덮어쓰지 않습니다. 상태 확인에 실패하면 이전 릴리스로 되돌립니다.
+배포에는 SSH 키 `~/.ssh/gongbang-prod`가 필요합니다. 서버의 22번 포트는 NCP 접근 제어(ACG)에 등록한 IP에서만 열립니다. 스크립트는 새 릴리스를 올리고 문의 데이터를 `/opt/gongbang/backups`에 저장합니다. 이어서 DB 마이그레이션과 시드를 실행하고 서비스를 재시작합니다. 시드는 없는 행만 넣으므로 기존 데이터를 덮어쓰지 않습니다. 상태 확인에 실패하면 이전 릴리스로 되돌립니다.
 
 ## 문제 해결
 
