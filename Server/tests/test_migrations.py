@@ -78,12 +78,27 @@ async def test_upgrade_adopts_inquiries_only_schema_without_losing_owner_work(
         ).one()
     assert row == (
         "이도윤",
-        ["예약 안내 · 문의 답변을 승인해도 예약은 자동으로 만들어지지 않습니다.", "수업 정원 · 최대 6명"],
+        ["예약 안내 · 문의 답변을 완료해도 예약은 자동으로 만들어지지 않습니다.", "수업 정원 · 최대 6명"],
         EDITED,
         "approved",
         4,
         True,
     )
+
+
+async def test_upgrade_reopens_rejected_inquiries_and_retires_the_status(
+    empty_database: AsyncEngine,
+) -> None:
+    await create_legacy_table(empty_database)
+    async with empty_database.begin() as connection:
+        _ = await connection.execute(text("UPDATE inquiries SET status = 'rejected'"))
+    await upgrade(empty_database)
+    async with empty_database.connect() as connection:
+        row = (await connection.execute(text("SELECT status, draft, revision FROM inquiries"))).one()
+    assert row == ("pending", EDITED, 5)
+    with pytest.raises(SQLAlchemyError):
+        async with empty_database.begin() as connection:
+            _ = await connection.execute(text("UPDATE inquiries SET status = 'rejected'"))
 
 
 async def test_incompatible_existing_table_stops_the_migration(empty_database: AsyncEngine) -> None:

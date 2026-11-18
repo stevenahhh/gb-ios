@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from datetime import date, datetime
-from typing import Annotated, Final
+from typing import Annotated, Final, Literal, assert_never
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
@@ -10,27 +10,35 @@ from pydantic import AwareDatetime, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bookings import seats_taken
-from common import LongText, Now, Session, ShortText, required_text
-from contracts import ApiModel, ApiRequest, EventKind
-from display import clock, count, day_start, local, masked, next_day_start, people, won
+from bookings import SessionCompletion, booking_card, booking_records, seats_taken
+from common import LongText, Now, Session, ShortText, invalid_transition, locked, required_text
+from contracts import ApiModel, ApiRequest, Card, EventKind, Status
+from display import clock, count, day_start, local, masked, month_day_weekday, next_day_start, people, won
 from metrics import UNSHIPPED
-from models import CalendarEventRow, ClassSessionRow, CustomerRow, OrderRow, ShipmentRow, TaskRow
+from models import BookingRow, CalendarEventRow, ClassSessionRow, OrderRow, ShipmentRow, TaskRow
+from orders import OrderRecord, order_card, order_records
+from shipments import ShipmentRecord, shipment_card, shipment_records
 
 router = APIRouter()
 MAX_RANGE_DAYS: Final = 62
 KIND_ORDER: Final[tuple[EventKind, ...]] = ("booking", "order", "delivery", "todo")
 type Dated = tuple[date, "AgendaItem"]
+type AgendaTarget = Literal["session", "order", "shipment", "task", "event"]
 
 
 class AgendaItem(ApiModel):
-    """One calendar row."""
+    """One calendar row; `is_done` is set only for rows the owner can check off."""
 
     id: str
+    target: AgendaTarget
+    target_id: str
     time: str
     title: str
     kind: EventKind
     detail: str
+    status: Status | None = None
+    is_done: bool | None = None
+    revision: int
 
 
 class DayEvent(ApiModel):
@@ -58,6 +66,15 @@ class CalendarRange(ApiModel):
     days: list[CalendarDay]
 
 
+class AgendaDetail(ApiModel):
+    """One calendar row with the work cards linked to it."""
+
+    date: date
+    date_label: str
+    item: AgendaItem
+    cards: list[Card]
+
+
 class EventCreate(ApiRequest):
     """A schedule entry added by the owner."""
 
@@ -65,6 +82,103 @@ class EventCreate(ApiRequest):
     kind: EventKind = "todo"
     detail: LongText = ""
     starts_at: Annotated[AwareDatetime, Field(strict=False)]
+
+
+def session_item(session: ClassSessionRow, seats: int) -> Dated:
+    """Present a class with its completion state."""
+    return (
+        local(session.starts_at).date(),
+        AgendaItem(
+            id=f"session:{session.id}",
+            target="session",
+            target_id=session.id,
+            time=clock(session.starts_at),
+            title=session.title,
+            kind="booking",
+            detail=f"예약 {people(seats)} · {session.duration_minutes}분",
+            is_done=session.status == "completed",
+            revision=session.revision,
+        ),
+    )
+
+
+def order_item(record: OrderRecord) -> Dated:
+    """Present an order with the status its card shows."""
+    order, customer, _ = record
+    return (
+        local(order.ordered_at).date(),
+        AgendaItem(
+            id=f"order:{order.id}",
+            target="order",
+            target_id=order.id,
+            time=clock(order.ordered_at),
+            title=order.product_name,
+            kind="order",
+            detail=f"#{order.order_number} · {masked(customer.name)} · {won(order.amount_won)}",
+            status=order_card(record).status,
+            revision=order.revision,
+        ),
+    )
+
+
+def shipment_item(record: ShipmentRecord, today: date) -> Dated:
+    """Place a parcel on its next meaningful date."""
+    shipment, order, _ = record
+    if shipment.delivered_at is not None:
+        day, time, detail = local(shipment.delivered_at).date(), clock(shipment.delivered_at), "배송 완료"
+    elif shipment.expected_arrival_on is not None:
+        day, time, detail = shipment.expected_arrival_on, "종일", "도착 예정"
+    else:
+        day, time, detail = local(shipment.ship_by_at).date(), clock(shipment.ship_by_at), "택배 수거"
+    return (
+        day,
+        AgendaItem(
+            id=f"shipment:{shipment.id}",
+            target="shipment",
+            target_id=shipment.id,
+            time=time,
+            title=order.product_name,
+            kind="delivery",
+            detail=f"#{order.order_number} · {detail}",
+            status=shipment_card(record, today).status,
+            revision=shipment.revision,
+        ),
+    )
+
+
+def task_item(task: TaskRow) -> Dated:
+    """Present a task with its completion state."""
+    return (
+        local(task.due_at).date(),
+        AgendaItem(
+            id=f"task:{task.id}",
+            target="task",
+            target_id=task.id,
+            time=clock(task.due_at),
+            title=task.title,
+            kind="order" if task.kind == "material" else "todo",
+            detail=" · ".join(part for part in (task.vendor, task.detail) if part),
+            is_done=task.status == "done",
+            revision=task.revision,
+        ),
+    )
+
+
+def event_item(event: CalendarEventRow) -> AgendaItem:
+    """Present an owner-created event."""
+    return AgendaItem.model_validate(
+        {
+            "id": f"event:{event.id}",
+            "target": "event",
+            "target_id": event.id,
+            "time": clock(event.starts_at),
+            "title": event.title,
+            "kind": event.kind,
+            "detail": event.detail,
+            "is_done": event.completed_at is not None,
+            "revision": event.revision,
+        },
+    )
 
 
 async def session_items(db: AsyncSession, begin: datetime, end: datetime) -> list[Dated]:
@@ -76,53 +190,25 @@ async def session_items(db: AsyncSession, begin: datetime, end: datetime) -> lis
             ClassSessionRow.starts_at < end,
         ),
     )
-    return [
-        (
-            local(row.starts_at).date(),
-            AgendaItem(
-                id=f"session:{row.id}",
-                time=clock(row.starts_at),
-                title=row.title,
-                kind="booking",
-                detail=f"예약 {people(seats)} · {row.duration_minutes}분",
-            ),
-        )
-        for row, seats in rows.tuples()
-    ]
+    return [session_item(row, seats) for row, seats in rows.tuples()]
 
 
 async def order_items(db: AsyncSession, begin: datetime, end: datetime) -> list[Dated]:
     """Add customer orders placed in the range."""
-    orders = await db.execute(
-        select(OrderRow, CustomerRow)
-        .join(CustomerRow, CustomerRow.id == OrderRow.customer_id)
-        .where(
+    records = await db.execute(
+        order_records().where(
             OrderRow.status != "cancelled",
             OrderRow.ordered_at >= begin,
             OrderRow.ordered_at < end,
         ),
     )
-    return [
-        (
-            local(order.ordered_at).date(),
-            AgendaItem(
-                id=f"order:{order.id}",
-                time=clock(order.ordered_at),
-                title=order.product_name,
-                kind="order",
-                detail=f"#{order.order_number} · {masked(customer.name)} · {won(order.amount_won)}",
-            ),
-        )
-        for order, customer in orders.tuples()
-    ]
+    return [order_item(record) for record in records.tuples()]
 
 
 async def shipment_items(db: AsyncSession, begin: datetime, end: datetime) -> list[Dated]:
-    """Place parcels on their next meaningful date."""
-    rows = await db.execute(
-        select(ShipmentRow, OrderRow)
-        .join(OrderRow, OrderRow.id == ShipmentRow.order_id)
-        .where(
+    """Add parcels whose next meaningful date falls in the range."""
+    records = await db.execute(
+        shipment_records().where(
             or_(
                 and_(
                     ShipmentRow.status.in_(UNSHIPPED),
@@ -138,27 +224,7 @@ async def shipment_items(db: AsyncSession, begin: datetime, end: datetime) -> li
             ),
         ),
     )
-    items: list[Dated] = []
-    for shipment, order in rows.tuples():
-        if shipment.delivered_at is not None:
-            day, time, detail = local(shipment.delivered_at).date(), clock(shipment.delivered_at), "배송 완료"
-        elif shipment.expected_arrival_on is not None:
-            day, time, detail = shipment.expected_arrival_on, "종일", "도착 예정"
-        else:
-            day, time, detail = local(shipment.ship_by_at).date(), clock(shipment.ship_by_at), "택배 수거"
-        items.append(
-            (
-                day,
-                AgendaItem(
-                    id=f"shipment:{shipment.id}",
-                    time=time,
-                    title=order.product_name,
-                    kind="delivery",
-                    detail=f"#{order.order_number} · {detail}",
-                ),
-            ),
-        )
-    return items
+    return [shipment_item(record, local(begin).date()) for record in records.tuples()]
 
 
 async def owner_items(db: AsyncSession, begin: datetime, end: datetime) -> list[Dated]:
@@ -167,34 +233,48 @@ async def owner_items(db: AsyncSession, begin: datetime, end: datetime) -> list[
     events = await db.scalars(
         select(CalendarEventRow).where(CalendarEventRow.starts_at >= begin, CalendarEventRow.starts_at < end),
     )
-    items: list[Dated] = [
-        (
-            local(task.due_at).date(),
-            AgendaItem(
-                id=f"task:{task.id}",
-                time=clock(task.due_at),
-                title=task.title,
-                kind="order" if task.kind == "material" else "todo",
-                detail=" · ".join(part for part in (task.vendor, task.detail) if part),
-            ),
-        )
-        for task in tasks
-    ]
+    items = [task_item(task) for task in tasks]
     items += [(local(event.starts_at).date(), event_item(event)) for event in events]
     return items
 
 
-def event_item(event: CalendarEventRow) -> AgendaItem:
-    """Present an owner-created event."""
-    return AgendaItem.model_validate(
-        {
-            "id": f"event:{event.id}",
-            "time": clock(event.starts_at),
-            "title": event.title,
-            "kind": event.kind,
-            "detail": event.detail,
-        },
+def required[T](row: T | None) -> T:
+    """Answer 404 when a linked calendar row no longer exists."""
+    if row is None:
+        raise HTTPException(404, "calendar item not found")
+    return row
+
+
+async def order_cards(db: AsyncSession, order_id: str, now: datetime) -> list[Card]:
+    """Load an order card followed by the cards of its parcels."""
+    order = required((await db.execute(order_records().where(OrderRow.id == order_id))).tuples().first())
+    shipments = await db.execute(shipment_records().where(ShipmentRow.order_id == order_id))
+    return [order_card(order), *(shipment_card(record, now.date()) for record in shipments.tuples())]
+
+
+async def session_detail(db: AsyncSession, session_id: str, now: datetime) -> tuple[Dated, list[Card]]:
+    """Load a class with its active bookings."""
+    statement = select(ClassSessionRow, seats_taken()).where(ClassSessionRow.id == session_id)
+    session, seats = required((await db.execute(statement)).tuples().first())
+    bookings = await db.execute(
+        booking_records()
+        .where(BookingRow.session_id == session_id, BookingRow.status != "cancelled")
+        .order_by(BookingRow.created_at, BookingRow.id),
     )
+    return session_item(session, seats), [booking_card(record, now) for record in bookings.tuples()]
+
+
+async def order_detail(db: AsyncSession, order_id: str, now: datetime) -> tuple[Dated, list[Card]]:
+    """Load an order with its work cards."""
+    record = required((await db.execute(order_records().where(OrderRow.id == order_id))).tuples().first())
+    return order_item(record), await order_cards(db, order_id, now)
+
+
+async def shipment_detail(db: AsyncSession, shipment_id: str, now: datetime) -> tuple[Dated, list[Card]]:
+    """Load a parcel with the work cards of its order."""
+    statement = shipment_records().where(ShipmentRow.id == shipment_id)
+    record = required((await db.execute(statement)).tuples().first())
+    return shipment_item(record, now.date()), await order_cards(db, record[1].id, now)
 
 
 @router.get("/calendar")
@@ -231,6 +311,28 @@ async def calendar_range(
     return CalendarRange(today=now.date(), start=start, end=end, days=days)
 
 
+@router.get("/calendar/items/{target}/{target_id}")
+async def agenda_detail(target: AgendaTarget, target_id: str, db: Session, now: Now) -> AgendaDetail:
+    """Return one calendar row with the cards that act on the same database rows."""
+    cards: list[Card] = []
+    match target:
+        case "session":
+            dated, cards = await session_detail(db, target_id, now)
+        case "order":
+            dated, cards = await order_detail(db, target_id, now)
+        case "shipment":
+            dated, cards = await shipment_detail(db, target_id, now)
+        case "task":
+            dated = task_item(required(await db.get(TaskRow, target_id)))
+        case "event":
+            event = required(await db.get(CalendarEventRow, target_id))
+            dated = (local(event.starts_at).date(), event_item(event))
+        case _:
+            assert_never(target)
+    day, item = dated
+    return AgendaDetail(date=day, date_label=month_day_weekday(day), item=item, cards=cards)
+
+
 @router.post("/calendar/events", status_code=201)
 async def create_event(body: EventCreate, db: Session) -> AgendaItem:
     """Persist an owner-added schedule entry."""
@@ -242,5 +344,17 @@ async def create_event(body: EventCreate, db: Session) -> AgendaItem:
         starts_at=body.starts_at,
     )
     db.add(event)
+    await db.flush()
+    return event_item(event)
+
+
+@router.post("/calendar/events/{event_id}/completion")
+async def set_event_completion(event_id: str, body: SessionCompletion, db: Session, now: Now) -> AgendaItem:
+    """Check off an owner-added event, or undo that mark."""
+    event = await locked(db, CalendarEventRow, event_id, body.expected_revision)
+    if (event.completed_at is not None) == body.done:
+        raise invalid_transition()
+    event.completed_at = now if body.done else None
+    event.revision += 1
     await db.flush()
     return event_item(event)
