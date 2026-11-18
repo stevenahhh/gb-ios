@@ -2,6 +2,8 @@
 
 공방 AI 비서 사장님용 대시보드를 SwiftUI로 옮긴 화면 골격입니다. 탭 바와 내비게이션 바, 화면 배치를 [Figma 파일](https://www.figma.com/design/nUn7ayeiKAVljMiPvwQQV3/Untitled)대로 짰습니다. 데이터는 Figma 프레임에서 옮긴 고정 샘플이고 업무 로직, 서버, AI는 아직 붙이지 않았습니다. iOS 앱은 Swift Package나 CocoaPods 같은 외부 의존성을 하나도 쓰지 않습니다.
 
+문의 답변은 NCP의 FastAPI·PostgreSQL과 연결되어 있습니다. 초안을 저장하거나 승인·반려하면 서버에 기록되고 앱 재실행 후에도 유지됩니다. 오늘, 운영, SNS·스토어 관리의 대기 건수가 함께 바뀝니다. AI 초안은 HyperCLOVA X에 연결되어 있으며 승인해도 손님께 발송되지는 않습니다. 웹 버전에는 이 흐름이 없습니다. 배포와 검증 범위는 [DB 연동 기록](docs/2026-11-18-db-integration.md)을 참고하세요.
+
 Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보기)로 바로 넘어가면 됩니다. 같은 화면을 브라우저에서 띄웁니다.
 
 ## 스크린샷
@@ -64,13 +66,17 @@ Xcode 없이 화면만 보려면 [웹 버전으로 보기](#웹-버전으로-보
 
 ### 운영
 
-운영 탭 아이콘에는 배지 7이 붙습니다. 맨 위 "먼저 확인해주세요"에는 누를 수 있는 행이 셋 있습니다. 예약금 미확인 2건, 미답변 문의 3건, 발송 마감 2건입니다. 행을 누르면 맞는 관리 화면이 필터를 미리 건 채로 열립니다.
+운영 탭 아이콘에는 배지 7이 붙습니다. 맨 위 "먼저 확인해주세요"에는 누를 수 있는 행이 셋 있습니다. 예약금 미확인 2건, 미답변 문의 3건, 발송 마감 2건입니다. 행을 누르면 맞는 관리 화면이 필터를 미리 건 채로 열립니다. 미답변 문의 건수와 배지 숫자는 문의 답변을 승인하거나 반려할 때마다 줄어듭니다.
 
 그 아래 11월 운영 현황에는 처리율이라고 적힌 75% 링과 숫자 4개, 전월 대비 수치 한 쌍이 있습니다. 기간 메뉴에서 11월이나 10월을 고르면 고른 쪽에 체크 표시가 붙습니다. 이어서 행 네 개로 된 전체 업무 관리, 기회와 리포트를 담은 공방 성장 순으로 나옵니다.
 
 전체 업무 관리에서는 예약 관리, 주문 관리, 배송 관리, SNS·스토어 관리 화면으로 넘어갑니다. 상태 필터와 검색창은 이제 목록을 실제로 걸러 냅니다. SNS·스토어 관리의 필터는 전체, 채널, 문의, 콘텐츠 네 가지입니다. 맞는 항목이 없을 때는 빈 상태 안내를 띄웁니다. 주문 관리와 배송 관리에는 순서 두 가지를 고르는 정렬 메뉴도 있습니다.
 
 상태 배지는 기호와 글자를 함께 보여 줍니다. 주황은 처리가 필요한 일, 초록은 끝난 일, 회색은 진행 중인 일입니다.
+
+### 문의 답변
+
+오늘 탭의 할 일 맨 위 "답변 대기 문의"와 SNS·스토어 관리의 문의 목록에서 문의를 누르면 문의 답변 화면이 열립니다. 손님 문의, 답변 근거, 답변 초안 순으로 보여 줍니다. 초안 저장 버튼으로 저장하거나, 현재 편집 내용을 포함해 승인·반려할 수 있습니다. 처리한 문의는 다시 고칠 수 없습니다. 빈 초안은 승인할 수 없고 반려만 됩니다. 승인해도 손님께 발송되지는 않습니다. 앱을 다시 켜도 서버에 저장한 상태가 유지됩니다. 테스트·미리보기용 샘플 모드는 `-sampleInquiries`로 명시하며 서버 실패 시 샘플로 전환하지 않습니다.
 
 ### 설정
 
@@ -226,6 +232,8 @@ Xcode에서 **Product > Test**(⌘U)를 누르면 GongbangAssistantUITests가 �
 | ScreenshotTourUITests | testCaptureEveryScreen | 모든 화면과 스크롤 끝, 완료 필터 화면, 검색 결과가 없는 화면을 찍어 테스트 첨부물로 저장 |
 | ScreenshotTourUITests | testCaptureScreenStates | 오늘, 캘린더, 예약 관리의 로딩·빈 화면·오류 화면을 찍어 저장 |
 
+문의 답변 규칙은 UI 테스트가 아니라 패키지 테스트로 확인합니다. 터미널에서 `swift test --package-path Packages/RoundupCore`를 실행하면 9개가 돕니다. 문의 답변 화면을 누르는 UI 테스트는 아직 없습니다.
+
 결과는 Test navigator(⌘6)에 뜹니다. 스크린샷은 Report navigator(⌘9)에서 해당 실행 아래에 있습니다.
 
 ## 명령줄로 빌드·테스트하기
@@ -311,11 +319,15 @@ GongbangAssistant/
 │   ├── OperationsView.swift
 │   └── OperationAreaView.swift
 ├── Settings/SettingsView.swift
+├── Inquiries/InquiryViews.swift   문의 행, 문의 답변 화면
 ├── Assistant/AssistantViews.swift AI 막대와 비서 시트
 ├── Shared/
 │   ├── Components.swift           숫자 줄, 행, 카드, 배지
 │   └── SampleData.swift           샘플 데이터
 └── Assets.xcassets                AccentColor, AppIcon (라이트, 다크, 틴트)
+Packages/RoundupCore/              문의·승인 규칙 (로컬 Swift 패키지)
+├── Sources/RoundupCore/           DemoStore, 모델, 샘플 문의
+└── Tests/RoundupCoreTests/        규칙 테스트 9개
 GongbangAssistantUITests/
 ├── TabNavigationUITests.swift
 └── ScreenshotTourUITests.swift
@@ -362,7 +374,7 @@ AccentColor는 라이트 모드에서 #18181B, 다크 모드에서 #FAFAFA입니
 
 ## 아직 넣지 않은 것
 
-- 업무 로직
+- 문의 답변을 뺀 나머지 업무 로직. 승인한 답변을 보내거나 예약으로 잇는 일도 아직 없습니다
 - 데이터 저장
 - 서버 호출과 AI 호출
 - 설정의 상세 화면
