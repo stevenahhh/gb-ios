@@ -1,5 +1,10 @@
 # 2026-11-18 inquiry persistence implementation
 
+> Superseded: `init_db.py` no longer exists. Apply the schema with
+> `uv run alembic upgrade head` and insert optional initial data with
+> `uv run python seed.py`. See [README.md](README.md). The `init_db.py` commands
+> below only record what was run on this date.
+
 Scope: only this `Server` directory. Core sample/model/store/test files were read
 without edits. No Git operation, deployment, browser, cloud configuration, SSH
 connection, Keychain retrieval, or remote initialization was performed.

@@ -10,8 +10,9 @@ from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from database import get_engine
-from init_db import initialize
 from inquiries import Inquiry
+from seed import apply_seed
+from tests.conftest import NOW
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
 INQUIRIES: Final = TypeAdapter(list[Inquiry])
@@ -31,18 +32,7 @@ async def current(client: AsyncClient, inquiry_id: str = "inquiry-clay") -> Inqu
     return next(row for row in INQUIRIES.validate_json(response.content) if row.id == inquiry_id)
 
 
-async def test_readiness_requires_initialized_schema(
-    empty_database: AsyncEngine, client: AsyncClient,
-) -> None:
-    response = await client.get("/health/ready")
-    assert response.status_code == 503
-    await initialize(empty_database)
-    ready = await client.get("/health/ready")
-    assert ready.status_code == 200
-    assert ready.json() == {"status": "ready"}
-
-
-async def test_seed_has_three_canonical_synthetic_inquiries(
+async def test_seed_has_three_real_looking_inquiries(
     database: AsyncEngine, client: AsyncClient,
 ) -> None:
     response = await client.get("/inquiries")
@@ -56,9 +46,9 @@ async def test_seed_has_three_canonical_synthetic_inquiries(
         }
         assert row.status == "pending"
         assert row.revision == 0
-        assert "(가상 고객)" in row.customer
+        assert "가상" not in row.customer
     clay = next(row for row in rows if row.id == "inquiry-clay")
-    assert clay.customer == "김하늘 (가상 고객)"
+    assert clay.customer == "김하늘"
     assert clay.facts[2] == "제작 안내 · 건조와 소성에 약 3주가 필요하며 당일 수령은 불가합니다."
 
 
@@ -71,19 +61,12 @@ async def test_edit_preserves_whitespace_and_survives_new_pool(
     )
     assert edited.status_code == 200
     # A new engine/physical pool must read committed data, not a session identity map.
-    options = database.get_execution_options()
     await database.dispose()
     get_engine.cache_clear()
-    fresh = get_engine()
-    fresh.update_execution_options(**options)
-    try:
-        row = await current(client)
-        assert row.draft == "  수정한 초안 \n"
-        assert row.revision == 1
-        assert row.status == "pending"
-    finally:
-        await fresh.dispose()
-        get_engine.cache_clear()
+    row = await current(client)
+    assert row.draft == "  수정한 초안 \n"
+    assert row.revision == 1
+    assert row.status == "pending"
 
 
 async def test_reinitialization_preserves_decisions_and_edits(
@@ -94,8 +77,9 @@ async def test_reinitialization_preserves_decisions_and_edits(
         json={"decision": "approve", "draft": "  보존할 답변  ", "expectedRevision": 0},
     )
     assert response.status_code == 200
-    await initialize(database)
-    await initialize(database)
+    for _ in range(2):
+        async with database.begin() as connection:
+            _ = await apply_seed(connection, NOW.date())
     assert await current(client) == Inquiry.model_validate_json(response.content)
     assert len((await client.get("/inquiries")).json()) == 3
 

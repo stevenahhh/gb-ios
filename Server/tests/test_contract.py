@@ -1,12 +1,19 @@
 """Executable auth/config/input contracts that do not need a database."""
 
+import json
+import logging
 from collections.abc import Iterator
+from datetime import datetime
+from typing import Final
 
 import pytest
 from fastapi.testclient import TestClient
 
 from database import DatabaseConfigurationError, get_engine
 from main import app
+from observability import MAX_JSON_BYTES, JsonFormatter
+
+LEAK: Final = "postgresql://secret-value"
 
 
 @pytest.fixture
@@ -26,6 +33,19 @@ def http(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         ("PATCH", "/inquiries/inquiry-clay/draft"),
         ("POST", "/inquiries/inquiry-clay/decision"),
         ("GET", "/health/ready"),
+        ("GET", "/today"),
+        ("GET", "/bookings"),
+        ("POST", "/bookings"),
+        ("GET", "/orders"),
+        ("GET", "/shipments"),
+        ("GET", "/channels"),
+        ("GET", "/calendar"),
+        ("POST", "/calendar/events"),
+        ("GET", "/operations"),
+        ("GET", "/settings"),
+        ("PUT", "/workshop"),
+        ("POST", "/tasks/x/completion"),
+        ("POST", "/ask"),
     ],
 )
 @pytest.mark.parametrize("api_key", ["", "wrong"])
@@ -84,8 +104,51 @@ def test_invalid_database_configuration_is_redacted(
     assert url not in str(failure.value)
 
 
+def test_oversized_json_body_is_rejected_before_parsing(http: TestClient) -> None:
+    response = http.post(
+        "/ask", headers={"X-Roundup-Key": "synthetic-test-key"}, content=b"x" * (MAX_JSON_BYTES + 1),
+    )
+    assert response.status_code == 413
+    assert response.json() == {"detail": "request body too large"}
+
+
+def test_unexpected_failure_returns_generic_body_and_logs_no_detail(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def explode(_now: datetime) -> list[str]:
+        raise RuntimeError(LEAK)
+
+    monkeypatch.setattr("main.build_context", explode)
+    logging.getLogger("roundup").propagate = True
+    with caplog.at_level(logging.INFO, logger="roundup"):
+        response = http.post("/ask", headers={"X-Roundup-Key": "synthetic-test-key"}, json={"question": "?"})
+    logging.getLogger("roundup").propagate = False
+    assert response.status_code == 500
+    assert response.json() == {"detail": "internal server error"}
+    record = next(item for item in caplog.records if item.getMessage() == "http_request")
+    formatted = JsonFormatter().format(record)
+    assert json.loads(formatted)["route"] == "/ask"
+    assert json.loads(formatted)["error_type"] == "RuntimeError"
+    assert LEAK not in formatted
+
+
+def test_non_ascii_api_key_is_rejected_not_crashed(http: TestClient) -> None:
+    response = http.get("/health", headers={"X-Roundup-Key": "키".encode()})
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("schema", ["Bad-Name", "x; DROP SCHEMA public", "1digit"])
+def test_invalid_schema_name_is_rejected(monkeypatch: pytest.MonkeyPatch, schema: str) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://synthetic@127.0.0.1/unused")
+    monkeypatch.setenv("DATABASE_SSLMODE", "disable")
+    monkeypatch.setenv("DATABASE_SCHEMA", schema)
+    get_engine.cache_clear()
+    with pytest.raises(DatabaseConfigurationError):
+        get_engine()
+
+
 def test_existing_liveness_and_service_routes_remain_registered(http: TestClient) -> None:
     response = http.get("/health", headers={"X-Roundup-Key": "synthetic-test-key"})
     assert response.json() == {"status": "ok"}
-    paths = http.get("/openapi.json").json()["paths"]
+    paths = app.openapi()["paths"]
     assert {"/draft", "/ask", "/stt", "/geocode", "/staticmap"} <= paths.keys()

@@ -1,23 +1,30 @@
-"""PostgreSQL schema and process-owned async connection pool."""
+"""PostgreSQL engine, request transactions, and migrated-schema readiness."""
 
+import logging
+import re
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from os import environ
-from typing import override
+from pathlib import Path
+from typing import Final, override
 
+from alembic.script import ScriptDirectory
 from fastapi import FastAPI, HTTPException
-from sqlalchemy import CheckConstraint, Integer, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Text, column, select, table
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import ArgumentError, SQLAlchemyError
+from sqlalchemy.exc import ArgumentError, IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase
+
+LOGGER: Final = logging.getLogger("roundup.database")
+MIGRATIONS: Final = Path(__file__).resolve().parent / "migrations"
+SCHEMA_NAME: Final = re.compile(r"[a-z_][a-z0-9_]{0,62}")
 
 
 class DatabaseConfigurationError(Exception):
@@ -26,32 +33,23 @@ class DatabaseConfigurationError(Exception):
     @override
     def __str__(self) -> str:
         return (
-            "Configure DATABASE_URL for PostgreSQL and DATABASE_SSLMODE "
-            "as disable, require, or verify-full"
+            "Configure DATABASE_URL for PostgreSQL, DATABASE_SSLMODE as disable, "
+            "require, or verify-full, and DATABASE_SCHEMA as a lowercase identifier"
         )
 
 
 class Base(DeclarativeBase):
-    """Metadata for the initial inquiry schema."""
+    """Metadata shared by every table and by Alembic."""
 
 
-class InquiryRow(Base):
-    """Mutable ORM row; all application writes hold its transaction row lock."""
-
-    __tablename__: str = "inquiries"
-    __table_args__: tuple[CheckConstraint, ...] = (
-        CheckConstraint("status IN ('pending', 'approved', 'rejected')"),
-        CheckConstraint("revision >= 0"),
-    )
-
-    id: Mapped[str] = mapped_column(Text, primary_key=True)
-    customer: Mapped[str] = mapped_column(Text)
-    subject: Mapped[str] = mapped_column(Text)
-    question: Mapped[str] = mapped_column(Text)
-    facts: Mapped[list[str]] = mapped_column(ARRAY(Text))
-    draft: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(Text)
-    revision: Mapped[int] = mapped_column(Integer)
+def server_settings() -> dict[str, str]:
+    """Select the optional dedicated schema through the connection search path."""
+    schema = environ.get("DATABASE_SCHEMA", "")
+    if not schema:
+        return {}
+    if SCHEMA_NAME.fullmatch(schema) is None:
+        raise DatabaseConfigurationError
+    return {"search_path": schema}
 
 
 @lru_cache(maxsize=1)
@@ -82,7 +80,12 @@ def get_engine() -> AsyncEngine:
         pool_size=5,
         max_overflow=5,
         pool_timeout=10,
-        connect_args={"timeout": 10, "command_timeout": 15, "ssl": ssl_options[ssl_mode]},
+        connect_args={
+            "timeout": 10,
+            "command_timeout": 15,
+            "ssl": ssl_options[ssl_mode],
+            "server_settings": server_settings(),
+        },
     )
 
 
@@ -97,11 +100,35 @@ async def database_lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         get_engine.cache_clear()
 
 
-async def session() -> AsyncIterator[AsyncSession]:
-    """Give each HTTP request a transaction and redact infrastructure errors."""
+@asynccontextmanager
+async def transaction() -> AsyncGenerator[AsyncSession]:
+    """Run one transaction and redact infrastructure errors at the boundary."""
     factory = async_sessionmaker(get_engine(), expire_on_commit=False)
     try:
         async with factory.begin() as db:
             yield db
-    except (SQLAlchemyError, OSError, TimeoutError):
-        raise HTTPException(503, "inquiry database unavailable") from None
+    except IntegrityError as error:
+        LOGGER.warning("database_constraint_rejected", extra={"error_type": type(error).__name__})
+        raise HTTPException(409, "request conflicts with current data") from None
+    except (SQLAlchemyError, OSError, TimeoutError) as error:
+        LOGGER.error("database_unavailable", extra={"error_type": type(error).__name__})  # noqa: TRY400
+        raise HTTPException(503, "service unavailable") from None
+
+
+async def session() -> AsyncIterator[AsyncSession]:
+    """Give each HTTP request one transaction that commits before the response."""
+    async with transaction() as db:
+        yield db
+
+
+@lru_cache(maxsize=1)
+def expected_schema_revision() -> str | None:
+    """Read the newest migration shipped with this release."""
+    return ScriptDirectory(str(MIGRATIONS)).get_current_head()
+
+
+async def schema_is_current(db: AsyncSession) -> bool:
+    """Compare the database migration version with this release."""
+    version = column("version_num", Text)
+    applied = await db.scalar(select(version).select_from(table("alembic_version")))
+    return applied == expected_schema_revision()

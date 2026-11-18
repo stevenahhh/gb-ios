@@ -2,16 +2,15 @@
 
 from typing import Annotated, ClassVar, Literal, NewType, assert_never
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import InquiryRow, session
+from common import Offset, Revision, Session
+from models import InquiryRow
 
 InquiryId = NewType("InquiryId", str)
-Revision = Annotated[int, Field(strict=True, ge=0)]
-Session = Annotated[AsyncSession, Depends(session, scope="function")]
 router = APIRouter()
 
 
@@ -33,7 +32,7 @@ class DraftEdit(BaseModel):
     """A pending draft edit requires the revision the client observed."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid", strict=True)
-    draft: str
+    draft: str = Field(max_length=4000)
     expected_revision: Revision = Field(alias="expectedRevision")
 
 
@@ -41,13 +40,6 @@ class Decision(DraftEdit):
     """A decision carries the final draft and uses the same revision contract."""
 
     decision: Literal["approve", "reject"]
-
-
-class Ready(BaseModel):
-    """A successful database/schema readiness response."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-    status: Literal["ready"] = "ready"
 
 
 async def locked_inquiry(
@@ -64,17 +56,12 @@ async def locked_inquiry(
     return row
 
 
-@router.get("/health/ready")
-async def ready(db: Session) -> Ready:
-    """Check connectivity and the initialized schema, even when it is empty."""
-    _ = await db.execute(select(InquiryRow).limit(1))
-    return Ready()
-
-
 @router.get("/inquiries")
-async def list_inquiries(db: Session) -> list[Inquiry]:
-    """Return all durable inquiries, including already decided ones."""
-    rows = await db.scalars(select(InquiryRow).order_by(InquiryRow.id))
+async def list_inquiries(
+    db: Session, limit: Annotated[int, Query(ge=1, le=500)] = 200, offset: Offset = 0,
+) -> list[Inquiry]:
+    """Return durable inquiries by ID, including already decided ones."""
+    rows = await db.scalars(select(InquiryRow).order_by(InquiryRow.id).limit(limit).offset(offset))
     return [Inquiry.model_validate(row) for row in rows]
 
 
