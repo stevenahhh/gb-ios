@@ -456,6 +456,7 @@ struct KindTag: View {
 struct SectionHeader: View {
     let title: String
     var area: OperationArea?
+    var filter: String?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -469,7 +470,7 @@ struct SectionHeader: View {
                 Spacer()
             }
             if let area {
-                NavigationLink("전체 보기", value: AreaRoute(area: area))
+                NavigationLink("전체 보기", value: AreaRoute(area: area, filter: filter))
                     .font(.subheadline)
                     .textCase(nil)
                     .frame(minHeight: 44)

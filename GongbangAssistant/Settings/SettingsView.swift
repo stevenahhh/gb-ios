@@ -67,7 +67,11 @@ struct SettingsView: View {
     private func rows(_ rows: [Row]) -> some View {
         ForEach(rows) { row in
             NavigationLink {
-                PlaceholderScreen(title: row.title, systemImage: row.systemImage)
+                if row.title == "공방 정보" {
+                    WorkshopInfoView()
+                } else {
+                    PlaceholderScreen(title: row.title, systemImage: row.systemImage)
+                }
             } label: {
                 Label(row.title, systemImage: row.systemImage)
             }

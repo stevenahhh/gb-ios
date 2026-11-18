@@ -1,4 +1,5 @@
 import SwiftUI
+import RoundupCore
 
 struct AreaRoute: Hashable {
     let area: OperationArea
@@ -21,18 +22,23 @@ struct OperationsView: View {
     }
 
     @State private var period = Period.november
+    @Environment(DemoStore.self) private var store
+
+    private var attentionCount: Int {
+        SampleData.attentionCount(pendingInquiries: store.pendingCount)
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     attentionRow("예약금 미확인", count: 2, systemImage: "wonsign.circle", route: AreaRoute(area: .bookings, filter: "예약금 대기"))
-                    attentionRow("미답변 문의", count: 3, systemImage: "bubble.left", route: AreaRoute(area: .channels, filter: "문의"))
+                    attentionRow("미답변 문의", count: store.pendingCount, systemImage: "bubble.left", route: AreaRoute(area: .channels, filter: "문의"))
                     attentionRow("발송 마감", count: 2, systemImage: "shippingbox", route: AreaRoute(area: .deliveries, filter: "발송 예정"))
                 } header: {
                     HStack {
                         SectionHeader(title: "먼저 확인해주세요")
-                        StatusBadge(Status(text: "\(SampleData.attentionCount)건", tone: .attention))
+                        StatusBadge(Status(text: "\(attentionCount)건", tone: .attention))
                     }
                 }
 
@@ -111,13 +117,14 @@ struct OperationsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("운영")
-            .navigationSubtitle("먼저 확인할 일 \(SampleData.attentionCount)건")
+            .navigationSubtitle("먼저 확인할 일 \(attentionCount)건")
             .navigationDestination(for: AreaRoute.self) { route in
                 OperationAreaView(area: route.area, initialFilter: route.filter)
             }
             .navigationDestination(for: WorkItem.self) { item in
                 WorkDetailView(item: item)
             }
+            .inquiryDestination()
         }
     }
 
@@ -216,4 +223,5 @@ struct OperationsView: View {
 
 #Preview {
     OperationsView()
+        .environment(DemoStore())
 }

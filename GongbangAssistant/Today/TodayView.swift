@@ -1,4 +1,5 @@
 import SwiftUI
+import RoundupCore
 
 enum TodaySegment: String, CaseIterable, Identifiable {
     case tasks = "할 일"
@@ -26,6 +27,7 @@ struct TodayView: View {
     @SceneStorage("today.segment") private var segment: TodaySegment = .tasks
     @State private var state = ScreenState.launch
     @State private var updatedAt = Date.now
+    @Environment(DemoStore.self) private var store
 
     var body: some View {
         NavigationStack {
@@ -38,6 +40,7 @@ struct TodayView: View {
                 .navigationDestination(for: WorkItem.self) { item in
                     WorkDetailView(item: item)
                 }
+                .inquiryDestination()
         }
     }
 
@@ -71,7 +74,7 @@ struct TodayView: View {
     private var list: some View {
         List {
             Section {
-                MetricStrip(metrics: segment.metrics)
+                MetricStrip(metrics: segment.metrics.withPendingInquiries(store.pendingCount))
             }
 
             Section {
@@ -90,6 +93,7 @@ struct TodayView: View {
         }
         .listStyle(.insetGrouped)
         .refreshable {
+            await store.loadInquiries()
             updatedAt = .now
         }
     }
@@ -98,6 +102,19 @@ struct TodayView: View {
     private var segmentContent: some View {
         switch segment {
         case .tasks:
+            Section {
+                if !store.hasLoadedInquiries {
+                    Text("서버 문의를 불러오면 대기 목록이 보여요.")
+                        .foregroundStyle(.secondary)
+                } else if store.pendingInquiries.isEmpty {
+                    Label("답변을 기다리는 문의가 없어요", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.pendingInquiries) { InquiryRow(inquiry: $0) }
+                }
+            } header: {
+                SectionHeader(title: "답변 대기 문의 \(store.pendingCount)건", area: .channels, filter: "문의")
+            }
             ForEach(SampleData.todayTaskGroups) { group in
                 Section {
                     ForEach(group.items) { item in
@@ -109,7 +126,7 @@ struct TodayView: View {
             }
         case .channels:
             Section {
-                ForEach(SampleData.channelCards) { WorkCardRow(item: $0) }
+                ForEach(SampleData.channelCards) { WorkCardRow(item: $0.withPendingInquiries(store.pendingCount)) }
             } header: {
                 SectionHeader(title: "채널 현황", area: .channels)
             }
@@ -176,4 +193,5 @@ struct TodayView: View {
 
 #Preview {
     TodayView()
+        .environment(DemoStore())
 }

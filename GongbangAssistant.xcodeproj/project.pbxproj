@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0B1A00000000000000000A03 /* RoundupCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0B1A00000000000000000A02 /* RoundupCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0B1A00000000000000000301 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -39,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0B1A00000000000000000A03 /* RoundupCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +95,7 @@
 			);
 			name = GongbangAssistant;
 			packageProductDependencies = (
+				0B1A00000000000000000A02 /* RoundupCore */,
 			);
 			productName = GongbangAssistant;
 			productReference = 0B1A00000000000000000201 /* GongbangAssistant.app */;
@@ -146,6 +152,9 @@
 			);
 			mainGroup = 0B1A00000000000000000601;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0B1A00000000000000000A01 /* XCLocalSwiftPackageReference "Packages/RoundupCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0B1A00000000000000000602 /* Products */;
 			projectDirPath = "";
@@ -257,7 +266,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "공방 AI 비서";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "비서에게 말로 물어볼 때 목소리를 글자로 바꾸는 데 써요.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -289,7 +300,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "공방 AI 비서";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "비서에게 말로 물어볼 때 목소리를 글자로 바꾸는 데 써요.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -379,6 +392,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0B1A00000000000000000A01 /* XCLocalSwiftPackageReference "Packages/RoundupCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/RoundupCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0B1A00000000000000000A02 /* RoundupCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0B1A00000000000000000A01 /* XCLocalSwiftPackageReference "Packages/RoundupCore" */;
+			productName = RoundupCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0B1A00000000000000000001 /* Project object */;
 }

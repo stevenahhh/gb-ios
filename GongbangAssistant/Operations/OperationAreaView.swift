@@ -1,4 +1,5 @@
 import SwiftUI
+import RoundupCore
 
 enum OperationArea: String, CaseIterable, Identifiable, Hashable {
     case bookings
@@ -179,16 +180,7 @@ enum OperationArea: String, CaseIterable, Identifiable, Hashable {
                 WorkItem(title: "Instagram", status: Status(text: "연결됨", tone: .done),
                          lines: ["@orot.studio · 팔로워 1,284", "이번 주 +24 · 게시물 초안 2건"], tag: "채널", action: .open),
                 WorkItem(title: "네이버 스마트스토어", status: Status(text: "연결됨", tone: .done),
-                         lines: ["오롯 공방 · 이번 달 주문 38건", "상품 문의 3건 · 리뷰 답글 대기 2건"], tag: "채널", action: .open),
-                WorkItem(title: "선물 포장이 되나요?", status: Status(text: "답변 대기", tone: .attention),
-                         lines: ["네이버 스마트스토어 · 머그컵 2종 세트", "김*연 · 오늘 09:12"], tag: "문의",
-                         action: .perform("답변 쓰기")),
-                WorkItem(title: "주말 클래스에 주차할 수 있나요?", status: Status(text: "답변 대기", tone: .attention),
-                         lines: ["Instagram DM · 주말 도자기 클래스", "박*은 · 오늘 08:40"], tag: "문의",
-                         action: .perform("답변 쓰기")),
-                WorkItem(title: "플레이트 다른 색도 있나요?", status: Status(text: "답변 대기", tone: .attention),
-                         lines: ["네이버 스마트스토어 · 오롯 세라믹 플레이트", "정*우 · 어제 21:05"], tag: "문의",
-                         action: .perform("답변 쓰기")),
+                         lines: ["오롯 공방 · 이번 달 주문 38건", "문의 3건 · 리뷰 답글 대기 2건"], tag: "채널", action: .open),
                 WorkItem(title: "주말 클래스 모집 글", status: Status(text: "초안 준비", tone: .progress),
                          lines: ["Instagram 게시물 · 비서가 작성", "남은 3자리를 알릴 홍보 글이에요."], tag: "콘텐츠",
                          action: .perform("홍보 글 검토하기")),
@@ -206,6 +198,7 @@ struct OperationAreaView: View {
     @State private var query = ""
     @State private var sort: String
     @State private var state = ScreenState.launch
+    @Environment(DemoStore.self) private var store
 
     init(area: OperationArea, initialFilter: String? = nil) {
         self.area = area
@@ -214,7 +207,7 @@ struct OperationAreaView: View {
     }
 
     private var visibleItems: [WorkItem] {
-        let filtered = area.items.filter { item in
+        let filtered = area.items.map { $0.withPendingInquiries(store.pendingCount) }.filter { item in
             let matchesFilter = filter == area.filters[0] || item.tag == filter
             let matchesQuery = query.isEmpty
                 || item.title.localizedStandardContains(query)
@@ -223,6 +216,17 @@ struct OperationAreaView: View {
         }
         let isReversed = area.sortOptions.count > 1 && sort == area.sortOptions[1]
         return isReversed ? Array(filtered.reversed()) : filtered
+    }
+
+    private var visibleInquiries: [Inquiry] {
+        guard area == .channels, filter == area.filters[0] || filter == "문의" else { return [] }
+        let matching = store.inquiries.filter { inquiry in
+            query.isEmpty
+                || inquiry.subject.localizedStandardContains(query)
+                || inquiry.question.localizedStandardContains(query)
+                || inquiry.customer.localizedStandardContains(query)
+        }
+        return matching.filter { $0.status == .pending } + matching.filter { $0.status != .pending }
     }
 
     private var primaryID: WorkItem.ID? {
@@ -255,7 +259,7 @@ struct OperationAreaView: View {
     private var list: some View {
         List {
             Section {
-                MetricStrip(metrics: area.metrics)
+                MetricStrip(metrics: area.metrics.withPendingInquiries(store.pendingCount))
             }
 
             Section {
@@ -269,9 +273,10 @@ struct OperationAreaView: View {
             }
 
             Section(area.listTitle) {
-                if visibleItems.isEmpty {
+                if visibleItems.isEmpty && visibleInquiries.isEmpty {
                     emptyView
                 } else {
+                    ForEach(visibleInquiries) { InquiryRow(inquiry: $0) }
                     ForEach(visibleItems) { item in
                         WorkCardRow(item: item, isPrimary: item.id == primaryID)
                     }
@@ -352,4 +357,5 @@ struct OperationAreaView: View {
     NavigationStack {
         OperationAreaView(area: .bookings)
     }
+    .environment(DemoStore())
 }

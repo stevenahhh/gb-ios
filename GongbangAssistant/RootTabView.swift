@@ -1,4 +1,5 @@
 import SwiftUI
+import RoundupCore
 
 enum AppTab: String, Hashable {
     case today
@@ -18,6 +19,8 @@ struct RootTabView: View {
     @SceneStorage("root.tab") private var selection: AppTab = .today
     @State private var assistant: AssistantLaunch?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(DemoStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: $selection) {
@@ -30,7 +33,7 @@ struct RootTabView: View {
             Tab("운영", systemImage: "square.grid.2x2", value: AppTab.operations) {
                 OperationsView()
             }
-            .badge(SampleData.attentionCount)
+            .badge(SampleData.attentionCount(pendingInquiries: store.pendingCount))
             Tab("설정", systemImage: "gearshape", value: AppTab.settings) {
                 SettingsView()
             }
@@ -45,10 +48,21 @@ struct RootTabView: View {
         }
         .sheet(item: $assistant) { launch in
             AssistantSheet(launch: launch)
+                .environment(store)
+        }
+        .safeAreaInset(edge: .top) {
+            InquirySyncStatus()
+        }
+        .task { await store.loadInquiries() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await store.loadInquiries() }
+            }
         }
     }
 }
 
 #Preview {
     RootTabView()
+        .environment(DemoStore())
 }

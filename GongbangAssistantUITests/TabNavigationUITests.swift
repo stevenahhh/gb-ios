@@ -15,6 +15,7 @@ final class TabNavigationUITests: XCTestCase {
     @MainActor
     func testEveryTabShowsItsNavigationTitle() throws {
         let app = XCUIApplication()
+        app.launchArguments += ["-sampleInquiries"]
         app.launch()
 
         for tab in tabs {
@@ -30,6 +31,7 @@ final class TabNavigationUITests: XCTestCase {
     @MainActor
     func testOperationsPushesAreaScreenAndGoesBack() throws {
         let app = XCUIApplication()
+        app.launchArguments += ["-sampleInquiries"]
         app.launch()
 
         app.tabBars.buttons["운영"].tap()
@@ -53,6 +55,7 @@ final class TabNavigationUITests: XCTestCase {
     @MainActor
     func testStatusFilterAndSearchNarrowTheList() throws {
         let app = XCUIApplication()
+        app.launchArguments += ["-sampleInquiries"]
         app.launch()
 
         app.tabBars.buttons["운영"].tap()
@@ -86,6 +89,7 @@ final class TabNavigationUITests: XCTestCase {
     @MainActor
     func testAssistantIsReachableFromEveryTab() throws {
         let app = XCUIApplication()
+        app.launchArguments += ["-sampleInquiries"]
         app.launch()
 
         let accessory = app.buttons["assistant.accessory"]

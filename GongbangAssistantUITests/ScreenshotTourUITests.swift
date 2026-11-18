@@ -11,6 +11,7 @@ final class ScreenshotTourUITests: XCTestCase {
     @MainActor
     func testCaptureEveryScreen() throws {
         app = XCUIApplication()
+        app.launchArguments = ["-sampleInquiries"]
         app.launch()
 
         selectTab("오늘")
@@ -100,7 +101,7 @@ final class ScreenshotTourUITests: XCTestCase {
     func testCaptureScreenStates() throws {
         for state in ["loading", "empty", "error"] {
             app = XCUIApplication()
-            app.launchArguments = ["-screenState", state]
+            app.launchArguments = ["-sampleInquiries", "-screenState", state]
             app.launch()
             selectTab("오늘")
             capture("state-\(state)-today")

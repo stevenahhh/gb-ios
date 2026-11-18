@@ -45,7 +45,7 @@ struct WorkItem: Identifiable, Hashable {
     let id = UUID()
     let title: String
     var status: Status?
-    let lines: [String]
+    var lines: [String]
     var deadline: String?
     var tag: String?
     var action: CardAction?
@@ -121,7 +121,11 @@ struct AgendaItem: Identifiable, Hashable {
 
 enum SampleData {
     static let today = DateComponents(calendar: Calendar(identifier: .gregorian), year: 2026, month: 11, day: 4)
-    static let attentionCount = 7
+    static let fixedAttentionCount = 4
+
+    static func attentionCount(pendingInquiries: Int) -> Int {
+        fixedAttentionCount + pendingInquiries
+    }
 
     static let todayTaskGroups: [TaskGroup] = [
         TaskGroup(title: "예약", kind: .booking, area: .bookings, items: [
@@ -142,7 +146,7 @@ enum SampleData {
         WorkItem(title: "Instagram", status: Status(text: "연결됨", tone: .done),
                  lines: ["@orot.studio", "팔로워 1,284 · 이번 주 +24"], action: .open),
         WorkItem(title: "네이버 스마트스토어", status: Status(text: "연결됨", tone: .done),
-                 lines: ["오늘 주문 3건 · 결제금액 126,000원"], deadline: "상품 문의 3건이 답을 기다려요", action: .open),
+                 lines: ["오늘 주문 3건 · 결제금액 126,000원"], deadline: "문의 3건이 답을 기다려요", action: .open),
     ]
 
     static let channelTodos: [WorkItem] = [
