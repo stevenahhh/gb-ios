@@ -62,6 +62,10 @@ enum RoundupAPI {
         try await get("calendar", query: ["start": start.dayKey, "end": end.dayKey])
     }
 
+    static func agendaDetail(_ route: AgendaRoute) async throws -> AgendaDetail {
+        try await get("calendar/items/\(route.target.rawValue)/\(route.id)")
+    }
+
     static func area(_ area: OperationArea, query: AreaQuery) async throws -> AreaPage {
         var parameters = ["limit": String(query.limit), "offset": String(query.offset)]
         parameters[area.filterParameter] = query.filter
@@ -112,7 +116,8 @@ enum RoundupAPI {
         switch item.target {
         case .session: let _: State = try await post("class-sessions/\(item.id)/completion", body)
         case .task: let _: State = try await post("tasks/\(item.id)/completion", body)
-        case .shipment: preconditionFailure("shipments use their own actions")
+        case .event: let _: State = try await post("calendar/events/\(item.id)/completion", body)
+        case .shipment, .order: preconditionFailure("\(item.target) uses its own actions")
         }
     }
 

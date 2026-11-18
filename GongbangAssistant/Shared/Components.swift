@@ -166,74 +166,147 @@ struct StatusBadge: View {
     }
 }
 
+struct TimelinePosition: Hashable {
+    let isFirst: Bool
+    let isLast: Bool
+
+    init(index: Int, count: Int) {
+        isFirst = index == 0
+        isLast = index == count - 1
+    }
+}
+
 struct TaskRow: View {
     let item: TaskItem
     let kind: EventKind
+    var timeline: TimelinePosition?
+    var route: AgendaRoute?
+    @State private var requestedDone: Bool?
     @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
     @ScaledMetric(relativeTo: .body) private var iconSize = 36
+    @ScaledMetric(relativeTo: .body) private var nodeSize = 24
 
-    private var isDone: Bool { item.isDone ?? false }
+    private let timelineSpacing: CGFloat = 10
+    private let railWidth: CGFloat = 2
+
+    private var isDone: Bool { requestedDone ?? item.isDone ?? false }
     private var isRunning: Bool { app.isRunning(item.id) }
+    private var visibleTimeline: TimelinePosition? { dynamicTypeSize.isAccessibilitySize ? nil : timeline }
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 12) {
-                        info
-                        Spacer(minLength: 8)
-                        if item.isDone != nil {
-                            doneButton
-                        }
+        destinationContent
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if item.isDone != nil {
+                    Button(isDone ? "미완료" : "완료", systemImage: isDone ? "arrow.uturn.backward" : "checkmark") {
+                        toggle()
                     }
-                    if item.isDone == nil, let status = item.status {
-                        StatusBadge(status)
-                    }
+                    .tint(.green)
+                    .disabled(isRunning)
                 }
-            } else {
-                HStack(spacing: 12) {
+            }
+            .listRowInsets(visibleTimeline == nil ? nil : EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            .listRowSeparator(visibleTimeline == nil ? .automatic : .hidden)
+            .onChange(of: item.revision) { requestedDone = nil }
+    }
+
+    @ViewBuilder
+    private var destinationContent: some View {
+        if let route {
+            NavigationLink(value: route) { content }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let visibleTimeline {
+            timelineContent(visibleTimeline)
+        } else if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 12) {
                     info
                     Spacer(minLength: 8)
                     if item.isDone != nil {
                         doneButton
-                    } else if let status = item.status {
-                        StatusBadge(status)
                     }
                 }
-            }
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            if item.isDone != nil {
-                Button(isDone ? "미완료" : "완료", systemImage: isDone ? "arrow.uturn.backward" : "checkmark") {
-                    toggle()
+                if item.isDone == nil, let status = item.status {
+                    StatusBadge(status)
                 }
-                .tint(.green)
-                .disabled(isRunning)
+            }
+        } else {
+            HStack(spacing: 12) {
+                info
+                Spacer(minLength: 8)
+                accessory
             }
         }
+    }
+
+    @ViewBuilder
+    private var accessory: some View {
+        if item.isDone != nil {
+            doneButton
+        } else if let status = item.status {
+            StatusBadge(status)
+        }
+    }
+
+    private func timelineContent(_ position: TimelinePosition) -> some View {
+        HStack(spacing: timelineSpacing) {
+            HStack(spacing: timelineSpacing) {
+                Text(item.time ?? "")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: timeWidth, alignment: .leading)
+                timelineNode
+                titles
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 4)
+            accessory
+        }
+        .padding(.vertical, 8)
+        .background(alignment: .leading) {
+            VStack(spacing: 0) {
+                Rectangle().fill(.separator).opacity(position.isFirst ? 0 : 1)
+                Rectangle().fill(.separator).opacity(position.isLast ? 0 : 1)
+            }
+            .frame(width: railWidth)
+            .padding(.leading, timeWidth + timelineSpacing + (nodeSize - railWidth) / 2)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var timelineNode: some View {
+        Image(systemName: isDone ? "checkmark" : kind.symbol)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: nodeSize, height: nodeSize)
+            .background(isDone ? AnyShapeStyle(.gray) : AnyShapeStyle(kind.color), in: .circle)
+            .accessibilityLabel(kind.label)
     }
 
     private func toggle() {
         let item = item
         let target = !isDone
-        Task { await app.run(id: item.id) { try await RoundupAPI.setDone(item, done: target) } }
+        requestedDone = target
+        Task {
+            let saved = await app.run(id: item.id) { try await RoundupAPI.setDone(item, done: target) }
+            if !saved { requestedDone = nil }
+        }
     }
 
     private var doneButton: some View {
         Button(action: toggle) {
-            Group {
-                if isRunning {
-                    ProgressView()
-                } else {
-                    Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                        .foregroundStyle(isDone ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
-                }
-            }
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(.rect)
+            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                .font(.title2)
+                .foregroundStyle(isDone ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .disabled(isRunning)
@@ -259,15 +332,21 @@ struct TaskRow: View {
                     .background(kind.color.opacity(0.12), in: .rect(cornerRadius: 8))
                     .accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(keepingWords: item.title)
-                    .font(.body.weight(.medium))
-                PhraseText(text: item.detail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            titles
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var titles: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(keepingWords: item.title)
+                .font(.body.weight(.medium))
+                .strikethrough(isDone)
+                .foregroundStyle(isDone ? .secondary : .primary)
+            PhraseText(text: item.detail)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -371,68 +450,6 @@ struct WorkCard: View {
 
 extension [WorkItem] {
     var primaryActionID: WorkItem.ID? { first { $0.action != nil }?.id }
-}
-
-struct AgendaRow: View {
-    let item: AgendaItem
-    @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 6) {
-                    time
-                    titles
-                    KindTag(kind: item.kind)
-                }
-            } else {
-                HStack(spacing: 12) {
-                    time
-                        .frame(minWidth: timeWidth, alignment: .leading)
-                    titles
-                    Spacer(minLength: 8)
-                    KindTag(kind: item.kind)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var time: some View {
-        Text(keepingWords: item.time)
-            .font(.subheadline.monospacedDigit())
-            .foregroundStyle(.secondary)
-    }
-
-    private var titles: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(keepingWords: item.title)
-                .font(.body.weight(.semibold))
-            PhraseText(text: item.detail)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-struct KindTag: View {
-    let kind: EventKind
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: kind.symbol)
-                .foregroundStyle(kind.color)
-                .accessibilityHidden(true)
-            Text(kind.label)
-                .foregroundStyle(.primary)
-        }
-        .font(.subheadline.weight(.semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(kind.color.opacity(0.14), in: .rect(cornerRadius: 6))
-        .fixedSize()
-    }
 }
 
 struct SectionHeader: View {

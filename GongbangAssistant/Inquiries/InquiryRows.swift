@@ -18,8 +18,7 @@ extension ReplyStatus {
     var badge: Status {
         switch self {
         case .pending: Status(text: "답변 대기", tone: .attention)
-        case .approved: Status(text: "답변 승인", tone: .done)
-        case .rejected: Status(text: "초안 반려", tone: .neutral)
+        case .approved: Status(text: "답변 완료", tone: .done)
         }
     }
 }
