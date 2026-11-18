@@ -69,6 +69,8 @@ enum TaskTarget: String, Decodable, Hashable {
     case session
     case task
     case shipment
+    case order
+    case event
 }
 
 struct TaskItem: Decodable, Identifiable, Hashable {
@@ -128,23 +130,40 @@ enum EventKind: String, Decodable, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct DayEvent: Decodable, Hashable {
-    let kind: EventKind
-    let count: Int
-    let display: String
-}
-
 struct AgendaItem: Decodable, Identifiable, Hashable {
     let id: String
+    let target: TaskTarget
+    let targetId: String
     let time: String
     let title: String
     let kind: EventKind
     let detail: String
+    let status: Status?
+    let isDone: Bool?
+    let revision: Int
+
+    var route: AgendaRoute { AgendaRoute(target: target, id: targetId) }
+
+    /// Calendar rows act on the same database rows as the today list.
+    var task: TaskItem {
+        TaskItem(id: targetId, target: target, time: time, title: title, detail: detail,
+                 status: status, isDone: isDone, revision: revision)
+    }
+}
+
+struct AgendaRoute: Hashable {
+    let target: TaskTarget
+    let id: String
+}
+
+struct AgendaDetail: Decodable {
+    let dateLabel: String
+    let item: AgendaItem
+    let cards: [WorkItem]
 }
 
 struct CalendarDay: Decodable, Hashable {
     let date: String
-    let events: [DayEvent]
     let items: [AgendaItem]
 }
 

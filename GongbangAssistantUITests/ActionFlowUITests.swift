@@ -12,6 +12,12 @@ final class ActionFlowUITests: RoundupUITestCase {
     }
 
     @MainActor
+    private func waitUntil(_ element: XCUIElement, isEnabled: Bool) {
+        let predicate = NSPredicate(format: "isEnabled == %@", NSNumber(value: isEnabled))
+        wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 10)
+    }
+
+    @MainActor
     private func goBack(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
     }
@@ -68,6 +74,48 @@ final class ActionFlowUITests: RoundupUITestCase {
         XCTAssertEqual(task.value as? String, "미완료")
         task.tap()
         waitFor(task, "value == %@", "완료")
+    }
+
+    @MainActor
+    func testCalendarRowTogglesInPlaceAndOpensItsDetail() throws {
+        let app = try launch()
+        app.tabBars.buttons["캘린더"].tap()
+        let order = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "#1042")).firstMatch
+        XCTAssertTrue(scrollTo(order, in: app))
+        order.tap()
+        XCTAssertTrue(app.navigationBars["일정 상세"].waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "주문과 배송", in: app).waitForExistence(timeout: 10))
+        goBack(app)
+
+        // The enclosing row link inherits the toggle's identifier, so the label picks the toggle.
+        let toggle = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label ENDSWITH %@", "task.task-market", "완료 표시")).firstMatch
+        XCTAssertTrue(scrollTo(toggle, in: app))
+        XCTAssertEqual(toggle.value as? String, "미완료")
+        toggle.tap()
+        waitFor(toggle, "value == %@", "완료")
+        XCTAssertFalse(app.navigationBars["일정 상세"].exists)
+        toggle.tap()
+        waitFor(toggle, "value == %@", "미완료")
+    }
+
+    @MainActor
+    func testCompletedInquiryReplyCanBeEditedAgain() throws {
+        let app = try launch()
+        let row = app.buttons["inquiry.inquiry-change"]
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let complete = app.buttons["inquiry.complete"]
+        XCTAssertTrue(scrollTo(complete, in: app))
+        complete.tap()
+        waitUntil(complete, isEnabled: false)
+
+        let editor = app.textViews["inquiry.draft"]
+        XCTAssertTrue(scrollTo(editor, in: app))
+        editor.tap()
+        editor.typeText("추가 안내")
+        XCTAssertTrue(scrollTo(complete, in: app))
+        waitUntil(complete, isEnabled: true)
     }
 
     @MainActor

@@ -5,11 +5,21 @@ struct InquiryDetailView: View {
     let id: String
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
     @State private var errorMessage: String?
     @State private var isGenerating = false
     @State private var draft = ""
     @State private var editorRevision: Int?
     @State private var savedDraft = ""
+    @State private var completionCount = 0
+
+    private var isEditingLocked: Bool {
+        isGenerating || store.isInquiryBusy || store.requiresInquiryReload
+    }
+
+    private var isDraftBlank: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         Group {
@@ -26,12 +36,14 @@ struct InquiryDetailView: View {
         .navigationTitle("문의 답변")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: store.inquiry(id: id)?.revision, initial: true) {
-            if let inquiry = store.inquiry(id: id), editorRevision == nil || draft == savedDraft {
-                draft = inquiry.draft
-                savedDraft = inquiry.draft
-                editorRevision = inquiry.revision
+            if editorRevision == nil || draft == savedDraft {
+                loadEditorFromStore()
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { saveUnsavedEdit() }
+        }
+        .onDisappear(perform: saveUnsavedEdit)
     }
 
     private func detail(_ inquiry: Inquiry) -> some View {
@@ -61,112 +73,91 @@ struct InquiryDetailView: View {
             }
 
             Section {
-                if inquiry.status == .pending {
-                    TextEditor(text: $draft)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 160)
-                        .accessibilityLabel("답변 초안 편집")
-                        .accessibilityIdentifier("inquiry.draft")
-                        .disabled(isGenerating || store.isInquiryBusy || store.requiresInquiryReload)
-                    Button("초안 저장") {
-                        Task { await saveDraft() }
+                TextEditor(text: $draft)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 160)
+                    .accessibilityLabel("답변 작성")
+                    .accessibilityIdentifier("inquiry.draft")
+                    .disabled(isEditingLocked)
+                if editorRevision != inquiry.revision {
+                    Button("서버 답변으로 되돌리기") {
+                        loadEditorFromStore()
+                        errorMessage = nil
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(isGenerating || store.isInquiryBusy || store.requiresInquiryReload || draft == inquiry.draft)
-                    .accessibilityIdentifier("inquiry.save")
-                    Text(draft == inquiry.draft ? "저장된 초안이에요." : "아직 저장하지 않은 수정 내용이 있어요. 초안 저장 또는 승인을 눌러 주세요.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if editorRevision != inquiry.revision {
-                        Button("서버 초안으로 되돌리기") {
-                            draft = inquiry.draft
-                            savedDraft = inquiry.draft
-                            editorRevision = inquiry.revision
-                            errorMessage = nil
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                }
+                if let errorMessage {
+                    Label {
+                        Text(keepingWords: errorMessage)
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
                     }
-                    Button {
-                        Task { await generateDraft(for: inquiry) }
-                    } label: {
-                        if isGenerating {
-                            ProgressView("초안을 쓰는 중이에요")
-                        } else {
-                            Label("AI로 초안 다시 쓰기", systemImage: "sparkles")
-                        }
-                    }
-                    .disabled(isGenerating || store.isInquiryBusy || store.requiresInquiryReload)
-                    .accessibilityIdentifier("inquiry.generate")
-                    if let errorMessage {
-                        Label {
-                            Text(keepingWords: errorMessage)
-                                .foregroundStyle(.primary)
-                        } icon: {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(.orange)
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .accessibilityIdentifier("inquiry.error")
-                    }
-                    decisionButtons
-                        .disabled(isGenerating || store.isInquiryBusy || store.requiresInquiryReload)
-                    if store.isSavingInquiry {
-                        ProgressView("서버에 저장하는 중이에요")
-                    }
-                } else {
-                    if inquiry.draft.isEmpty {
-                        Text("초안을 비운 채 반려했어요.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(inquiry.draft)
-                            .textSelection(.enabled)
-                    }
-                    Label(inquiry.status == .approved ? "답변을 승인했어요." : "초안을 반려했어요.",
-                          systemImage: inquiry.status == .approved ? "checkmark.circle.fill" : "xmark.circle")
-                        .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityIdentifier("inquiry.error")
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { replyActions(inquiry) }
+                    VStack(spacing: 8) { replyActions(inquiry) }
                 }
             } header: {
-                Text("답변 초안")
+                Text("답변 작성")
             } footer: {
-                if inquiry.status == .pending {
-                    Text("고쳐 쓴 뒤 승인하거나 반려해 주세요. 승인해도 아직 손님께 발송되지는 않아요.")
-                } else {
-                    Text("처리한 답변은 다시 바꿀 수 없어요.")
-                }
+                Text("답변 완료를 눌러도 손님께 자동으로 보내지지는 않아요. 고친 내용은 화면을 나갈 때 저장해요.")
             }
         }
         .listStyle(.insetGrouped)
-        .sensoryFeedback(.success, trigger: inquiry.status)
+        .sensoryFeedback(.success, trigger: completionCount)
     }
 
-    private var decisionButtons: some View {
-        VStack(spacing: 8) {
-            Button {
-                decide(.approve)
-            } label: {
-                Text("답변 승인")
-                    .foregroundStyle(Color(.systemBackground))
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 30)
+    @ViewBuilder
+    private func replyActions(_ inquiry: Inquiry) -> some View {
+        Button {
+            Task { await generateDraft(for: inquiry) }
+        } label: {
+            Group {
+                if isGenerating {
+                    ProgressView()
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                        Text("AI로 다시 쓰기")
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .accessibilityIdentifier("inquiry.approve")
-
-            Button(role: .destructive) {
-                decide(.reject)
-            } label: {
-                Text("초안 반려")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 30)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .accessibilityIdentifier("inquiry.reject")
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: 30)
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .disabled(isEditingLocked)
+        .accessibilityIdentifier("inquiry.generate")
+
+        Button(action: complete) {
+            Group {
+                if store.isSavingInquiry {
+                    ProgressView()
+                } else {
+                    Text("답변 완료")
+                        .foregroundStyle(Color(.systemBackground))
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: 30)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .disabled(isEditingLocked || isDraftBlank || (inquiry.status == .approved && draft == inquiry.draft))
+        .accessibilityIdentifier("inquiry.complete")
+    }
+
+    private func loadEditorFromStore() {
+        guard let inquiry = store.inquiry(id: id) else { return }
+        draft = inquiry.draft
+        savedDraft = inquiry.draft
+        editorRevision = inquiry.revision
     }
 
     private func generateDraft(for inquiry: Inquiry) async {
@@ -175,7 +166,7 @@ struct InquiryDetailView: View {
         do {
             let text = try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
                                                   question: inquiry.question, facts: inquiry.facts)
-            // Generated text is an unsaved edit, and never overwrites an in-flight decision.
+            // Generated text is an unsaved edit, and never overwrites an in-flight completion.
             draft = text
             errorMessage = nil
         } catch {
@@ -183,26 +174,34 @@ struct InquiryDetailView: View {
         }
     }
 
-    private func saveDraft() async {
-        guard let editorRevision else { return }
-        do {
-            try await store.saveDraft(id: id, draft: InquiryDraft(draft: draft, expectedRevision: editorRevision))
-            savedDraft = draft
-            self.editorRevision = store.inquiry(id: id)?.revision
-            errorMessage = nil
-            app.dataDidChange()
-        } catch {
-            errorMessage = error.localizedDescription
+    /// The owner has no save button, so edits persist when the screen or app is left.
+    private func saveUnsavedEdit() {
+        guard let inquiry = store.inquiry(id: id), let editorRevision, editorRevision == inquiry.revision,
+              draft != inquiry.draft, !store.isInquiryBusy, !store.requiresInquiryReload,
+              inquiry.status == .pending || !isDraftBlank else { return }
+        let edit = InquiryDraft(draft: draft, expectedRevision: editorRevision)
+        Task {
+            do {
+                try await store.saveDraft(id: id, draft: edit)
+                // The owner may have kept typing while this save was in flight.
+                savedDraft = edit.draft
+                self.editorRevision = store.inquiry(id: id)?.revision
+                app.dataDidChange()
+            } catch {
+                app.failureMessage = error.localizedDescription
+            }
         }
     }
 
-    private func decide(_ decision: ReplyDecision) {
+    private func complete() {
         guard let editorRevision else { return }
-        let value = InquiryDecision(decision: decision, draft: InquiryDraft(draft: draft, expectedRevision: editorRevision))
+        let value = InquiryDecision(decision: .approve, draft: InquiryDraft(draft: draft, expectedRevision: editorRevision))
         Task {
             do {
                 try await store.decide(id: id, decision: value)
+                loadEditorFromStore()
                 errorMessage = nil
+                completionCount += 1
                 app.dataDidChange()
             } catch {
                 errorMessage = error.localizedDescription

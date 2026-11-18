@@ -105,8 +105,10 @@ struct TodayView: View {
             }
             ForEach(today.tasks.groups) { group in
                 Section {
-                    ForEach(group.items) { item in
-                        TaskRow(item: item, kind: group.kind)
+                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                        TaskRow(item: item, kind: group.kind,
+                                timeline: group.kind == .booking
+                                    ? TimelinePosition(index: index, count: group.items.count) : nil)
                     }
                 } header: {
                     SectionHeader(title: group.title, area: group.area)
