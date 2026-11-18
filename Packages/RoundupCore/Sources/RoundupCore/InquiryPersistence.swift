@@ -22,11 +22,20 @@ public struct InquiryDecision: Encodable, Sendable {
     }
 }
 
+public struct InquiryReopen: Encodable, Sendable {
+    public let expectedRevision: Int
+
+    public init(expectedRevision: Int) {
+        self.expectedRevision = expectedRevision
+    }
+}
+
 @MainActor
 public protocol InquiryRepository {
     func load() async throws -> [Inquiry]
     func save(id: String, draft: InquiryDraft) async throws -> Inquiry
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry
+    func reopen(id: String, request: InquiryReopen) async throws -> Inquiry
 }
 
 public enum InquiryPersistenceError: Error, LocalizedError {

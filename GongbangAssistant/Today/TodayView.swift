@@ -27,10 +27,7 @@ struct TodayView: View {
             }
             .navigationTitle(greeting)
             .navigationSubtitle(subtitle)
-            .navigationDestination(for: AreaRoute.self) { route in
-                OperationAreaView(area: route.area, initialFilter: route.filter)
-            }
-            .inquiryDestination()
+            .appDestinations()
         }
         .task(id: app.dataVersion) { await load() }
     }
@@ -52,7 +49,7 @@ struct TodayView: View {
 
     private func list(_ today: TodayScreenData) -> some View {
         List {
-            Section {
+            CardSection {
                 MetricStrip(metrics: metrics(today))
             }
 
@@ -67,10 +64,11 @@ struct TodayView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
             }
+            .listSectionSeparator(.hidden)
 
             segmentContent(today)
         }
-        .listStyle(.insetGrouped)
+        .cardList()
         .refreshable {
             await load()
             await store.loadInquiries()
@@ -90,7 +88,7 @@ struct TodayView: View {
     private func segmentContent(_ today: TodayScreenData) -> some View {
         switch segment {
         case .tasks:
-            Section {
+            CardSection {
                 if !store.hasLoadedInquiries {
                     Text("서버 문의를 불러오면 대기 목록이 보여요.")
                         .foregroundStyle(.secondary)
@@ -98,13 +96,13 @@ struct TodayView: View {
                     Label("답변을 기다리는 문의가 없어요", systemImage: "checkmark.circle")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(store.pendingInquiries) { InquiryRow(inquiry: $0) }
+                    ForEach(store.pendingInquiries) { AssistantDraftRow(inquiry: $0) }
                 }
             } header: {
                 SectionHeader(title: "답변 대기 문의 \(store.pendingCount)건", area: .channels, filter: "inquiries")
             }
             ForEach(today.tasks.groups) { group in
-                Section {
+                CardSection {
                     ForEach(group.items) { item in
                         TaskRow(item: item, kind: group.kind)
                     }
@@ -113,23 +111,23 @@ struct TodayView: View {
                 }
             }
         case .channels:
-            Section {
+            CardSection {
                 ForEach(today.channels.cards) { WorkCard(item: $0) }
             } header: {
                 SectionHeader(title: "채널 현황", area: .channels)
             }
-            Section {
+            CardSection {
                 cards(today.channels.todos, empty: "오늘 챙길 채널 일이 없어요")
             } header: {
                 SectionHeader(title: "오늘 챙길 일 \(today.channels.todos.count)건")
             }
         case .delivery:
-            Section {
+            CardSection {
                 cards(today.delivery.shipToday, empty: "오늘 발송할 물건이 없어요")
             } header: {
                 SectionHeader(title: "오늘 발송할 물건 \(today.delivery.shipToday.count)건", area: .deliveries)
             }
-            Section {
+            CardSection {
                 NavigationLink(value: AreaRoute(area: .deliveries, filter: "in_transit")) {
                     VStack(alignment: .leading, spacing: 4) {
                         PhraseText(text: today.delivery.transitSummary)
@@ -145,12 +143,12 @@ struct TodayView: View {
                 SectionHeader(title: "이동 중인 배송")
             }
         case .suggestions:
-            Section {
+            CardSection {
                 cards(today.suggestions.items, empty: "지금은 새로운 추천이 없어요")
             } header: {
                 SectionHeader(title: "오늘의 추천")
             } footer: {
-                Text("공방의 예약과 초안을 바탕으로 골랐어요. 내용을 확인해 주세요.")
+                Text("비서가 공방의 예약과 초안을 보고 골랐어요. 틀릴 수 있으니 내용을 확인해 주세요.")
             }
         }
     }

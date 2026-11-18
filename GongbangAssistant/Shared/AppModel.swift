@@ -9,6 +9,7 @@ final class AppModel {
     private(set) var successCount = 0
     private(set) var attentionCount: Int?
     private(set) var runningIDs: Set<String> = []
+    private(set) var ownerEditedDraftIDs: Set<String> = []
     var failureMessage: String?
 
     func isRunning(_ id: String) -> Bool { runningIDs.contains(id) }
@@ -37,8 +38,12 @@ final class AppModel {
         dataVersion += 1
     }
 
+    func markDraftEdited(_ id: String) {
+        ownerEditedDraftIDs.insert(id)
+    }
+
     func refreshAttention() async {
-        attentionCount = try? await RoundupAPI.operations(month: nil).attentionCount
+        attentionCount = try? await RoundupAPI.operations(period: nil).attentionCount
     }
 
     func updateAttention(_ count: Int) {

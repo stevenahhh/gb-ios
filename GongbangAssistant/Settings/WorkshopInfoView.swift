@@ -32,7 +32,7 @@ struct WorkshopInfoView: View {
 
     var body: some View {
         List {
-            Section("기본 정보") {
+            CardSection("기본 정보") {
                 TextField("공방 이름", text: $name)
                     .accessibilityIdentifier("workshop.name")
                 TextField("호칭", text: $ownerTitle)
@@ -41,7 +41,7 @@ struct WorkshopInfoView: View {
                 TextField("소개", text: $description, axis: .vertical)
             }
 
-            Section {
+            CardSection {
                 TextField("도로명 주소", text: $address)
                     .textContentType(.fullStreetAddress)
                     .submitLabel(.search)
@@ -64,12 +64,14 @@ struct WorkshopInfoView: View {
             }
 
             if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.circle.fill")
-                    .foregroundStyle(.orange)
+                CardSection {
+                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                }
             }
 
             if let place {
-                Section("확인된 위치") {
+                CardSection("확인된 위치") {
                     Text(place.address)
                         .textSelection(.enabled)
                     Group {
@@ -85,7 +87,7 @@ struct WorkshopInfoView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList()
         .navigationTitle("공방 정보")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
