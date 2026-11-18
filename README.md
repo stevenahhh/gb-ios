@@ -44,8 +44,7 @@ Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으
 
 1. GitHub 초대를 수락합니다. 초대는 <https://github.com/stevenahhh/gb-ios/invitations>에서 확인합니다. 초대는 7일 뒤 만료되므로 그 전에 수락해 주세요.
 2. Mac에서 GitHub에 로그인합니다. [GitHub CLI](https://cli.github.com)를 쓴다면 `gh auth login`을 실행합니다.
-3. 저장소 관리자에게 앱 키를 비공개로 받습니다.
-4. [서버 연결 설정](#서버-연결-설정)대로 설정 파일을 만들고 Xcode에서 실행합니다.
+3. [서버 연결 설정](#서버-연결-설정)대로 설정 파일에 앱 키를 넣고 Xcode에서 실행합니다.
 
 ```bash
 git clone https://github.com/stevenahhh/gb-ios.git
@@ -55,15 +54,9 @@ open GongbangAssistant/RoundupSecrets.plist
 open GongbangAssistant.xcodeproj
 ```
 
-저장소 관리자는 운영 Mac에서 아래 명령으로 앱 키를 확인합니다.
-
-```bash
-security find-generic-password -a gongbang -s gongbang-prod-api-key -w
-```
-
 | 할 수 있는 일 | 필요한 것 |
 |---|---|
-| 앱 실행 | Mac, Xcode, 앱 키 |
+| 앱 실행 | Mac, Xcode |
 | 코드 push | 저장소 쓰기 권한 |
 | 서버 배포 | 운영 Mac의 SSH 키, ACG에 등록된 IP |
 
@@ -196,7 +189,13 @@ cp Config/RoundupSecrets.example.plist GongbangAssistant/RoundupSecrets.plist
 open GongbangAssistant/RoundupSecrets.plist
 ```
 
-`APIKey` 값을 저장소 관리자에게 받은 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다. 앱 키는 커밋하거나 단체 채팅방에 남기지 마세요.
+`APIKey` 값을 아래 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다.
+
+```text
+NaapiKp6n7_Y0qcWC2rOI3W1_aqUXD5d5939eJWDDp0
+```
+
+이 키가 있으면 운영 데이터를 읽고 바꿀 수 있습니다. 키가 README와 Git 기록에 들어 있으므로 저장소를 공개로 바꾸면 안 됩니다. 저장소 밖으로 키가 나갔다면 서버의 `ROUNDUP_API_KEY`를 교체하고 이 값도 함께 바꿉니다.
 
 운영 서버는 HTTPS 443번 포트로 어느 네트워크에서나 접속할 수 있습니다. 모든 요청에는 앱 키가 필요합니다.
 
