@@ -20,6 +20,7 @@ Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으
 
 ## 목차
 
+- [팀원 안내](#팀원-안내)
 - [화면 구성](#화면-구성)
 - [웹 버전으로 보기](#웹-버전으로-보기)
 - [준비물](#준비물)
@@ -27,6 +28,7 @@ Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으
 - [시뮬레이터에서 실행하기](#시뮬레이터에서-실행하기)
 - [시뮬레이터 사용 팁](#시뮬레이터-사용-팁)
 - [실제 iPhone에서 실행하기 (검증하지 않음)](#실제-iphone에서-실행하기-검증하지-않음)
+- [Mac 없이 iPhone에 설치하기](#mac-없이-iphone에-설치하기)
 - [테스트 실행하기](#테스트-실행하기)
 - [명령줄로 빌드·테스트하기](#명령줄로-빌드테스트하기)
 - [운영 서버](#운영-서버)
@@ -35,6 +37,37 @@ Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으
 - [Figma 화면과 코드 대응표](#figma-화면과-코드-대응표)
 - [사용한 iOS 기본 구성 요소](#사용한-ios-기본-구성-요소)
 - [아직 넣지 않은 것](#아직-넣지-않은-것)
+
+## 팀원 안내
+
+이 저장소는 비공개입니다. 초대받은 GitHub 계정만 코드를 볼 수 있습니다.
+
+1. GitHub 초대를 수락합니다. 초대는 <https://github.com/stevenahhh/gb-ios/invitations>에서 확인합니다. 초대는 7일 뒤 만료되므로 그 전에 수락해 주세요.
+2. Mac에서 GitHub에 로그인합니다. [GitHub CLI](https://cli.github.com)를 쓴다면 `gh auth login`을 실행합니다.
+3. 저장소 관리자에게 앱 키를 비공개로 받습니다.
+4. [서버 연결 설정](#서버-연결-설정)대로 설정 파일을 만들고 Xcode에서 실행합니다.
+
+```bash
+git clone https://github.com/stevenahhh/gb-ios.git
+cd gb-ios
+cp Config/RoundupSecrets.example.plist GongbangAssistant/RoundupSecrets.plist
+open GongbangAssistant/RoundupSecrets.plist
+open GongbangAssistant.xcodeproj
+```
+
+저장소 관리자는 운영 Mac에서 아래 명령으로 앱 키를 확인합니다.
+
+```bash
+security find-generic-password -a gongbang -s gongbang-prod-api-key -w
+```
+
+| 할 수 있는 일 | 필요한 것 |
+|---|---|
+| 앱 실행 | Mac, Xcode, 앱 키 |
+| 코드 push | 저장소 쓰기 권한 |
+| 서버 배포 | 운영 Mac의 SSH 키, ACG에 등록된 IP |
+
+Mac이 없다면 [Mac 없이 iPhone에 설치하기](#mac-없이-iphone에-설치하기)를 봐 주세요.
 
 ## 화면 구성
 
@@ -163,7 +196,7 @@ cp Config/RoundupSecrets.example.plist GongbangAssistant/RoundupSecrets.plist
 open GongbangAssistant/RoundupSecrets.plist
 ```
 
-`APIKey` 값을 서버 담당자에게 따로 받은 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다. 저장소가 공개되어 있으므로 앱 키를 커밋하거나 채팅방에 남기지 마세요.
+`APIKey` 값을 저장소 관리자에게 받은 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다. 앱 키는 커밋하거나 단체 채팅방에 남기지 마세요.
 
 운영 서버는 HTTPS 443번 포트로 어느 네트워크에서나 접속할 수 있습니다. 모든 요청에는 앱 키가 필요합니다.
 
@@ -216,6 +249,19 @@ Apple Account가 있어야 합니다. 무료 Personal Team으로도 앱에 서�
 5. iPhone에서 개발자 모드를 켭니다. Settings > Privacy & Security > Developer Mode를 켜고 재시동한 뒤 확인을 누릅니다.
 6. Xcode 실행 대상을 연결한 iPhone으로 바꾸고 **⌘R**을 누릅니다.
 7. 무료 계정이면 첫 실행이 신뢰하지 않은 개발자라는 이유로 막힐 수 있습니다. 그때는 iPhone의 Settings > General > VPN & Device Management에서 개발자 인증서를 신뢰로 바꿉니다.
+
+## Mac 없이 iPhone에 설치하기
+
+지금은 설치할 수 없습니다. iPhone 앱은 Apple 인증서로 서명해야 하는데 운영 Mac에는 서명 인증서와 개발팀이 없습니다. 유료 Apple Developer Program에 가입하면 Mac이 없는 팀원도 설치할 수 있습니다. 가입비는 [멤버십 1년에 99달러](https://developer.apple.com/programs/enroll/)이고 지역별 금액은 가입할 때 표시됩니다.
+
+| 방법 | 팀원이 할 일 | 조건 | 판단 |
+|---|---|---|---|
+| [TestFlight 내부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers/) | App Store Connect 초대 수락, TestFlight 앱에서 설치 | App Store Connect 사용자 최대 100명 | 추천 |
+| [TestFlight 외부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers) | 이메일이나 공개 링크로 TestFlight에서 설치 | 최대 10,000명, 베타 심사 정보 제출 필요 | 팀 밖 시연용 |
+| [Ad Hoc 배포](https://developer.apple.com/help/account/devices/devices-overview/) | 기기 식별자를 전달하고 설치 파일로 설치 | 제품군별 등록 기기 최대 100대 | 기기를 추가할 때마다 다시 빌드 |
+| [무료 Personal Team](https://developer.apple.com/library/archive/qa/qa1915/_index.html) | 사용할 수 없음 | 본인 기기용이고 배포용 서명이 안 됨 | 해당 없음 |
+
+TestFlight 빌드는 [최대 90일](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview) 동안 시험할 수 있으므로 그 전에 새 빌드를 올려야 합니다. 가입 뒤에는 운영 Mac에서 Xcode로 Archive를 만들어 App Store Connect에 올립니다. 이 빌드에는 `RoundupSecrets.plist`의 앱 키가 들어갑니다. 아직 실제 iPhone에서는 시험하지 않았습니다.
 
 ## 테스트 실행하기
 
@@ -297,6 +343,8 @@ xcrun xcresulttool export attachments --path build/TestResults.xcresult --output
 | 배포 위치 | `/opt/gongbang/current` |
 | 서버 비밀값 | `/opt/gongbang/server.env` |
 | DB | Cloud DB for PostgreSQL `gongbang-prod-db`, 서로 다른 존의 2대 구성, VPC 내부 접속만 허용 |
+
+서버와 DB, 공인 IP 비용은 30일 기준 약 31만 4천 원(부가세 별도)입니다. 스토리지, 백업, 로그, CLOVA, 지도, 음성 인식은 사용량만큼 더 붙습니다.
 
 앱은 이 서버의 인증서 `GongbangAssistant/roundup-server.cer`만 신뢰합니다. 서버 인증서를 바꾸면 이 파일도 함께 바꿔서 앱을 다시 빌드해야 합니다.
 
