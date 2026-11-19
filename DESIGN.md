@@ -46,7 +46,7 @@ Ranked jobs:
 - Primary action: pick a day and read its schedule.
 - Priorities: 1) the week strip (default) or the month calendar, 2) the selected day's schedule as a timeline with done toggles.
 - Left out on purpose: a custom time grid.
-- Layout: List with card sections; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; dates carry no markers, dots, or legend; the agenda is a single-color timeline that names each kind in text; each row opens the same detail screen the other tabs use; classes, tasks, and owner events have a done toggle that strikes the title through in place, while orders and deliveries show their status and change through their detail actions; days without events show an empty state with an add action. Anti-patterns: anything under dates, per-kind colors or symbols, a chevron on a row that does not navigate.
+- Layout: List with card sections; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; dates carry no markers, dots, or legend; the agenda is a timeline whose nodes carry each kind's color and symbol, turning gray with a checkmark when done; each row opens the same detail screen the other tabs use; classes, tasks, and owner events have a done toggle that strikes the title through in place, while orders and deliveries show their status and change through their detail actions; days without events show an empty state with an add action. Anti-patterns: anything under dates, a chevron on a row that does not navigate.
 
 ### 운영
 - Primary action: open the first item under 먼저 확인해주세요.

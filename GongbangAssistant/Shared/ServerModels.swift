@@ -254,8 +254,7 @@ struct AgendaItem: Decodable, Identifiable, Hashable {
 
     /// Calendar rows reuse the today row, so both act on the same database rows.
     var task: TaskItem {
-        TaskItem(id: targetId, target: target, time: time, title: title,
-                 detail: detail.isEmpty ? kind.label : "\(kind.label) · \(detail)",
+        TaskItem(id: targetId, target: target, time: time, title: title, detail: detail,
                  status: status, isDone: isDone, revision: revision)
     }
 }

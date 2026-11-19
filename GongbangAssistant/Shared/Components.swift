@@ -187,7 +187,7 @@ struct TaskRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
     @ScaledMetric(relativeTo: .body) private var iconSize = 36
-    @ScaledMetric(relativeTo: .body) private var nodeSize = 12
+    @ScaledMetric(relativeTo: .body) private var nodeSize = 24
 
     private let infoSpacing: CGFloat = 12
     private let railWidth: CGFloat = 2
@@ -253,10 +253,11 @@ struct TaskRow: View {
     }
 
     private var node: some View {
-        Circle()
-            .fill(isDone ? AnyShapeStyle(.secondary) : AnyShapeStyle(AppPalette.card))
-            .overlay { Circle().strokeBorder(.secondary, lineWidth: 2) }
+        Image(systemName: isDone ? "checkmark" : kind.symbol)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
             .frame(width: nodeSize, height: nodeSize)
+            .background(isDone ? AnyShapeStyle(.gray) : AnyShapeStyle(kind.color), in: .circle)
             .accessibilityHidden(true)
     }
 
