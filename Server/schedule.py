@@ -31,6 +31,7 @@ class AgendaItem(ApiModel):
     title: str
     kind: EventKind
     detail: str
+    is_done: bool | None = None
 
 
 class DayEvent(ApiModel):
@@ -85,6 +86,7 @@ async def session_items(db: AsyncSession, begin: datetime, end: datetime) -> lis
                 title=row.title,
                 kind="booking",
                 detail=f"예약 {people(seats)} · {row.duration_minutes}분",
+                is_done=row.status == "completed",
             ),
         )
         for row, seats in rows.tuples()
@@ -176,6 +178,7 @@ async def owner_items(db: AsyncSession, begin: datetime, end: datetime) -> list[
                 title=task.title,
                 kind="order" if task.kind == "material" else "todo",
                 detail=" · ".join(part for part in (task.vendor, task.detail) if part),
+                is_done=task.status == "done",
             ),
         )
         for task in tasks

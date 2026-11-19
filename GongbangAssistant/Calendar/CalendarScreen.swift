@@ -36,12 +36,6 @@ struct CalendarScreen: View {
             .navigationSubtitle(subtitle)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("오늘") {
-                        selectedDay = calendar.startOfDay(for: .now)
-                    }
-                }
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                ToolbarItem(placement: .topBarTrailing) {
                     Button("일정 추가", systemImage: "plus") {
                         isAddingEvent = true
                     }
@@ -51,6 +45,7 @@ struct CalendarScreen: View {
             .sheet(isPresented: $isAddingEvent) {
                 EventFormSheet(day: selectedDay)
             }
+            .appDestinations()
         }
         .task(id: loadKey) { await load() }
     }
@@ -74,8 +69,9 @@ struct CalendarScreen: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
             }
+            .listSectionSeparator(.hidden)
 
-            Section {
+            CardSection {
                 switch mode {
                 case .week:
                     WeekStrip(selectedDay: $selectedDay, days: days)
@@ -89,17 +85,27 @@ struct CalendarScreen: View {
                 if mode == .week {
                     weekHeader
                 }
-            } footer: {
-                EventLegend()
             }
 
-            Section {
+            CardSection {
                 agenda(days[selectedDay.dayKey])
             } header: {
-                SectionHeader(title: dayTitle(days[selectedDay.dayKey]))
+                HStack(alignment: .firstTextBaseline) {
+                    SectionHeader(title: dayTitle(days[selectedDay.dayKey]))
+                    if !calendar.isDateInToday(selectedDay) {
+                        Spacer(minLength: 8)
+                        Button("오늘로") {
+                            selectedDay = calendar.startOfDay(for: .now)
+                        }
+                        .font(.subheadline)
+                        .textCase(nil)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("calendar.today")
+                    }
+                }
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList(separators: .hidden)
         .refreshable { await load() }
     }
 
@@ -128,7 +134,13 @@ struct CalendarScreen: View {
     @ViewBuilder
     private func agenda(_ day: CalendarDay?) -> some View {
         if let day {
-            ForEach(day.items) { AgendaRow(item: $0) }
+            ForEach(day.items) { item in
+                if let route = item.route {
+                    NavigationLink(value: route) { AgendaRow(item: item) }
+                } else {
+                    AgendaRow(item: item)
+                }
+            }
         } else {
             ContentUnavailableView {
                 Label("이 날은 일정이 없어요", systemImage: "calendar")
@@ -160,7 +172,6 @@ struct WeekStrip: View {
     @Binding var selectedDay: Date
     let days: [String: CalendarDay]
     @ScaledMetric(relativeTo: .body) private var circleSize = 36
-    @ScaledMetric(relativeTo: .caption2) private var symbolSize = 8
 
     private let calendar = Calendar.workshop
     private let weekdays = ["월", "화", "수", "목", "금", "토", "일"]
@@ -192,14 +203,9 @@ struct WeekStrip: View {
                                     Circle().fill(.tint)
                                 }
                             }
-                        HStack(spacing: 1) {
-                            ForEach(events, id: \.self) { event in
-                                Image(systemName: event.kind.symbol)
-                                    .font(.system(size: symbolSize, weight: .semibold))
-                                    .foregroundStyle(event.kind.color)
-                            }
-                        }
-                        .frame(minHeight: symbolSize + 2)
+                        Circle()
+                            .fill(events.isEmpty ? Color.clear : Color.secondary)
+                            .frame(width: 6, height: 6)
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(.rect)
@@ -215,37 +221,5 @@ struct WeekStrip: View {
     private func accessibilityLabel(date: Date, events: [DayEvent]) -> String {
         let summary = events.isEmpty ? "일정 없음" : events.map { "\($0.kind.label) \($0.display)" }.joined(separator: ", ")
         return "\(date.koreanDay()), \(summary)"
-    }
-}
-
-struct EventLegend: View {
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) { items }
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                GridRow {
-                    item(.booking)
-                    item(.order)
-                }
-                GridRow {
-                    item(.delivery)
-                    item(.todo)
-                }
-            }
-        }
-        .font(.subheadline)
-    }
-
-    private var items: some View {
-        ForEach(EventKind.allCases) { item($0) }
-    }
-
-    private func item(_ kind: EventKind) -> some View {
-        Label {
-            Text(kind.label)
-        } icon: {
-            Image(systemName: kind.symbol)
-                .foregroundStyle(kind.color)
-        }
     }
 }

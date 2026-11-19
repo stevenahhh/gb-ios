@@ -19,6 +19,8 @@ from bookings import router as booking_router
 from channels import router as channel_router
 from common import Now, Session
 from database import database_lifespan, schema_is_current
+from details import router as detail_router
+from drafts import router as draft_router
 from inquiries import router as inquiry_router
 from observability import RequestBoundary, configure_logging
 from operations import router as operations_router
@@ -29,6 +31,7 @@ from schedule import router as schedule_router
 from shipments import router as shipment_router
 from tasks import router as task_router
 from today import router as today_router
+from undo import router as undo_router
 from workshop import router as workshop_router
 
 
@@ -52,6 +55,7 @@ app.add_middleware(RequestBoundary)
 for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
+    detail_router, draft_router, undo_router,
 ):
     app.include_router(router)
 

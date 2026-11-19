@@ -34,30 +34,55 @@ final class ActionFlowUITests: RoundupUITestCase {
     }
 
     @MainActor
-    func testContentReviewIsRecorded() throws {
-        let app = try launch()
-        openArea("channels", in: app)
-        app.segmentedControls.buttons["콘텐츠"].tap()
-        let review = app.buttons["action.draft-keyring-result"]
-        XCTAssertTrue(scrollTo(review, in: app))
-        review.tap()
-        let save = app.buttons["form.save"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
-        wait(for: [expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: save)], timeout: 10)
-        save.tap()
-        XCTAssertTrue(review.waitForNonExistence(timeout: 10))
+    private func approveThenReopenDraft(_ row: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let approve = app.buttons["draft.approve"]
+        XCTAssertTrue(approve.waitForExistence(timeout: 10))
+        approve.tap()
+        let reopen = app.buttons["draft.reopen"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 10))
+        reopen.tap()
+        XCTAssertTrue(app.buttons["draft.approve"].waitForExistence(timeout: 10))
     }
 
     @MainActor
-    func testRecommendationAcknowledgementIsRecorded() throws {
+    func testContentDraftCanBeApprovedAndUndone() throws {
+        let app = try launch()
+        openArea("channels", in: app)
+        app.segmentedControls.buttons["콘텐츠"].tap()
+        approveThenReopenDraft(app.buttons["draft.content.draft-keyring-result"], in: app)
+    }
+
+    @MainActor
+    func testRecommendationDraftCanBeApprovedAndUndone() throws {
         let app = try launch()
         let segment = app.segmentedControls.buttons["비서 추천"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10))
         segment.tap()
-        let acknowledge = app.buttons["action.recommendation-market"]
-        XCTAssertTrue(scrollTo(acknowledge, in: app))
-        acknowledge.tap()
-        XCTAssertTrue(acknowledge.waitForNonExistence(timeout: 10))
+        approveThenReopenDraft(app.buttons["draft.recommendation.recommendation-market"], in: app)
+    }
+
+    @MainActor
+    func testInquiryDecisionCanBeUndone() throws {
+        let app = try launch()
+        approveThenReopenDraft(app.buttons["inquiry.inquiry-change"], in: app)
+    }
+
+    @MainActor
+    func testDepositConfirmationCanBeUndoneFromBookingDetail() throws {
+        let app = try launch()
+        openArea("bookings", in: app)
+        let row = app.buttons["booking.row.booking-minwoo"]
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let confirm = app.buttons["step.do.예약금"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        let undo = app.buttons["step.undo.예약금"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        undo.tap()
+        XCTAssertTrue(app.buttons["step.do.예약금"].waitForExistence(timeout: 10))
     }
 
     @MainActor

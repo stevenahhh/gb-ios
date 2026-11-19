@@ -75,6 +75,11 @@ def invalid_transition() -> HTTPException:
     return HTTPException(409, "action is not valid for the current state")
 
 
+def can_reopen(*, is_decided: bool) -> bool:
+    """Allow decided work to reopen; a future sent/published check belongs here."""
+    return is_decided
+
+
 def required_text(value: str) -> str:
     """Trim user text and reject blank values."""
     text = value.strip()

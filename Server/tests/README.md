@@ -21,3 +21,10 @@ The request clock is fixed through a FastAPI dependency override so date-derived
 numbers are deterministic. HTTPX's in-process ASGI transport exercises the real
 application and PostgreSQL. Only the outbound HyperCLOVA call is replaced, in the
 test that inspects the prompt built from database rows.
+
+`test_undo.py` covers revision-checked reversals, state restoration, and shared
+attention totals. `test_drafts.py` covers local edits, decisions, linked
+recommendations, and reopening. `test_details.py` covers the additive screen
+contracts and custom operation periods. Migration tests exercise both directions
+of revision `0003`, including preserving rejected text on downgrade; API-key
+contract tests cover the new routes without a database.

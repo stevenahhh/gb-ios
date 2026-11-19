@@ -36,6 +36,7 @@ const stroke: Record<string, string> = {
   hammer: "M13.5 4.5l6 6-2.5 2.5-6-6z M11 7 3.5 14.5l3 3L14 10",
   infoCircle: "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17z M12 11v5.5 M12 8v.1",
   uturn: "M9 14 4.5 9.5 9 5 M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-2",
+  flag: "M6 21V4 M6 4.5h12l-3 4 3 4H6",
   checkmark: "M5 12.5l4.5 4.5L19 7.5",
 };
 

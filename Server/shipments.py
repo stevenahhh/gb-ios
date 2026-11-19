@@ -21,7 +21,7 @@ from common import (
     matches,
     required_text,
 )
-from contracts import Card, CardAction, Page, Status
+from contracts import Card, CardAction, CardUndo, Page, Status
 from display import local, masked, relative_day, relative_moment
 from metrics import UNSHIPPED, delivery_metrics, load_counts
 from models import CustomerRow, OrderRow, ShipmentRow
@@ -95,6 +95,7 @@ def shipment_card(record: ShipmentRecord, today: date) -> Card:
     return Card(
         id=shipment.id, kind="shipment", title=order.product_name, status=status, lines=lines,
         deadline=deadline, tag=tag, revision=shipment.revision, action=action,
+        undo=CardUndo(path=f"/shipments/{shipment.id}/undo") if shipment.status != "packing" else None,
     )
 
 

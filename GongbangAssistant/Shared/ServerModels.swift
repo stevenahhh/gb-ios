@@ -54,8 +54,44 @@ struct CardAction: Decodable, Hashable {
     let label: String
 }
 
+enum CardKind: String, Decodable, Hashable {
+    case booking
+    case order
+    case shipment
+    case channel
+    case content
+    case task
+    case recommendation
+}
+
+struct UndoAction: Decodable, Hashable {
+    let label: String
+    let path: String
+}
+
+enum DraftKind: String, Decodable, Hashable {
+    case content
+    case recommendation
+}
+
+struct DraftReference: Decodable, Hashable {
+    let kind: DraftKind
+    let id: String
+    let status: ReplyStatus
+    let preview: String
+}
+
+struct BookingSummary: Decodable, Hashable {
+    let day: String
+    let dayTitle: String
+    let time: String
+    let customer: String
+    let people: Int
+}
+
 struct WorkItem: Decodable, Identifiable, Hashable {
     let id: String
+    let kind: CardKind
     let title: String
     let status: Status?
     let lines: [String]
@@ -63,6 +99,63 @@ struct WorkItem: Decodable, Identifiable, Hashable {
     let tag: String?
     let revision: Int
     let action: CardAction?
+    let undo: UndoAction?
+    let draft: DraftReference?
+    let booking: BookingSummary?
+
+    var route: AppRoute? {
+        switch kind {
+        case .booking: .booking(id)
+        case .order, .shipment, .task: .work(kind, id)
+        case .channel, .content, .recommendation: nil
+        }
+    }
+}
+
+struct BookingDetail: Decodable {
+    struct Session: Decodable {
+        let id: String
+        let isDone: Bool
+        let revision: Int
+    }
+
+    let id: String
+    let title: String
+    let status: Status
+    let schedule: String
+    let customer: String
+    let people: Int
+    let minutes: Int
+    let source: String
+    let seatNote: String?
+    let depositDisplay: String
+    let depositConfirmed: Bool
+    let depositDeadline: String?
+    let revision: Int
+    let action: CardAction?
+    let undo: UndoAction?
+    let session: Session
+}
+
+struct ClassSessionDetail: Decodable {
+    let id: String
+    let title: String
+    let schedule: String
+    let isDone: Bool
+    let revision: Int
+    let bookingIds: [String]
+}
+
+struct AssistantDraftDetail: Decodable {
+    let id: String
+    let kind: DraftKind
+    let title: String
+    let lines: [String]
+    let text: String
+    let status: ReplyStatus
+    let revision: Int
+    let afterApproval: String
+    let canReopen: Bool
 }
 
 enum TaskTarget: String, Decodable, Hashable {
@@ -80,6 +173,14 @@ struct TaskItem: Decodable, Identifiable, Hashable {
     let status: Status?
     let isDone: Bool?
     let revision: Int
+
+    var route: AppRoute {
+        switch target {
+        case .session: .classSession(id)
+        case .task: .work(.task, id)
+        case .shipment: .work(.shipment, id)
+        }
+    }
 }
 
 struct TaskGroup: Decodable, Identifiable, Hashable {
@@ -140,6 +241,19 @@ struct AgendaItem: Decodable, Identifiable, Hashable {
     let title: String
     let kind: EventKind
     let detail: String
+    let isDone: Bool?
+
+    var route: AppRoute? {
+        let parts = id.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        switch parts[0] {
+        case "session": return .classSession(parts[1])
+        case "order": return .work(.order, parts[1])
+        case "shipment": return .work(.shipment, parts[1])
+        case "task": return .work(.task, parts[1])
+        default: return nil
+        }
+    }
 }
 
 struct CalendarDay: Decodable, Hashable {
@@ -268,15 +382,6 @@ struct SessionOption: Decodable, Identifiable, Hashable {
     let schedule: String
     let remainingSeats: Int
     let deposit: String
-}
-
-struct ContentDetail: Decodable {
-    let id: String
-    let title: String
-    let channel: String
-    let body: String
-    let isReviewed: Bool
-    let revision: Int
 }
 
 extension Calendar {

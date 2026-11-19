@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 import models
 from database import Base
-from tests.conftest import downgrade, upgrade
+from seed import apply_seed
+from tests.conftest import NOW, downgrade, upgrade
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
 BASELINE: Final = Path(__file__).resolve().parent.parent / "migrations/versions/0001_inquiries_baseline.py"
@@ -117,7 +118,43 @@ async def test_readiness_requires_the_release_schema_version(
     assert (await client.get("/health/ready")).status_code == 503
     await upgrade(empty_database, "0001")
     assert (await client.get("/health/ready")).status_code == 503
+    await upgrade(empty_database, "0002")
+    assert (await client.get("/health/ready")).status_code == 503
     await upgrade(empty_database)
     response = await client.get("/health/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+
+
+async def test_rejected_status_upgrade_and_downgrade_preserve_text(empty_database: AsyncEngine) -> None:
+    await upgrade(empty_database, "0002")
+    async with empty_database.begin() as connection:
+        _ = await apply_seed(connection, NOW.date())
+    await upgrade(empty_database)
+    async with empty_database.begin() as connection:
+        _ = await connection.execute(text(
+            "UPDATE content_drafts SET status = 'rejected', body = '보존할 글', revision = 3",
+        ))
+        _ = await connection.execute(text(
+            "UPDATE assistant_recommendations SET status = 'rejected', body = '보존할 추천', revision = 4",
+        ))
+    await downgrade(empty_database, "0002")
+    async with empty_database.connect() as connection:
+        drafts = (await connection.execute(text(
+            "SELECT status, body, revision FROM content_drafts",
+        ))).all()
+        recommendations = (await connection.execute(text(
+            "SELECT status, body, revision FROM assistant_recommendations",
+        ))).all()
+        assert drafts == [("draft", "보존할 글", 3)] * 2
+        assert recommendations == [("open", "보존할 추천", 4)] * 3
+    async with empty_database.begin() as connection:
+        with pytest.raises(SQLAlchemyError):
+            _ = await connection.execute(text("UPDATE content_drafts SET status = 'rejected'"))
+    async with empty_database.begin() as connection:
+        with pytest.raises(SQLAlchemyError):
+            _ = await connection.execute(text("UPDATE assistant_recommendations SET status = 'rejected'"))
+    await upgrade(empty_database)
+    async with empty_database.begin() as connection:
+        _ = await connection.execute(text("UPDATE content_drafts SET status = 'rejected'"))
+        _ = await connection.execute(text("UPDATE assistant_recommendations SET status = 'rejected'"))

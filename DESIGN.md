@@ -15,10 +15,10 @@ Ranked jobs:
 
 ## Principles
 
-- Native components only: TabView with Tab, NavigationStack, List insetGrouped, Picker, Gauge, UICalendarView, searchable, ContentUnavailableView. No custom-drawn bars.
+- Native components only: TabView with Tab, NavigationStack, List with per-row card backgrounds (`CardSection`, so dark cards can use a smaller radius), Picker, Gauge, UICalendarView, searchable, ContentUnavailableView. No custom-drawn bars.
 - One prominent button per screen (borderedProminent). Every other state-changing action is bordered. Actions that only open something become whole-row navigation links.
 - Liquid Glass stays in the control layer: tab bar, toolbars, the assistant accessory, and the assistant composer. Content rows never use glass button styles.
-- Status never relies on color alone. Each status badge pairs a symbol with text. Status tones use orange (needs action), green (done), and gray (in progress or neutral). Event kinds use a different set (blue, brown, teal, purple) with their own symbols, so one color never means two things.
+- Status never relies on color alone. Each status badge pairs a symbol with text. Status tones use orange (needs action), green (done), and gray (in progress or neutral). Operations and Calendar use no per-category color, leading icon, or row separator; event kinds are written as text. Today keeps its delivery and material tiles.
 - Dynamic Type everywhere: scaled metrics for fixed widths, stacked layouts and menu pickers at accessibility sizes.
 - Text size floor: body text uses body (17pt) and secondary text uses subheadline (15pt) or larger, including status badges, metric labels, row details, legends, and kind tags. System chrome keeps Apple's own styles: navigation subtitles, section headers, tab labels, and the footnote-sized assistant disclaimer.
 - Korean text breaks only between words. Titles go through `Text(keepingWords:)`, which joins the characters inside each word with U+2060 and keeps the original string as the accessibility label. Detail lines go through `PhraseText`, a flow layout of plain Text pieces: a line with ` · ` separators wraps only at the separators, any other line wraps only between words.
@@ -44,15 +44,15 @@ Ranked jobs:
 
 ### 캘린더
 - Primary action: pick a day and read its schedule.
-- Priorities: 1) the week strip (default) or the month calendar, 2) the selected day's schedule, 3) the legend.
+- Priorities: 1) the week strip (default) or the month calendar, 2) the selected day's schedule.
 - Left out on purpose: a custom time grid.
-- Layout: List insetGrouped; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; days with several kinds show one small symbol per kind; each marker count equals that day's agenda rows; days without events show an empty state with an add action. Anti-patterns: color-only event markers, a dot on a day whose schedule is empty, a chevron on a row that does not navigate.
+- Layout: List insetGrouped; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; days with events show one single-color dot, and the agenda names each kind in text; days without events show an empty state with an add action. Anti-patterns: per-kind colors or symbols under dates, a dot on a day whose schedule is empty, a chevron on a row that does not navigate.
 
 ### 운영
 - Primary action: open the first item under 먼저 확인해주세요.
-- Priorities: 1) 먼저 확인해주세요 with three tappable counts, 2) the monthly summary (labelled ring, four numbers, labelled month-over-month pair, period menu with a checkmark), 3) the four work areas, then 기회.
+- Priorities: 1) 먼저 확인해주세요 with three tappable counts, 2) the monthly summary (labelled ring, four numbers, labelled comparison pair, a period button that opens a start-to-end calendar), 3) the four work areas, then 기회.
 - Left out on purpose: charts.
-- Layout: List insetGrouped; scroll owner is the List; rows push OperationAreaView with an optional preset filter. Anti-patterns: a non-tappable urgent summary, a period menu that looks like plain text.
+- Layout: List insetGrouped; scroll owner is the List; rows push OperationAreaView with an optional preset filter. Anti-patterns: a non-tappable urgent summary, a period control that looks like plain text.
 
 ### 예약 관리, 주문 관리, 배송 관리, SNS·스토어 관리
 - Primary action: the first state-changing action in the filtered list (for example 입금 확인하기).

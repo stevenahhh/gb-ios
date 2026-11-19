@@ -73,6 +73,66 @@ final class InquiryPersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testReopenedDecisionPersistsAndCanBeDecidedAgainWithItsNewRevision() async throws {
+        let server = MemoryInquiryRepository()
+        let store = InquiryStore(repository: server)
+        await store.loadInquiries()
+        try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
+            decision: .approve, draft: InquiryDraft(draft: "승인한 답변", expectedRevision: 0)))
+
+        try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 1))
+
+        let restarted = InquiryStore(repository: server)
+        await restarted.loadInquiries()
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.status, .pending)
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.draft, "승인한 답변")
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.revision, 2)
+        XCTAssertEqual(restarted.pendingCount, 3)
+        try await restarted.decide(id: "inquiry-clay", decision: InquiryDecision(
+            decision: .reject, draft: InquiryDraft(draft: "다시 판단", expectedRevision: 2)))
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.status, .rejected)
+    }
+
+    @MainActor
+    func testReopenRefusesPendingAndStaleInquiriesWithoutChangingThem() async throws {
+        let server = MemoryInquiryRepository()
+        let store = InquiryStore(repository: server)
+        await store.loadInquiries()
+        do {
+            try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 0))
+            XCTFail("Pending inquiry was reopened")
+        } catch { XCTAssertEqual(error as? ReplyError, .notDecided) }
+        try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
+            decision: .approve, draft: InquiryDraft(draft: "답변", expectedRevision: 0)))
+
+        do {
+            try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 0))
+            XCTFail("Stale reopen succeeded")
+        } catch { XCTAssertTrue(error is InquiryPersistenceError) }
+
+        XCTAssertEqual(server.records.first { $0.id == "inquiry-clay" }?.status, .approved)
+        XCTAssertFalse(store.requiresInquiryReload)
+    }
+
+    @MainActor
+    func testFailedReopenKeepsDecisionAndRequiresReconciliation() async throws {
+        let server = MemoryInquiryRepository()
+        let store = InquiryStore(repository: server)
+        await store.loadInquiries()
+        try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
+            decision: .approve, draft: InquiryDraft(draft: "답변", expectedRevision: 0)))
+        server.writeFails = true
+
+        do {
+            try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 1))
+            XCTFail("Offline reopen succeeded")
+        } catch { XCTAssertTrue(store.requiresInquiryReload) }
+
+        XCTAssertEqual(store.inquiry(id: "inquiry-clay")?.status, .approved)
+        XCTAssertEqual(store.pendingCount, 2)
+    }
+
+    @MainActor
     func testBlankApprovalAndStaleEditorRevisionDoNotChangeServerState() async throws {
         let server = MemoryInquiryRepository()
         let store = InquiryStore(repository: server)

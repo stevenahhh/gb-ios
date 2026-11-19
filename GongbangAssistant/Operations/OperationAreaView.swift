@@ -167,8 +167,13 @@ struct OperationAreaView: View {
         .navigationTitle(area.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                toolbarAction
+            if area == .bookings {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("예약 등록", systemImage: "plus") {
+                        isAddingBooking = true
+                    }
+                    .accessibilityIdentifier("booking.add")
+                }
             }
         }
         .sheet(isPresented: $isAddingBooking) {
@@ -219,7 +224,7 @@ struct OperationAreaView: View {
         let inquiries = (page.inquiries ?? []) + extraInquiries
         let primaryID = items.primaryActionID
         return List {
-            Section {
+            CardSection {
                 MetricStrip(metrics: page.metrics)
             }
 
@@ -232,30 +237,90 @@ struct OperationAreaView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
             }
+            .listSectionSeparator(.hidden)
 
-            Section(area.listTitle) {
-                if items.isEmpty && inquiries.isEmpty {
-                    emptyView
-                } else {
-                    ForEach(inquiries) { InquiryRow(inquiry: $0) }
+            if items.isEmpty && inquiries.isEmpty {
+                CardSection(area.listTitle) { emptyView }
+            } else if area == .bookings {
+                ForEach(bookingDays(items), id: \.day) { group in
+                    CardSection("\(group.title) · \(group.items.count)건") {
+                        ForEach(group.items) { item in
+                            if let summary = item.booking {
+                                BookingListRow(item: item, summary: summary)
+                            }
+                        }
+                    }
+                }
+                moreSection
+            } else {
+                CardSection {
+                    ForEach(inquiries) { AssistantDraftRow(inquiry: $0) }
                     ForEach(items) { item in
                         WorkCard(item: item, isPrimary: item.id == primaryID)
                     }
-                    if hasMore {
-                        Button {
-                            Task { await loadMore() }
-                        } label: {
-                            if isLoadingMore { ProgressView() } else { Text("더 보기") }
-                        }
-                        .disabled(isLoadingMore)
-                        .accessibilityIdentifier("area.more")
-                    }
+                    moreButton
+                } header: {
+                    listHeader
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .cardList(separators: .hidden)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: area.searchPrompt)
         .refreshable { await load() }
+    }
+
+    private func bookingDays(_ items: [WorkItem]) -> [(day: String, title: String, items: [WorkItem])] {
+        var groups: [(day: String, title: String, items: [WorkItem])] = []
+        for item in items {
+            guard let summary = item.booking else { continue }
+            if let index = groups.firstIndex(where: { $0.day == summary.day }) {
+                groups[index].items.append(item)
+            } else {
+                groups.append((summary.day, summary.dayTitle, [item]))
+            }
+        }
+        return groups
+    }
+
+    @ViewBuilder
+    private var moreSection: some View {
+        if hasMore {
+            CardSection { moreButton }
+        }
+    }
+
+    @ViewBuilder
+    private var moreButton: some View {
+        if hasMore {
+            Button {
+                Task { await loadMore() }
+            } label: {
+                if isLoadingMore { ProgressView() } else { Text("더 보기") }
+            }
+            .disabled(isLoadingMore)
+            .accessibilityIdentifier("area.more")
+        }
+    }
+
+    private var listHeader: some View {
+        HStack {
+            Text(area.listTitle)
+            if !area.sortOptions.isEmpty {
+                Spacer()
+                Menu {
+                    Picker("정렬", selection: $sort) {
+                        ForEach(area.sortOptions, id: \.key) { Text($0.label).tag(Optional($0.key)) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Text(area.sortOptions.first { $0.key == sort }?.label ?? "정렬")
+                        .font(.subheadline)
+                        .frame(minHeight: 44)
+                }
+                .textCase(nil)
+                .accessibilityIdentifier("area.sort")
+            }
+        }
     }
 
     private var noDataView: some View {
@@ -296,28 +361,6 @@ struct OperationAreaView: View {
                     .controlSize(.large)
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var toolbarAction: some View {
-        switch area {
-        case .bookings:
-            Button("예약 등록", systemImage: "plus") {
-                isAddingBooking = true
-            }
-            .accessibilityIdentifier("booking.add")
-        case .orders, .deliveries:
-            Menu {
-                Picker("정렬", selection: $sort) {
-                    ForEach(area.sortOptions, id: \.key) { Text($0.label).tag(Optional($0.key)) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Label("정렬", systemImage: "arrow.up.arrow.down")
-            }
-        case .channels:
-            EmptyView()
         }
     }
 }
