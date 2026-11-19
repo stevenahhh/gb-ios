@@ -18,7 +18,9 @@ type DraftAction =
   | { readonly type: "draft/buffer"; readonly id: DraftId; readonly value: string }
   | { readonly type: "draft/cancel"; readonly id: DraftId }
   | { readonly type: "draft/save"; readonly id: DraftId }
-  | { readonly type: "draft/rewrite"; readonly id: DraftId };
+  | { readonly type: "draft/rewrite"; readonly id: DraftId }
+  | { readonly type: "inquiry/text"; readonly id: DraftId; readonly value: string }
+  | { readonly type: "inquiry/complete"; readonly id: DraftId };
 
 export type Action =
   | { readonly type: "booking/attended"; readonly id: BookingId; readonly value: boolean }
@@ -27,6 +29,7 @@ export type Action =
   | DraftAction;
 
 export const blankApproveError = "빈 내용은 승인할 수 없어요. 내용을 쓰거나 반려해 주세요.";
+export const blankCompleteError = "빈 답변으로는 완료할 수 없어요. 답변 내용을 입력해 주세요.";
 
 // 되돌리기는 발송·게시 전까지만 허용한다. 실제 발송/게시가 생기면 그 확인을 여기에 추가한다.
 export function canReopen(draft: Draft): boolean {
@@ -56,6 +59,11 @@ function reduceDraft(draft: Draft, action: DraftAction): Draft {
       const [next, ...rest] = draft.alternates;
       return next === undefined ? draft : { ...draft, text: next, alternates: [...rest, draft.text], edited: false, error: undefined };
     }
+    case "inquiry/text":
+      return { ...draft, text: action.value, edited: true, error: undefined };
+    case "inquiry/complete":
+      if (!draft.text.trim()) return { ...draft, error: blankCompleteError };
+      return { ...draft, text: draft.text.trim(), status: "approved", edited: false, error: undefined };
     default:
       return assertNever(action);
   }
@@ -78,7 +86,9 @@ export function reduce(state: State, action: Action): State {
     case "draft/buffer":
     case "draft/cancel":
     case "draft/save":
-    case "draft/rewrite": {
+    case "draft/rewrite":
+    case "inquiry/text":
+    case "inquiry/complete": {
       const draft = state.drafts[action.id];
       const next = reduceDraft(draft, action);
       return next === draft ? state : { ...state, drafts: { ...state.drafts, [action.id]: next } };
@@ -97,6 +107,9 @@ export const bookingStatus = (b: Booking): Status =>
 export const bookingTag = (b: Booking) => (b.deposit ? "확정" : "예약금 대기");
 
 export function draftStatus(d: Draft): Status {
+  if (d.kind === "inquiry") {
+    return d.status === "approved" ? { text: "답변 완료", tone: "done" } : { text: "답변 대기", tone: "attention" };
+  }
   switch (d.status) {
     case "pending": return { text: "검토 대기", tone: "attention" };
     case "approved": return { text: "승인함", tone: "done" };

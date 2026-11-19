@@ -48,88 +48,26 @@ final class InquiryPersistenceTests: XCTestCase {
     }
 
     @MainActor
-    func testRejectionOfBlankDraftPersistsAndRefusesSubsequentEditsAndDecisions() async throws {
+    func testCompletedReplyStaysEditableButNeverBlank() async throws {
         let server = MemoryInquiryRepository()
         let store = InquiryStore(repository: server)
         await store.loadInquiries()
         try await store.decide(id: "inquiry-group", decision: InquiryDecision(
-            decision: .reject, draft: InquiryDraft(draft: " \n", expectedRevision: 0)))
-        XCTAssertEqual(store.pendingCount, 2)
+            decision: .approve, draft: InquiryDraft(draft: "첫 답변", expectedRevision: 0)))
+        try await store.saveDraft(id: "inquiry-group", draft: InquiryDraft(draft: "고친 답변", expectedRevision: 1))
+        do {
+            try await store.saveDraft(id: "inquiry-group", draft: InquiryDraft(draft: " \n", expectedRevision: 2))
+            XCTFail("Completed reply accepted a blank edit")
+        } catch { XCTAssertEqual(error as? ReplyError, .emptyDraft) }
+        try await store.decide(id: "inquiry-group", decision: InquiryDecision(
+            decision: .approve, draft: InquiryDraft(draft: " 다시 완료 ", expectedRevision: 2)))
+
         let restarted = InquiryStore(repository: server)
         await restarted.loadInquiries()
-
-        XCTAssertEqual(restarted.inquiry(id: "inquiry-group")?.status, .rejected)
-        XCTAssertEqual(restarted.inquiry(id: "inquiry-group")?.draft, "")
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-group")?.status, .approved)
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-group")?.draft, "다시 완료")
+        XCTAssertEqual(restarted.inquiry(id: "inquiry-group")?.revision, 3)
         XCTAssertEqual(restarted.pendingCount, 2)
-        do {
-            try await restarted.saveDraft(id: "inquiry-group", draft: InquiryDraft(draft: "덮어쓰기", expectedRevision: 1))
-            XCTFail("Completed inquiry accepted an edit")
-        } catch { XCTAssertEqual(error as? ReplyError, .alreadyDecided) }
-        do {
-            try await restarted.decide(id: "inquiry-group", decision: InquiryDecision(
-                decision: .approve, draft: InquiryDraft(draft: "반복 결정", expectedRevision: 1)))
-            XCTFail("Completed inquiry accepted another decision")
-        } catch { XCTAssertEqual(error as? ReplyError, .alreadyDecided) }
-    }
-
-    @MainActor
-    func testReopenedDecisionPersistsAndCanBeDecidedAgainWithItsNewRevision() async throws {
-        let server = MemoryInquiryRepository()
-        let store = InquiryStore(repository: server)
-        await store.loadInquiries()
-        try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
-            decision: .approve, draft: InquiryDraft(draft: "승인한 답변", expectedRevision: 0)))
-
-        try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 1))
-
-        let restarted = InquiryStore(repository: server)
-        await restarted.loadInquiries()
-        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.status, .pending)
-        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.draft, "승인한 답변")
-        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.revision, 2)
-        XCTAssertEqual(restarted.pendingCount, 3)
-        try await restarted.decide(id: "inquiry-clay", decision: InquiryDecision(
-            decision: .reject, draft: InquiryDraft(draft: "다시 판단", expectedRevision: 2)))
-        XCTAssertEqual(restarted.inquiry(id: "inquiry-clay")?.status, .rejected)
-    }
-
-    @MainActor
-    func testReopenRefusesPendingAndStaleInquiriesWithoutChangingThem() async throws {
-        let server = MemoryInquiryRepository()
-        let store = InquiryStore(repository: server)
-        await store.loadInquiries()
-        do {
-            try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 0))
-            XCTFail("Pending inquiry was reopened")
-        } catch { XCTAssertEqual(error as? ReplyError, .notDecided) }
-        try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
-            decision: .approve, draft: InquiryDraft(draft: "답변", expectedRevision: 0)))
-
-        do {
-            try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 0))
-            XCTFail("Stale reopen succeeded")
-        } catch { XCTAssertTrue(error is InquiryPersistenceError) }
-
-        XCTAssertEqual(server.records.first { $0.id == "inquiry-clay" }?.status, .approved)
-        XCTAssertFalse(store.requiresInquiryReload)
-    }
-
-    @MainActor
-    func testFailedReopenKeepsDecisionAndRequiresReconciliation() async throws {
-        let server = MemoryInquiryRepository()
-        let store = InquiryStore(repository: server)
-        await store.loadInquiries()
-        try await store.decide(id: "inquiry-clay", decision: InquiryDecision(
-            decision: .approve, draft: InquiryDraft(draft: "답변", expectedRevision: 0)))
-        server.writeFails = true
-
-        do {
-            try await store.reopen(id: "inquiry-clay", request: InquiryReopen(expectedRevision: 1))
-            XCTFail("Offline reopen succeeded")
-        } catch { XCTAssertTrue(store.requiresInquiryReload) }
-
-        XCTAssertEqual(store.inquiry(id: "inquiry-clay")?.status, .approved)
-        XCTAssertEqual(store.pendingCount, 2)
     }
 
     @MainActor
@@ -234,7 +172,7 @@ final class InquiryPersistenceTests: XCTestCase {
                 server.records.removeFirst()
             } else {
                 _ = try await server.decide(id: "inquiry-clay", decision: InquiryDecision(
-                    decision: .reject, draft: InquiryDraft(draft: "다른 기기 결정", expectedRevision: 0)))
+                    decision: .approve, draft: InquiryDraft(draft: "다른 기기 결정", expectedRevision: 0)))
             }
 
             do {
@@ -245,15 +183,14 @@ final class InquiryPersistenceTests: XCTestCase {
             XCTAssertEqual(store.pendingCount, 3)
             await store.loadInquiries()
             XCTAssertEqual(store.pendingCount, 2)
-            XCTAssertEqual(store.inquiry(id: "inquiry-clay")?.status, missing ? nil : .rejected)
+            XCTAssertEqual(store.inquiry(id: "inquiry-clay")?.status, missing ? nil : .approved)
         }
     }
 
-    func testStatusCodesStayStableAndSeparateFromLabels() {
+    func testStatusCodesStayStable() {
         XCTAssertEqual(ReplyStatus.pending.rawValue, "pending")
         XCTAssertEqual(ReplyStatus.approved.rawValue, "approved")
         XCTAssertEqual(ReplyStatus.rejected.rawValue, "rejected")
-        XCTAssertEqual(ReplyStatus.pending.label, "승인 대기")
     }
 
     func testBackendJSONDecodesRevisionAndDecisionEncodesAtomicContract() throws {
@@ -264,9 +201,9 @@ final class InquiryPersistenceTests: XCTestCase {
         let inquiries = try JSONDecoder().decode([Inquiry].self, from: data)
         XCTAssertEqual(inquiries.first?.revision, 7)
         XCTAssertEqual(inquiries.first?.status, .approved)
-        let decision = InquiryDecision(decision: .reject, draft: InquiryDraft(draft: "현재 편집", expectedRevision: 7))
+        let decision = InquiryDecision(decision: .approve, draft: InquiryDraft(draft: "현재 편집", expectedRevision: 7))
         let encoded = try JSONEncoder().encode(decision)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: AnyHashable])
-        XCTAssertEqual(object, ["decision": "reject", "draft": "현재 편집", "expectedRevision": 7])
+        XCTAssertEqual(object, ["decision": "approve", "draft": "현재 편집", "expectedRevision": 7])
     }
 }

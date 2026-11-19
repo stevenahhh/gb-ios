@@ -25,14 +25,14 @@ private struct AssistantDraftLabel: View {
 struct AssistantDraftRow: View {
     let title: String
     let text: String
-    let status: ReplyStatus
+    let badge: Status
     let route: AppRoute
     let identifier: String
 
     init(title: String, reference: DraftReference) {
         self.title = title
         text = reference.preview
-        status = reference.status
+        badge = reference.status.badge
         route = .draft(reference.kind, reference.id)
         identifier = "draft.\(reference.kind.rawValue).\(reference.id)"
     }
@@ -40,7 +40,7 @@ struct AssistantDraftRow: View {
     init(inquiry: Inquiry) {
         title = inquiry.subject
         text = inquiry.draft
-        status = inquiry.status
+        badge = inquiry.badge
         route = .inquiry(inquiry.id)
         identifier = "inquiry.\(inquiry.id)"
     }
@@ -51,7 +51,7 @@ struct AssistantDraftRow: View {
                 HStack {
                     AssistantDraftLabel()
                     Spacer(minLength: 8)
-                    StatusBadge(status.badge)
+                    StatusBadge(badge)
                 }
                 Text(keepingWords: title)
                     .font(.headline)

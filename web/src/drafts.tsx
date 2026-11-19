@@ -4,7 +4,7 @@ import { canReopen, draftStatus, useStore } from "./store";
 import { Screen, Section, StatusBadge, UndoButton, useNav } from "./ui";
 
 const afterApproval: Record<DraftKind, string> = {
-  inquiry: "승인해도 아직 손님께 발송되지는 않아요.",
+  inquiry: "답변 완료를 눌러도 손님께 자동으로 보내지지는 않아요.",
   notice: "승인해도 아직 손님께 발송되지는 않아요.",
   promo: "승인해도 자동으로 게시되지 않아요. 게시는 직접 해 주세요.",
   market: "승인해도 자동으로 신청되지 않아요. 신청은 직접 해 주세요.",
@@ -27,9 +27,27 @@ export function DraftCompact({ id }: { id: DraftId }) {
   );
 }
 
+function InquiryReply({ d }: { d: Draft }) {
+  const { dispatch } = useStore();
+  const id = d.id;
+  return (
+    <>
+      <textarea value={d.text} onChange={(e) => dispatch({ type: "inquiry/text", id, value: e.target.value })} aria-label="답변 작성" />
+      {d.error ? <div className="err" role="alert"><Icon name="exclFill" size={16} color="var(--orange)" />{d.error}</div> : null}
+      <div className="btns btns-two">
+        <button className="btn btn-bordered" onClick={() => dispatch({ type: "draft/rewrite", id })}>비서로 다시 쓰기</button>
+        <button className="btn btn-prominent" disabled={!d.text.trim() || (d.status === "approved" && !d.edited)}
+          onClick={() => dispatch({ type: "inquiry/complete", id })}>답변 완료</button>
+      </div>
+      <div className="hint">{afterApproval.inquiry}</div>
+    </>
+  );
+}
+
 function DraftBody({ d }: { d: Draft }) {
   const { dispatch } = useStore();
   const id = d.id;
+  if (d.kind === "inquiry") return <InquiryReply d={d} />;
   if (d.editing !== undefined) {
     return (
       <>
@@ -85,7 +103,7 @@ export function DraftFull({ id }: { id: DraftId }) {
     <div className="draft">
       <div className="draft-top"><Who /><StatusBadge status={draftStatus(d)} /></div>
       <DraftBody d={d} />
-      {d.edited && d.editing === undefined ? <div className="hint">사장님이 고친 내용이에요.</div> : null}
+      {d.edited && d.editing === undefined && d.kind !== "inquiry" ? <div className="hint">사장님이 고친 내용이에요.</div> : null}
     </div>
   );
 }
@@ -127,7 +145,7 @@ export function DraftDetailScreen({ id }: { id: DraftId }) {
       <div className="detail detail-three">
         <div className="d-a"><DraftContext d={d} /></div>
         <div className="d-b">
-          <Section header="초안 검토" footer="비서가 틀릴 수 있어요. 내용을 확인해 주세요."><DraftFull id={id} /></Section>
+          <Section header={d.kind === "inquiry" ? "답변 작성" : "초안 검토"} footer="비서가 틀릴 수 있어요. 내용을 확인해 주세요."><DraftFull id={id} /></Section>
         </div>
         <div className="d-c">
           {d.kind === "inquiry" ? (

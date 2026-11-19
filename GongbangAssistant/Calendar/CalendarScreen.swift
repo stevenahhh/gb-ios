@@ -77,7 +77,7 @@ struct CalendarScreen: View {
                     WeekStrip(selectedDay: $selectedDay, days: days)
                         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 case .month:
-                    MonthCalendarView(selectedDay: $selectedDay, days: days)
+                    MonthCalendarView(selectedDay: $selectedDay)
                         .frame(maxWidth: 380)
                         .frame(maxWidth: .infinity)
                 }
@@ -134,12 +134,9 @@ struct CalendarScreen: View {
     @ViewBuilder
     private func agenda(_ day: CalendarDay?) -> some View {
         if let day {
-            ForEach(day.items) { item in
-                if let route = item.route {
-                    NavigationLink(value: route) { AgendaRow(item: item) }
-                } else {
-                    AgendaRow(item: item)
-                }
+            ForEach(Array(day.items.enumerated()), id: \.element.id) { index, item in
+                TaskRow(item: item.task, kind: item.kind,
+                        timeline: TimelinePosition(index: index, count: day.items.count))
             }
         } else {
             ContentUnavailableView {
@@ -185,7 +182,6 @@ struct WeekStrip: View {
         HStack(spacing: 0) {
             ForEach(Array(weekDates.enumerated()), id: \.element) { index, date in
                 let isSelected = calendar.isDate(date, inSameDayAs: selectedDay)
-                let events = days[date.dayKey]?.events ?? []
                 Button {
                     selectedDay = date
                 } label: {
@@ -203,23 +199,20 @@ struct WeekStrip: View {
                                     Circle().fill(.tint)
                                 }
                             }
-                        Circle()
-                            .fill(events.isEmpty ? Color.clear : Color.secondary)
-                            .frame(width: 6, height: 6)
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel(date: date, events: events))
+                .accessibilityLabel(accessibilityLabel(date: date))
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
         .padding(.vertical, 6)
     }
 
-    private func accessibilityLabel(date: Date, events: [DayEvent]) -> String {
-        let summary = events.isEmpty ? "일정 없음" : events.map { "\($0.kind.label) \($0.display)" }.joined(separator: ", ")
-        return "\(date.koreanDay()), \(summary)"
+    private func accessibilityLabel(date: Date) -> String {
+        let count = days[date.dayKey]?.items.count ?? 0
+        return "\(date.koreanDay()), \(count == 0 ? "일정 없음" : "일정 \(count)개")"
     }
 }

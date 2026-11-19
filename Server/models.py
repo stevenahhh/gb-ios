@@ -234,6 +234,7 @@ class CalendarEventRow(Entity, Base):
     title: Mapped[str] = mapped_column(Text)
     detail: Mapped[str] = mapped_column(Text)
     starts_at: Mapped[datetime] = timestamp()
+    completed_at: Mapped[datetime | None] = timestamp(nullable=True)
 
 
 class RecommendationRow(Entity, Base):
@@ -273,7 +274,7 @@ class InquiryRow(Base):
 
     __tablename__: str = "inquiries"
     __table_args__: TableArgs = (
-        CheckConstraint("status IN ('pending', 'approved', 'rejected')"),
+        CheckConstraint("status IN ('pending', 'approved')"),
         CheckConstraint(REVISION_CHECK), Index("ix_inquiries_status", "status"),
         Index("ix_inquiries_channel_id", "channel_id"),
     )

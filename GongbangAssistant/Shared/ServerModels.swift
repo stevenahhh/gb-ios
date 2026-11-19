@@ -162,6 +162,8 @@ enum TaskTarget: String, Decodable, Hashable {
     case session
     case task
     case shipment
+    case order
+    case event
 }
 
 struct TaskItem: Decodable, Identifiable, Hashable {
@@ -174,11 +176,13 @@ struct TaskItem: Decodable, Identifiable, Hashable {
     let isDone: Bool?
     let revision: Int
 
-    var route: AppRoute {
+    var route: AppRoute? {
         switch target {
         case .session: .classSession(id)
         case .task: .work(.task, id)
         case .shipment: .work(.shipment, id)
+        case .order: .work(.order, id)
+        case .event: nil
         }
     }
 }
@@ -229,36 +233,28 @@ enum EventKind: String, Decodable, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct DayEvent: Decodable, Hashable {
-    let kind: EventKind
-    let count: Int
-    let display: String
-}
-
 struct AgendaItem: Decodable, Identifiable, Hashable {
     let id: String
+    let target: TaskTarget
+    let targetId: String
     let time: String
     let title: String
     let kind: EventKind
     let detail: String
+    let status: Status?
     let isDone: Bool?
+    let revision: Int
 
-    var route: AppRoute? {
-        let parts = id.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { return nil }
-        switch parts[0] {
-        case "session": return .classSession(parts[1])
-        case "order": return .work(.order, parts[1])
-        case "shipment": return .work(.shipment, parts[1])
-        case "task": return .work(.task, parts[1])
-        default: return nil
-        }
+    /// Calendar rows reuse the today row, so both act on the same database rows.
+    var task: TaskItem {
+        TaskItem(id: targetId, target: target, time: time, title: title,
+                 detail: detail.isEmpty ? kind.label : "\(kind.label) · \(detail)",
+                 status: status, isDone: isDone, revision: revision)
     }
 }
 
 struct CalendarDay: Decodable, Hashable {
     let date: String
-    let events: [DayEvent]
     let items: [AgendaItem]
 }
 

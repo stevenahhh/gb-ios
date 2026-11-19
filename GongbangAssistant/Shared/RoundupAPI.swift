@@ -141,7 +141,8 @@ enum RoundupAPI {
         switch item.target {
         case .session: let _: State = try await post("class-sessions/\(item.id)/completion", body)
         case .task: let _: State = try await post("tasks/\(item.id)/completion", body)
-        case .shipment: preconditionFailure("shipments use their own actions")
+        case .event: let _: State = try await post("calendar/events/\(item.id)/completion", body)
+        case .shipment, .order: preconditionFailure("\(item.target) uses its own actions")
         }
     }
 
@@ -177,10 +178,6 @@ enum RoundupAPI {
 
     static func decideInquiry(id: String, decision: InquiryDecision) async throws -> Inquiry {
         try await post("inquiries/\(id)/decision", decision)
-    }
-
-    static func reopenInquiry(id: String, request: InquiryReopen) async throws -> Inquiry {
-        try await post("inquiries/\(id)/reopen", request)
     }
 
     // MARK: Provider proxies
@@ -338,9 +335,6 @@ struct APIInquiryRepository: InquiryRepository {
     }
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry {
         try await RoundupAPI.decideInquiry(id: id, decision: decision)
-    }
-    func reopen(id: String, request: InquiryReopen) async throws -> Inquiry {
-        try await RoundupAPI.reopenInquiry(id: id, request: request)
     }
 }
 

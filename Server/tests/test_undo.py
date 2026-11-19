@@ -100,7 +100,7 @@ async def test_stale_undo_preserves_state(
 
 @pytest.mark.parametrize("path", [
     "/bookings/booking-jieun/undo-deposit", "/orders/order-1042/undo-confirm",
-    "/shipments/shipment-order-1040/undo", "/tasks/task-clay/undo", "/inquiries/inquiry-clay/reopen",
+    "/shipments/shipment-order-1040/undo", "/tasks/task-clay/undo",
 ])
 async def test_invalid_undo_changes_nothing(
     database: AsyncEngine, client: AsyncClient, path: str,
@@ -112,7 +112,7 @@ async def test_invalid_undo_changes_nothing(
 
 @pytest.mark.parametrize("path", [
     "/bookings/missing/undo-deposit", "/orders/missing/undo-confirm",
-    "/shipments/missing/undo", "/tasks/missing/undo", "/inquiries/missing/reopen",
+    "/shipments/missing/undo", "/tasks/missing/undo",
 ])
 async def test_missing_undo_is_404(database: AsyncEngine, client: AsyncClient, path: str) -> None:
     assert (await client.post(path, json={"expectedRevision": 0})).status_code == 404
@@ -146,28 +146,6 @@ async def test_deposit_undo_requires_money_and_restores_missing_deadline(
     assert (
         await client.post("/bookings/booking-junho/undo-deposit", json={"expectedRevision": 0})
     ).status_code == 409
-
-
-@pytest.mark.parametrize("decision", ["approve", "reject"])
-async def test_inquiry_reopen_preserves_draft_and_restores_attention(
-    database: AsyncEngine, client: AsyncClient, decision: str,
-) -> None:
-    before = (await client.get("/operations")).json()["attentionCount"]
-    decided = await client.post(
-        "/inquiries/inquiry-clay/decision",
-        json={"decision": decision, "draft": "저장한 답변", "expectedRevision": 0},
-    )
-    assert decided.status_code == 200
-    assert (await client.get("/operations")).json()["attentionCount"] == before - 1
-    assert (
-        await client.post("/inquiries/inquiry-clay/reopen", json={"expectedRevision": 0})
-    ).status_code == 409
-    reopened = await client.post("/inquiries/inquiry-clay/reopen", json={"expectedRevision": 1})
-    assert reopened.status_code == 200
-    assert (reopened.json()["status"], reopened.json()["draft"], reopened.json()["revision"]) == (
-        "pending", "저장한 답변", 2,
-    )
-    assert (await client.get("/operations")).json()["attentionCount"] == before
 
 
 @pytest.mark.parametrize("case", ROUND_TRIPS, ids=lambda case: case.forward)

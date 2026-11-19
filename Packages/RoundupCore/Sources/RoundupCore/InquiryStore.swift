@@ -41,6 +41,7 @@ public final class InquiryStore {
     public func saveDraft(id: String, draft: InquiryDraft) async throws {
         let current = try writableInquiry(id: id)
         guard current.revision == draft.expectedRevision else { throw InquiryPersistenceError.conflict }
+        if current.status == .approved, Self.isBlank(draft.draft) { throw ReplyError.emptyDraft }
         isSavingInquiry = true
         defer { isSavingInquiry = false }
         do {
@@ -56,11 +57,7 @@ public final class InquiryStore {
     public func decide(id: String, decision: InquiryDecision) async throws {
         let current = try writableInquiry(id: id)
         guard current.revision == decision.expectedRevision else { throw InquiryPersistenceError.conflict }
-        if case .approve = decision.decision {
-            guard !decision.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw ReplyError.emptyDraft
-            }
-        }
+        guard !Self.isBlank(decision.draft) else { throw ReplyError.emptyDraft }
         isSavingInquiry = true
         defer { isSavingInquiry = false }
         do {
@@ -73,33 +70,15 @@ public final class InquiryStore {
     }
 
     @MainActor
-    public func reopen(id: String, request: InquiryReopen) async throws {
-        let current = try reconciledInquiry(id: id)
-        guard current.canReopen else { throw ReplyError.notDecided }
-        guard current.revision == request.expectedRevision else { throw InquiryPersistenceError.conflict }
-        isSavingInquiry = true
-        defer { isSavingInquiry = false }
-        do {
-            replace(try await repository.reopen(id: id, request: request))
-        } catch {
-            requiresInquiryReload = true
-            throw error
-        }
-    }
-
-    @MainActor
     private func writableInquiry(id: String) throws -> Inquiry {
-        let current = try reconciledInquiry(id: id)
-        guard current.status == .pending else { throw ReplyError.alreadyDecided }
-        return current
-    }
-
-    @MainActor
-    private func reconciledInquiry(id: String) throws -> Inquiry {
         guard !isInquiryBusy else { throw InquiryPersistenceError.busy }
         guard !requiresInquiryReload else { throw InquiryPersistenceError.conflict }
         guard let current = inquiry(id: id) else { throw ReplyError.missingInquiry }
         return current
+    }
+
+    private static func isBlank(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func replace(_ saved: Inquiry) {

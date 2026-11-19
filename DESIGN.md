@@ -38,15 +38,15 @@ Ranked jobs:
 
 ### 오늘
 - Primary action: the first state-changing card action of the selected segment (for example 포장 완료하기 on 배송).
-- Priorities: 1) the three numbers for today, 2) the segment control (할 일 / 채널 / 배송 / 비서 추천), 3) the grouped rows with done toggles and status badges.
+- Priorities: 1) the three numbers for today, 2) the segment control (할 일 / 채널 / 배송 / 비서 추천), 3) the grouped rows with done toggles and status badges. 예약 rows sit on a vertical timeline; checking any row strikes its title through in place.
 - Left out on purpose: monthly statistics, settings, a second prominent button.
 - Layout: List insetGrouped; scroll owner is the List; large title greeting by time of day with a subtitle showing the date and the last update time; pull to refresh. Anti-patterns: nested segmented controls, card buttons that only navigate.
 
 ### 캘린더
 - Primary action: pick a day and read its schedule.
-- Priorities: 1) the week strip (default) or the month calendar, 2) the selected day's schedule.
+- Priorities: 1) the week strip (default) or the month calendar, 2) the selected day's schedule as a timeline with done toggles.
 - Left out on purpose: a custom time grid.
-- Layout: List insetGrouped; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; days with events show one single-color dot, and the agenda names each kind in text; days without events show an empty state with an add action. Anti-patterns: per-kind colors or symbols under dates, a dot on a day whose schedule is empty, a chevron on a row that does not navigate.
+- Layout: List with card sections; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; dates carry no markers, dots, or legend; the agenda is a single-color timeline that names each kind in text; each row opens the same detail screen the other tabs use; classes, tasks, and owner events have a done toggle that strikes the title through in place, while orders and deliveries show their status and change through their detail actions; days without events show an empty state with an add action. Anti-patterns: anything under dates, per-kind colors or symbols, a chevron on a row that does not navigate.
 
 ### 운영
 - Primary action: open the first item under 먼저 확인해주세요.

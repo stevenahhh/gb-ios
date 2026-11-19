@@ -3,7 +3,6 @@ import UIKit
 
 struct MonthCalendarView: UIViewRepresentable {
     @Binding var selectedDay: Date
-    let days: [String: CalendarDay]
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -20,7 +19,7 @@ struct MonthCalendarView: UIViewRepresentable {
         view.timeZone = Calendar.workshop.timeZone
         view.visibleDateComponents = components(selectedDay)
         view.delegate = context.coordinator
-        view.wantsDateDecorations = true
+        view.wantsDateDecorations = false
 
         let selection = UICalendarSelectionSingleDate(delegate: context.coordinator)
         selection.selectedDate = components(selectedDay)
@@ -29,7 +28,6 @@ struct MonthCalendarView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UICalendarView, context: Context) {
-        let daysChanged = context.coordinator.parent.days != days
         context.coordinator.parent = self
         let target = components(selectedDay)
         if let selection = uiView.selectionBehavior as? UICalendarSelectionSingleDate,
@@ -37,16 +35,6 @@ struct MonthCalendarView: UIViewRepresentable {
             selection.setSelected(target, animated: !context.environment.accessibilityReduceMotion)
             uiView.setVisibleDateComponents(target, animated: !context.environment.accessibilityReduceMotion)
         }
-        if daysChanged {
-            let loaded = days.keys.compactMap(Self.components(fromKey:))
-            uiView.reloadDecorations(forDateComponents: loaded, animated: false)
-        }
-    }
-
-    private static func components(fromKey key: String) -> DateComponents? {
-        let parts = key.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        return DateComponents(calendar: Calendar.workshop, year: parts[0], month: parts[1], day: parts[2])
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UICalendarView, context: Context) -> CGSize? {
@@ -64,19 +52,6 @@ struct MonthCalendarView: UIViewRepresentable {
 
         init(parent: MonthCalendarView) {
             self.parent = parent
-        }
-
-        func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
-            guard let date = dateComponents.date, let dayEvents = parent.days[date.dayKey]?.events else { return nil }
-            let label = dayEvents.map { "\($0.kind.label) \($0.display)" }.joined(separator: ", ")
-            return .customView {
-                let configuration = UIImage.SymbolConfiguration(pointSize: 6)
-                let view = UIImageView(image: UIImage(systemName: "circle.fill", withConfiguration: configuration))
-                view.tintColor = .secondaryLabel
-                view.isAccessibilityElement = true
-                view.accessibilityLabel = label
-                return view
-            }
         }
 
         func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {

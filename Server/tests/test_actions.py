@@ -186,6 +186,35 @@ async def test_calendar_event_appears_on_its_day(database: AsyncEngine, client: 
     assert naive.status_code == 422
 
 
+async def agenda(client: AsyncClient) -> dict[str, dict[str, JsonValue]]:
+    day = f"{NOW:%Y-%m-%d}"
+    body = (await client.get("/calendar", params={"start": day, "end": day})).json()
+    return {item["target"]: item for item in body["days"][0]["items"]}
+
+
+async def test_calendar_rows_toggle_only_owner_checkable_work(
+    database: AsyncEngine, client: AsyncClient,
+) -> None:
+    created = (await client.post(
+        "/calendar/events", json={"title": "가마 점검", "startsAt": NOW.isoformat()},
+    )).json()
+    assert (created["isDone"], created["revision"]) == (False, 0)
+    path = f"/calendar/events/{created['targetId']}/completion"
+    done = await client.post(path, json={"done": True, "expectedRevision": 0})
+    assert (done.status_code, done.json()["isDone"]) == (200, True)
+    assert (await client.post(path, json={"done": True, "expectedRevision": 0})).status_code == 409
+    assert (await client.post(path, json={"done": True, "expectedRevision": 1})).status_code == 409
+    undone = await client.post(path, json={"done": False, "expectedRevision": 1})
+    assert (undone.status_code, undone.json()["isDone"]) == (200, False)
+
+    items = await agenda(client)
+    assert items["session"]["isDone"] is False
+    assert items["task"]["isDone"] is False
+    for target in ("order", "shipment"):
+        assert items[target]["isDone"] is None
+        assert items[target]["status"] is not None
+
+
 async def test_workshop_and_setting_edits_use_revisions(database: AsyncEngine, client: AsyncClient) -> None:
     settings = (await client.get("/settings")).json()
     workshop = {**settings["workshop"], "name": "오롯 도예", "expectedRevision": 0}

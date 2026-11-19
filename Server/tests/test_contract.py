@@ -52,7 +52,6 @@ def http(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         ("POST", "/orders/x/undo-confirm"),
         ("POST", "/shipments/x/undo"),
         ("POST", "/tasks/x/undo"),
-        ("POST", "/inquiries/x/reopen"),
         ("GET", "/assistant-drafts/content/x"),
         ("PATCH", "/assistant-drafts/content/x/draft"),
         ("POST", "/assistant-drafts/content/x/decision"),

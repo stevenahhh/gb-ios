@@ -1,6 +1,5 @@
 """Real PostgreSQL HTTP integration: no SQLite, fake stores, or mocked writes."""
 
-from dataclasses import dataclass
 from typing import Final, Literal
 
 import anyio
@@ -16,14 +15,6 @@ from tests.conftest import NOW
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
 INQUIRIES: Final = TypeAdapter(list[Inquiry])
-
-
-@dataclass(frozen=True, slots=True)
-class DecisionCase:
-    decision: str
-    draft: str
-    status: str
-    saved: str
 
 
 async def current(client: AsyncClient, inquiry_id: str = "inquiry-clay") -> Inquiry:
@@ -84,24 +75,24 @@ async def test_reinitialization_preserves_decisions_and_edits(
     assert len((await client.get("/inquiries")).json()) == 3
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        DecisionCase("approve", " \n최종 답변\t ", "approved", "최종 답변"),
-        DecisionCase("reject", " \n\t ", "rejected", ""),
-        DecisionCase("reject", "  반려 초안 \n", "rejected", "반려 초안"),
-    ],
-)
-async def test_decision_commits_trimmed_draft(
-    database: AsyncEngine, client: AsyncClient, case: DecisionCase,
-) -> None:
+async def test_completion_commits_trimmed_reply(database: AsyncEngine, client: AsyncClient) -> None:
     response = await client.post(
         "/inquiries/inquiry-group/decision",
-        json={"decision": case.decision, "draft": case.draft, "expectedRevision": 0},
+        json={"decision": "approve", "draft": " \n최종 답변\t ", "expectedRevision": 0},
     )
     assert response.status_code == 200
     row = await current(client, "inquiry-group")
-    assert (row.status, row.draft, row.revision) == (case.status, case.saved, 1)
+    assert (row.status, row.draft, row.revision) == ("approved", "최종 답변", 1)
+
+
+async def test_reject_decision_no_longer_exists(database: AsyncEngine, client: AsyncClient) -> None:
+    before = await current(client)
+    response = await client.post(
+        "/inquiries/inquiry-clay/decision",
+        json={"decision": "reject", "draft": "반려", "expectedRevision": 0},
+    )
+    assert response.status_code == 422
+    assert await current(client) == before
 
 
 async def test_blank_approval_rolls_back_without_changing_revision(
@@ -132,26 +123,29 @@ async def test_stale_revision_conflicts_while_pending(
     assert (await current(client)).draft == "new"
 
 
-@pytest.mark.parametrize("first", ["approve", "reject"])
-async def test_completed_inquiry_refuses_edits_and_repeat_decisions(
-    database: AsyncEngine, client: AsyncClient, first: str,
+async def test_completed_reply_stays_editable_but_never_blank(
+    database: AsyncEngine, client: AsyncClient,
 ) -> None:
-    completed = await client.post(
-        "/inquiries/inquiry-clay/decision",
-        json={"decision": first, "draft": "final", "expectedRevision": 0},
-    )
-    for revision in [0, 1]:
-        edit = await client.patch(
-            "/inquiries/inquiry-clay/draft", json={"draft": "overwrite", "expectedRevision": revision},
-        )
-        assert edit.status_code == 409
-        for decision in ["approve", "reject"]:
-            response = await client.post(
-                "/inquiries/inquiry-clay/decision",
-                json={"decision": decision, "draft": "", "expectedRevision": revision},
-            )
-            assert response.status_code == 409
-    assert await current(client) == Inquiry.model_validate_json(completed.content)
+    path = "/inquiries/inquiry-clay"
+    done = {"decision": "approve", "expectedRevision": 0, "draft": "첫 답변"}
+    assert (await client.post(f"{path}/decision", json=done)).status_code == 200
+
+    edited = await client.patch(f"{path}/draft", json={"draft": "고친 답변", "expectedRevision": 1})
+    assert edited.status_code == 200
+    row = await current(client)
+    assert (row.status, row.draft, row.revision) == ("approved", "고친 답변", 2)
+
+    blank = await client.patch(f"{path}/draft", json={"draft": " \n", "expectedRevision": 2})
+    assert blank.status_code == 422
+    stale = await client.post(f"{path}/decision", json={**done, "draft": "늦은 답변"})
+    assert stale.status_code == 409
+    assert await current(client) == row
+
+    body = {**done, "draft": " 다시 완료 ", "expectedRevision": 2}
+    again = await client.post(f"{path}/decision", json=body)
+    assert again.status_code == 200
+    row = await current(client)
+    assert (row.status, row.draft, row.revision) == ("approved", "다시 완료", 3)
 
 
 @pytest.mark.parametrize("operation", ["draft", "decision"])
