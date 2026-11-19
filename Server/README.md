@@ -55,7 +55,7 @@ See [.env.example](.env.example). Keep real values out of version control.
 | `DATABASE_SCHEMA` | no | Lowercase schema placed on the connection `search_path` |
 | `ROUNDUP_API_KEY` | yes | Shared `X-Roundup-Key` value, compared in constant time |
 | `ROUNDUP_LOG_LEVEL` | no | Application log level, default `INFO` |
-| `CLOVA_STUDIO_API_KEY` | for `/draft`, `/ask` | HyperCLOVA X |
+| `CLOVA_STUDIO_API_KEY` | for `/draft`, `/ask`, `/rewrite` | HyperCLOVA X |
 | `NCP_CSR_CLIENT_ID`, `NCP_CSR_CLIENT_SECRET` | for `/stt` | Speech recognition |
 | `NCP_MAPS_CLIENT_ID`, `NCP_MAPS_CLIENT_SECRET` | for `/geocode`, `/staticmap` | Naver Maps |
 
@@ -120,10 +120,18 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `GET /inquiries?limit&offset` | Array ordered by ID, default limit 200 |
 | `PATCH /inquiries/{id}/draft`, `POST /inquiries/{id}/decision` | Existing inquiry contract |
 | `POST /inquiries/{id}/reopen` | Reopen an approved or rejected inquiry while keeping its draft |
-| `POST /draft`, `POST /ask`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
+| `POST /draft`, `POST /ask`, `POST /rewrite`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
 
-`/ask` accepts `{question}` and reads workshop facts from PostgreSQL. A `context`
-field from older clients is ignored.
+`/ask` accepts `{question, history?}` and reads workshop facts from PostgreSQL. `history`
+is a list of `{role: "owner" | "assistant", text}` (at most 40 items, each text up to 2000
+characters); only the newest 6 turns reach the model. A `context` field from older clients
+is ignored. `/draft` keeps `{customer, subject, question, facts}` and adds the workshop
+profile and editable settings text from PostgreSQL. `/rewrite` accepts
+`{kind: "content" | "recommendation" | "inquiry", title, text, instruction?}` and returns
+`{draft}`. Prompts live in `prompts.py`. Every model answer is cleaned by `ai_output.py`.
+An empty answer, or a reply that promises a booking, refund, payment, discount, amount, or
+date missing from its facts, gets one corrective retry. If the retry fails too, the
+endpoint returns 502.
 
 Every state change takes `expectedRevision` and returns the updated object. Missing
 rows are 404. A stale revision or an action the current state does not allow is 409;

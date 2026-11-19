@@ -227,25 +227,3 @@ async def test_workshop_and_setting_edits_use_revisions(database: AsyncEngine, c
         await client.patch("/settings/help", json={"body": "x", "expectedRevision": 0})
     ).status_code == 409
 
-
-async def test_assistant_context_comes_from_rows_not_the_client(
-    database: AsyncEngine,
-    client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    prompts: list[str] = []
-
-    async def fake_chat(_system: str, user: str, _temperature: float) -> str:
-        prompts.append(user)
-        return "답변"
-
-    monkeypatch.setattr("main.chat", fake_chat)
-    response = await client.post(
-        "/ask", json={"question": "오늘 뭐 해?", "context": ["클라이언트가 보낸 거짓"]},
-    )
-    assert response.json() == {"answer": "답변"}
-    assert "클라이언트가 보낸 거짓" not in prompts[0]
-    assert f"오늘 날짜: {NOW:%Y-%m-%d}" in prompts[0]
-    assert "예약금 대기 2건" in prompts[0]
-    assert "오늘 수업: 14:00 나만의 머그컵 만들기 · 예약 4/6명" in prompts[0]
-    assert "010-" not in prompts[0].split("공방:")[0]

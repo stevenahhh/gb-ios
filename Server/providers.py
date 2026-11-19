@@ -1,8 +1,10 @@
 """Outbound NCP calls; credentials stay in the server environment."""
 
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
 from os import environ
-from typing import ClassVar, Final
+from typing import ClassVar, Final, Literal
 
 import httpx
 from fastapi import HTTPException
@@ -16,6 +18,23 @@ TIMEOUT: Final = httpx.Timeout(20.0)
 LOGGER: Final = logging.getLogger("roundup.providers")
 UPSTREAM_FAILED: Final = "upstream service failed"
 HTTP_OK: Final = 200
+type ChatRole = Literal["system", "user", "assistant"]
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessage:
+    """One turn sent to the chat model."""
+
+    role: ChatRole
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class Sampling:
+    """Per-endpoint generation settings."""
+
+    temperature: float
+    max_tokens: int
 
 
 class ClovaMessage(BaseModel):
@@ -97,15 +116,15 @@ def parsed[T: BaseModel](model: type[T], response: httpx.Response) -> T:
         raise HTTPException(502, UPSTREAM_FAILED) from None
 
 
-async def chat(system: str, user: str, temperature: float) -> str:
-    """Ask HyperCLOVA X for one short answer."""
+async def chat(messages: Sequence[ChatMessage], sampling: Sampling) -> str:
+    """Ask HyperCLOVA X for the next assistant turn."""
     response = await send(httpx.Request(
         "POST", CLOVA_URL,
         headers={"Authorization": f"Bearer {require_env('CLOVA_STUDIO_API_KEY')}"},
         json={
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "maxTokens": 300,
-            "temperature": temperature,
+            "messages": [{"role": message.role, "content": message.content} for message in messages],
+            "maxTokens": sampling.max_tokens,
+            "temperature": sampling.temperature,
         },
     ))
     return parsed(ClovaResponse, response).result.message.content.strip()
