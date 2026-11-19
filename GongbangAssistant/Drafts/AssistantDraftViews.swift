@@ -348,7 +348,7 @@ struct AssistantDraftDetailView: View {
                     app.dataDidChange()
                 },
                 rewrite: {
-                    try await RoundupAPI.ask(question: "아래 글을 같은 내용으로 다시 써 줘. 다시 쓴 글만 답해 줘.\n\n\(draft.text)")
+                    try await RoundupAPI.rewrite(kind: kind.rewriteKind, title: draft.title, text: draft.text)
                 }
             )
         )

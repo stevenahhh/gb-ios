@@ -196,12 +196,31 @@ enum RoundupAPI {
         return reply.draft
     }
 
-    /// The server builds the workshop context from its own database.
-    static func ask(question: String) async throws -> String {
-        struct Body: Encodable { let question: String }
+    struct ChatTurn: Encodable {
+        enum Role: String, Encodable { case owner, assistant }
+        let role: Role
+        let text: String
+    }
+
+    /// The server builds the workshop context from its own database; earlier turns let follow-ups work.
+    static func ask(question: String, history: [ChatTurn] = []) async throws -> String {
+        struct Body: Encodable { let question: String; let history: [ChatTurn] }
         struct Reply: Decodable { let answer: String }
-        let reply: Reply = try await post("ask", Body(question: question))
+        let reply: Reply = try await post("ask", Body(question: question, history: Array(history.suffix(6))))
         return reply.answer
+    }
+
+    enum RewriteKind: String, Encodable {
+        case content
+        case recommendation
+        case inquiry
+    }
+
+    static func rewrite(kind: RewriteKind, title: String, text: String, instruction: String = "") async throws -> String {
+        struct Body: Encodable { let kind: RewriteKind; let title, text, instruction: String }
+        struct Reply: Decodable { let draft: String }
+        let reply: Reply = try await post("rewrite", Body(kind: kind, title: title, text: text, instruction: instruction))
+        return reply.draft
     }
 
     static func transcribe(wav: Data) async throws -> String {

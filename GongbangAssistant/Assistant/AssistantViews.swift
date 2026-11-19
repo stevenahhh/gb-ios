@@ -5,6 +5,15 @@ private struct ChatTurn: Identifiable {
     let id = UUID()
     let role: Role
     let text: String
+
+    /// Failed turns stay on screen but never reach the model.
+    var apiTurn: RoundupAPI.ChatTurn? {
+        switch role {
+        case .owner: RoundupAPI.ChatTurn(role: .owner, text: text)
+        case .assistant: RoundupAPI.ChatTurn(role: .assistant, text: text)
+        case .failure: nil
+        }
+    }
 }
 
 struct AssistantAccessory: View {
@@ -233,16 +242,17 @@ struct AssistantSheet: View {
     private func send(_ text: String) {
         let value = trimmed(text)
         guard !value.isEmpty else { return }
+        let history = sent.compactMap(\.apiTurn)
         sent.append(ChatTurn(role: .owner, text: value))
         message = ""
-        Task { await answer(value) }
+        Task { await answer(value, history: history) }
     }
 
-    private func answer(_ question: String) async {
+    private func answer(_ question: String, history: [RoundupAPI.ChatTurn]) async {
         isAnswering = true
         defer { isAnswering = false }
         do {
-            let reply = try await RoundupAPI.ask(question: question)
+            let reply = try await RoundupAPI.ask(question: question, history: history)
             sent.append(ChatTurn(role: .assistant, text: reply))
         } catch {
             sent.append(ChatTurn(role: .failure, text: error.localizedDescription))

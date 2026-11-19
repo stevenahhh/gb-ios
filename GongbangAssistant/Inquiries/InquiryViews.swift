@@ -1,6 +1,22 @@
 import SwiftUI
 import RoundupCore
 
+private enum RewriteStyle: String, CaseIterable, Identifiable {
+    case shorter = "더 짧게"
+    case friendlier = "더 친근하게"
+    case politer = "더 정중하게"
+
+    var id: Self { self }
+
+    var instruction: String {
+        switch self {
+        case .shorter: "같은 내용을 핵심만 남겨 더 짧게 써 줘."
+        case .friendlier: "같은 내용을 더 친근하고 따뜻한 말투로 바꿔 줘."
+        case .politer: "같은 내용을 더 정중하고 격식 있는 말투로 바꿔 줘."
+        }
+    }
+}
+
 extension Inquiry {
     var badge: Status {
         status == .approved ? Status(text: "답변 완료", tone: .done) : Status(text: "답변 대기", tone: .attention)
@@ -112,8 +128,16 @@ struct InquiryDetailView: View {
 
     @ViewBuilder
     private func replyActions(_ inquiry: Inquiry) -> some View {
-        Button {
-            Task { await generateDraft(for: inquiry) }
+        Menu {
+            Button("새로 쓰기", systemImage: "sparkles") {
+                Task { await generateDraft(for: inquiry) }
+            }
+            ForEach(RewriteStyle.allCases) { style in
+                Button(style.rawValue) {
+                    Task { await rewrite(inquiry, style: style) }
+                }
+                .disabled(isDraftBlank)
+            }
         } label: {
             Group {
                 if isGenerating {
@@ -130,6 +154,7 @@ struct InquiryDetailView: View {
             .font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity, minHeight: 30)
         }
+        .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.large)
         .disabled(isEditingLocked)
@@ -167,6 +192,18 @@ struct InquiryDetailView: View {
             // Generated text is an unsaved edit, and never overwrites an in-flight completion.
             draft = try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
                                                question: inquiry.question, facts: inquiry.facts)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func rewrite(_ inquiry: Inquiry, style: RewriteStyle) async {
+        isGenerating = true
+        defer { isGenerating = false }
+        do {
+            draft = try await RoundupAPI.rewrite(kind: .inquiry, title: inquiry.subject, text: draft,
+                                                 instruction: style.instruction)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

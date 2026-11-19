@@ -72,6 +72,13 @@ struct UndoAction: Decodable, Hashable {
 enum DraftKind: String, Decodable, Hashable {
     case content
     case recommendation
+
+    var rewriteKind: RoundupAPI.RewriteKind {
+        switch self {
+        case .content: .content
+        case .recommendation: .recommendation
+        }
+    }
 }
 
 struct DraftReference: Decodable, Hashable {
