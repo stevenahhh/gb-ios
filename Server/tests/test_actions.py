@@ -228,3 +228,22 @@ async def test_workshop_and_setting_edits_use_revisions(database: AsyncEngine, c
         await client.patch("/settings/help", json={"body": "x", "expectedRevision": 0})
     ).status_code == 409
 
+
+async def test_assistant_activities_list_only_work_it_did(
+    database: AsyncEngine,
+    client: AsyncClient,
+) -> None:
+    async with database.begin() as connection:
+        _ = await connection.execute(text(
+            "UPDATE shipments SET ship_by_at = '2026-11-17T16:00:00+09:00' WHERE id = 'shipment-order-1040'",
+        ))
+    body = (await client.get("/assistant/activities")).json()
+    kinds = {item["kind"] for item in body}
+    assert kinds <= {"inquiryReply", "contentDraft", "missedPickup"}
+    pickup = next(item for item in body if item["kind"] == "missedPickup")
+    assert pickup["targetId"] == "shipment-order-1040"
+    assert pickup["status"] == "확인 필요"
+    reply = next(item for item in body if item["kind"] == "inquiryReply")
+    assert reply["summary"].endswith("님 문의에 답변을 써 뒀어요")
+    assert reply["evidence"][0].startswith("손님 문의 · ")
+    assert [item["at"] for item in body] == sorted((item["at"] for item in body), reverse=True)

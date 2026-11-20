@@ -9,8 +9,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from ai_output import empty_problems, normalize, reply_problems
-from assistant import build_context, shop_facts
+from assistant import build_context, named_cards, shop_facts
 from common import Now
+from contracts import Card
 from prompts import (
     ASK_SAMPLING,
     DRAFT_SAMPLING,
@@ -58,9 +59,10 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """Assistant answer."""
+    """Assistant answer and the cards it names, so the owner can act on them."""
 
     answer: str
+    items: list[Card] = Field(default_factory=list)
 
 
 class RewriteRequest(BaseModel):
@@ -107,9 +109,10 @@ async def draft(body: DraftRequest) -> DraftResponse:
 @router.post("/ask")
 async def ask(body: AskRequest, now: Now) -> AskResponse:
     """Answer from facts read from PostgreSQL for this request."""
-    context = await build_context(now)
+    context, cards = await build_context(now)
     messages = ask_messages(context, body.history, body.question)
-    return AskResponse(answer=await generate(messages, ASK_SAMPLING, empty_problems))
+    answer = await generate(messages, ASK_SAMPLING, empty_problems)
+    return AskResponse(answer=answer, items=named_cards(answer, cards))
 
 
 @router.post("/rewrite")

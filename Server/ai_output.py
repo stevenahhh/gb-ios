@@ -9,7 +9,11 @@ LABEL: Final = re.compile(
 )
 HEADING: Final = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.MULTILINE)
 BULLET: Final = re.compile(r"^[ \t]*[-*•][ \t]+", re.MULTILINE)
-BOLD: Final = re.compile(r"\*\*(.+?)\*\*|__(.+?)__", re.DOTALL)
+QUOTES: Final = "'\"\u2018\u2019\u201c\u201d"
+# Only paired emphasis around real words; masked text such as ***-****-**** stays as written.
+EMPHASIS: Final = re.compile(
+    rf"[{QUOTES}]?(?<![*_])(\*\*|__)(?=[^\s*_])([^*_\n]+?)(?<=[^\s*_])\1(?![*_])[{QUOTES}]?",
+)
 FILLER: Final = re.compile(
     r"(?:\s*[^.!?\n]*도움이\s*(?:되셨|되었|됐|되)(?:길|기를|으면|다면)[^.!?\n]*[.!?]?)+\s*$",
 )
@@ -43,7 +47,7 @@ def normalize(raw: str) -> str:
     """Strip wrappers, labels, markdown, and closing filler the prompts forbid."""
     text = FENCE.sub("", raw).strip()
     text = unquote(LABEL.sub("", text, count=1).strip())
-    text = BOLD.sub(r"\1\2", HEADING.sub("", text))
+    text = EMPHASIS.sub(r"\2", HEADING.sub("", text))
     text = BULLET.sub("· ", text)
     text = FILLER.sub("", text)
     return BLANK_RUN.sub("\n\n", text).strip()
