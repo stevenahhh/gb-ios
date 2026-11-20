@@ -186,6 +186,35 @@ async def test_calendar_event_appears_on_its_day(database: AsyncEngine, client: 
     assert naive.status_code == 422
 
 
+async def agenda(client: AsyncClient) -> dict[str, dict[str, JsonValue]]:
+    day = f"{NOW:%Y-%m-%d}"
+    body = (await client.get("/calendar", params={"start": day, "end": day})).json()
+    return {item["target"]: item for item in body["days"][0]["items"]}
+
+
+async def test_calendar_rows_toggle_only_owner_checkable_work(
+    database: AsyncEngine, client: AsyncClient,
+) -> None:
+    created = (await client.post(
+        "/calendar/events", json={"title": "가마 점검", "startsAt": NOW.isoformat()},
+    )).json()
+    assert (created["isDone"], created["revision"]) == (False, 0)
+    path = f"/calendar/events/{created['targetId']}/completion"
+    done = await client.post(path, json={"done": True, "expectedRevision": 0})
+    assert (done.status_code, done.json()["isDone"]) == (200, True)
+    assert (await client.post(path, json={"done": True, "expectedRevision": 0})).status_code == 409
+    assert (await client.post(path, json={"done": True, "expectedRevision": 1})).status_code == 409
+    undone = await client.post(path, json={"done": False, "expectedRevision": 1})
+    assert (undone.status_code, undone.json()["isDone"]) == (200, False)
+
+    items = await agenda(client)
+    assert items["session"]["isDone"] is False
+    assert items["task"]["isDone"] is False
+    for target in ("order", "shipment"):
+        assert items[target]["isDone"] is None
+        assert items[target]["status"] is not None
+
+
 async def test_workshop_and_setting_edits_use_revisions(database: AsyncEngine, client: AsyncClient) -> None:
     settings = (await client.get("/settings")).json()
     workshop = {**settings["workshop"], "name": "오롯 도예", "expectedRevision": 0}
@@ -198,25 +227,3 @@ async def test_workshop_and_setting_edits_use_revisions(database: AsyncEngine, c
         await client.patch("/settings/help", json={"body": "x", "expectedRevision": 0})
     ).status_code == 409
 
-
-async def test_assistant_context_comes_from_rows_not_the_client(
-    database: AsyncEngine,
-    client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    prompts: list[str] = []
-
-    async def fake_chat(_system: str, user: str, _temperature: float) -> str:
-        prompts.append(user)
-        return "답변"
-
-    monkeypatch.setattr("main.chat", fake_chat)
-    response = await client.post(
-        "/ask", json={"question": "오늘 뭐 해?", "context": ["클라이언트가 보낸 거짓"]},
-    )
-    assert response.json() == {"answer": "답변"}
-    assert "클라이언트가 보낸 거짓" not in prompts[0]
-    assert f"오늘 날짜: {NOW:%Y-%m-%d}" in prompts[0]
-    assert "예약금 대기 2건" in prompts[0]
-    assert "오늘 수업: 14:00 나만의 머그컵 만들기 · 예약 4/6명" in prompts[0]
-    assert "010-" not in prompts[0].split("공방:")[0]

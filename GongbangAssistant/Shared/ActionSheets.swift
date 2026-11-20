@@ -71,57 +71,6 @@ struct InvoiceSheet: View {
     }
 }
 
-struct ContentReviewSheet: View {
-    let item: WorkItem
-    @State private var loader = Loader<ContentDetail>()
-    @State private var text = ""
-    @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        FormSheet(
-            title: "홍보 글 검토", saveLabel: "검토 완료",
-            canSave: loader.value != nil && isFilled(text),
-            isSaving: app.isRunning(item.id), save: save
-        ) {
-            if let detail = loader.value {
-                Section {
-                    TextEditor(text: $text)
-                        .frame(minHeight: 200)
-                        .accessibilityLabel("홍보 글 본문")
-                        .accessibilityIdentifier("content.body")
-                } header: {
-                    Text(detail.title)
-                } footer: {
-                    Text("검토 완료해도 자동으로 게시되지 않아요. \(detail.channel)에는 직접 올려 주세요.")
-                }
-            } else if let message = loader.errorMessage {
-                Label(message, systemImage: "exclamationmark.circle")
-                Button("다시 시도") { Task { await load() } }
-            } else {
-                ProgressView("불러오는 중이에요")
-            }
-        }
-        .task { await load() }
-    }
-
-    private func load() async {
-        let id = item.id
-        await loader.load { try await RoundupAPI.contentDraft(id: id) }
-        if let body = loader.value?.body, text.isEmpty { text = body }
-    }
-
-    private func save() {
-        guard let detail = loader.value else { return }
-        let body = text
-        Task {
-            if await app.run(id: item.id, {
-                try await RoundupAPI.reviewContent(id: detail.id, body: body, revision: detail.revision)
-            }) { dismiss() }
-        }
-    }
-}
-
 struct BookingFormSheet: View {
     @State private var sessions = Loader<[SessionOption]>()
     @State private var sessionID: String?

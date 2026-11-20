@@ -1,7 +1,7 @@
 import Foundation
 @testable import RoundupCore
 
-/// Stateful server substitute: revisions and completed decisions obey the backend contract.
+/// Stateful server substitute: revisions and completed replies obey the backend contract.
 @MainActor
 final class MemoryInquiryRepository: InquiryRepository {
     var records = [
@@ -19,7 +19,7 @@ final class MemoryInquiryRepository: InquiryRepository {
     private var saveGate: CheckedContinuation<Void, Never>?
     private var saveStarted: CheckedContinuation<Void, Never>?
 
-    enum Failure: Error { case offline }
+    enum Failure: Error { case offline, unsupportedDecision }
 
     func load() async throws -> [Inquiry] {
         if loadFails { throw Failure.offline }
@@ -36,6 +36,10 @@ final class MemoryInquiryRepository: InquiryRepository {
         }
         if writeFails { throw Failure.offline }
         let index = try writableIndex(id: id, revision: draft.expectedRevision)
+        if records[index].status == .approved,
+           draft.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ReplyError.emptyDraft
+        }
         records[index].draft = draft.draft
         records[index].revision += 1
         return records[index]
@@ -44,14 +48,10 @@ final class MemoryInquiryRepository: InquiryRepository {
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry {
         if writeFails { throw Failure.offline }
         let index = try writableIndex(id: id, revision: decision.expectedRevision)
+        guard decision.decision == .approve else { throw Failure.unsupportedDecision }
         let text = decision.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch decision.decision {
-        case .approve:
-            guard !text.isEmpty else { throw ReplyError.emptyDraft }
-            records[index].status = .approved
-        case .reject:
-            records[index].status = .rejected
-        }
+        guard !text.isEmpty else { throw ReplyError.emptyDraft }
+        records[index].status = .approved
         records[index].draft = text
         records[index].revision += 1
         if loseDecisionResponse { throw Failure.offline }
@@ -72,7 +72,7 @@ final class MemoryInquiryRepository: InquiryRepository {
         guard let index = records.firstIndex(where: { $0.id == id }) else {
             throw ReplyError.missingInquiry
         }
-        guard records[index].revision == revision, records[index].status == .pending else {
+        guard records[index].revision == revision else {
             throw InquiryPersistenceError.conflict
         }
         return index

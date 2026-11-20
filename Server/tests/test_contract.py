@@ -45,7 +45,20 @@ def http(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         ("GET", "/settings"),
         ("PUT", "/workshop"),
         ("POST", "/tasks/x/completion"),
+        ("GET", "/bookings/x"),
+        ("GET", "/class-sessions/x"),
+        ("GET", "/cards/task/x"),
+        ("POST", "/bookings/x/undo-deposit"),
+        ("POST", "/orders/x/undo-confirm"),
+        ("POST", "/shipments/x/undo"),
+        ("POST", "/tasks/x/undo"),
+        ("GET", "/assistant-drafts/content/x"),
+        ("PATCH", "/assistant-drafts/content/x/draft"),
+        ("POST", "/assistant-drafts/content/x/decision"),
+        ("POST", "/assistant-drafts/content/x/reopen"),
         ("POST", "/ask"),
+        ("POST", "/draft"),
+        ("POST", "/rewrite"),
     ],
 )
 @pytest.mark.parametrize("api_key", ["", "wrong"])
@@ -118,7 +131,7 @@ def test_unexpected_failure_returns_generic_body_and_logs_no_detail(
     async def explode(_now: datetime) -> list[str]:
         raise RuntimeError(LEAK)
 
-    monkeypatch.setattr("main.build_context", explode)
+    monkeypatch.setattr("ai.build_context", explode)
     logging.getLogger("roundup").propagate = True
     with caplog.at_level(logging.INFO, logger="roundup"):
         response = http.post("/ask", headers={"X-Roundup-Key": "synthetic-test-key"}, json={"question": "?"})
@@ -151,4 +164,4 @@ def test_existing_liveness_and_service_routes_remain_registered(http: TestClient
     response = http.get("/health", headers={"X-Roundup-Key": "synthetic-test-key"})
     assert response.json() == {"status": "ok"}
     paths = app.openapi()["paths"]
-    assert {"/draft", "/ask", "/stt", "/geocode", "/staticmap"} <= paths.keys()
+    assert {"/draft", "/ask", "/rewrite", "/stt", "/geocode", "/staticmap"} <= paths.keys()

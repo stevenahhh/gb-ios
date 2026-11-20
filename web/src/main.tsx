@@ -1,8 +1,12 @@
-import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { attentionCount } from "./data";
+import { assertNever } from "./data";
 import { Icon } from "./icons";
-import { AreaScreen, AssistantSheet, CalendarScreen, DetailScreen, OperationsScreen, PlaceholderScreen, SettingsScreen, TodayScreen } from "./screens";
+import { AreaScreen } from "./area";
+import { BookingDetailScreen, WorkDetailScreen } from "./details";
+import { DraftDetailScreen } from "./drafts";
+import { AssistantSheet, CalendarScreen, OperationsScreen, PlaceholderScreen, SettingsScreen, TodayScreen } from "./screens";
+import { attentionCount, StoreProvider, useStore } from "./store";
 import { NavContext, type Route } from "./ui";
 
 const CANVAS_W = 402;
@@ -30,16 +34,36 @@ function useFitScale() {
   return Math.max(scale, 0.1);
 }
 
+const wideQuery = window.matchMedia("(min-width: 720px)");
+function useWide() {
+  const [wide, setWide] = useState(wideQuery.matches);
+  useLayoutEffect(() => {
+    const onChange = () => setWide(wideQuery.matches);
+    wideQuery.addEventListener("change", onChange);
+    return () => wideQuery.removeEventListener("change", onChange);
+  }, []);
+  return wide;
+}
+
+function RootScreen({ tab }: { tab: Tab }) {
+  switch (tab) {
+    case "today": return <TodayScreen />;
+    case "calendar": return <CalendarScreen />;
+    case "operations": return <OperationsScreen />;
+    case "settings": return <SettingsScreen />;
+    default: return assertNever(tab);
+  }
+}
+
 function RouteView({ tab, route }: { tab: Tab; route: Route }) {
   switch (route.kind) {
-    case "root":
-      return tab === "today" ? <TodayScreen /> : tab === "calendar" ? <CalendarScreen /> : tab === "operations" ? <OperationsScreen /> : <SettingsScreen />;
-    case "area":
-      return <AreaScreen areaId={route.area} initialFilter={route.filter} />;
-    case "detail":
-      return <DetailScreen item={route.item} />;
-    case "placeholder":
-      return <PlaceholderScreen title={route.title} symbol={route.symbol} />;
+    case "root": return <RootScreen tab={tab} />;
+    case "area": return <AreaScreen areaId={route.area} initialFilter={route.filter} />;
+    case "booking": return <BookingDetailScreen id={route.id} />;
+    case "work": return <WorkDetailScreen id={route.id} />;
+    case "draft": return <DraftDetailScreen id={route.id} />;
+    case "placeholder": return <PlaceholderScreen title={route.title} symbol={route.symbol} />;
+    default: return assertNever(route);
   }
 }
 
@@ -103,10 +127,26 @@ function StatusBar() {
   );
 }
 
-function App() {
+function TabBar({ tab, onSelect }: { tab: Tab; onSelect: (t: Tab) => void }) {
+  const { state } = useStore();
+  const attention = attentionCount(state);
+  return (
+    <nav className="tabbar" aria-label="탭">
+      {tabs.map((t) => (
+        <button key={t.id} className={t.id === tab ? "tab tab-on" : "tab"} onClick={() => onSelect(t.id)} aria-current={t.id === tab ? "page" : undefined}>
+          <span className="tab-icon">
+            <Icon name={t.id === tab ? t.activeIcon : t.icon} size={24} />
+            {t.id === "operations" && attention > 0 ? <span className="tab-badge" aria-label={`먼저 확인할 일 ${attention}건`}>{attention}</span> : null}
+          </span>
+          <span className="tab-label">{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function PhoneFrame({ children }: { children: ReactNode }) {
   const scale = useFitScale();
-  const [tab, setTab] = useState<Tab>("today");
-  const [sheet, setSheet] = useState<null | { voice: boolean }>(null);
   useEffect(() => {
     document.documentElement.style.setProperty("--canvas-w", `${CANVAS_W}px`);
     document.documentElement.style.setProperty("--canvas-h", `${CANVAS_H}px`);
@@ -115,38 +155,49 @@ function App() {
     <div className="stage">
       <div className="device" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }} data-testid="phone">
         <div className="canvas" style={{ width: CANVAS_W, height: CANVAS_H, transform: `scale(${scale})` }}>
-          {tabs.map((t) => <TabStack key={t.id} tab={t.id} active={t.id === tab} />)}
+          {children}
           <StatusBar />
-          <div className="accessory">
-            <button className="accessory-main" onClick={() => setSheet({ voice: false })} aria-label="비서에게 물어보기">
-              <Icon name="sparkles" size={20} color="var(--accent)" />
-              <span>비서에게 물어보세요</span>
-            </button>
-            <button className="accessory-mic" onClick={() => setSheet({ voice: true })} aria-label="말로 물어보기">
-              <Icon name="mic" size={20} />
-            </button>
-          </div>
-          <nav className="tabbar" aria-label="탭">
-            {tabs.map((t) => (
-              <button key={t.id} className={t.id === tab ? "tab tab-on" : "tab"} onClick={() => setTab(t.id)} aria-current={t.id === tab ? "page" : undefined}>
-                <span className="tab-icon">
-                  <Icon name={t.id === tab ? t.activeIcon : t.icon} size={24} />
-                  {t.id === "operations" ? <span className="tab-badge">{attentionCount}</span> : null}
-                </span>
-                <span className="tab-label">{t.label}</span>
-              </button>
-            ))}
-          </nav>
           <div className="home-indicator" />
-          {sheet ? <AssistantSheet voice={sheet.voice} onClose={() => setSheet(null)} /> : null}
         </div>
       </div>
     </div>
   );
 }
 
+function App() {
+  const wide = useWide();
+  const [tab, setTab] = useState<Tab>("today");
+  const [sheet, setSheet] = useState<null | { voice: boolean }>(null);
+  const content = (
+    <>
+      {tabs.map((t) => <TabStack key={t.id} tab={t.id} active={t.id === tab} />)}
+      <div className="accessory">
+        <button className="accessory-main" onClick={() => setSheet({ voice: false })} aria-label="비서에게 물어보기">
+          <Icon name="sparkles" size={20} color="var(--accent)" />
+          <span>비서에게 물어보세요</span>
+        </button>
+        <button className="accessory-mic" onClick={() => setSheet({ voice: true })} aria-label="말로 물어보기">
+          <Icon name="mic" size={20} />
+        </button>
+      </div>
+      <TabBar tab={tab} onSelect={setTab} />
+      {sheet ? <AssistantSheet voice={sheet.voice} onClose={() => setSheet(null)} /> : null}
+    </>
+  );
+  if (wide) {
+    return (
+      <div className="stage">
+        <div className="canvas canvas-wide" data-testid="canvas">{content}</div>
+      </div>
+    );
+  }
+  return <PhoneFrame>{content}</PhoneFrame>;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <StoreProvider>
+      <App />
+    </StoreProvider>
   </StrictMode>,
 );

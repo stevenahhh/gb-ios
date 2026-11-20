@@ -82,16 +82,22 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testDepositConfirmationSurvivesRelaunch() throws {
         var app = try launch()
         openArea("bookings", in: app)
-        let action = app.buttons["action.booking-jieun"]
-        XCTAssertTrue(scrollTo(action, in: app))
-        action.tap()
-        XCTAssertTrue(action.waitForNonExistence(timeout: 10))
+        let row = app.buttons["booking.row.booking-jieun"]
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let confirm = app.buttons["step.do.예약금"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        XCTAssertTrue(app.buttons["step.undo.예약금"].waitForExistence(timeout: 10))
 
         app.terminate()
         app = try launch()
         openArea("bookings", in: app)
-        XCTAssertTrue(scrollTo(element(labelled: "박*은 · 2명 · 예약금 확인 완료", in: app), in: app))
-        XCTAssertFalse(app.buttons["action.booking-jieun"].exists)
+        let reopened = app.buttons["booking.row.booking-jieun"]
+        XCTAssertTrue(scrollTo(reopened, in: app))
+        reopened.tap()
+        XCTAssertTrue(app.buttons["step.undo.예약금"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["step.do.예약금"].exists)
     }
 
     @MainActor

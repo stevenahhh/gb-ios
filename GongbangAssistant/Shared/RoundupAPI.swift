@@ -49,13 +49,14 @@ enum RoundupConfiguration {
 enum RoundupAPI {
     private struct Revisioned: Encodable { let expectedRevision: Int }
     private struct Completion: Encodable { let done: Bool; let expectedRevision: Int }
+    private struct Acknowledged: Decodable {}
 
     // MARK: Screens
 
     static func today() async throws -> TodayScreenData { try await get("today") }
 
-    static func operations(month: String?) async throws -> OperationsData {
-        try await get("operations", query: month.map { ["month": $0] } ?? [:])
+    static func operations(period: OperationPeriod?) async throws -> OperationsData {
+        try await get("operations", query: period?.query ?? [:])
     }
 
     static func calendar(start: Date, end: Date) async throws -> CalendarRange {
@@ -73,7 +74,13 @@ enum RoundupAPI {
     static func settings() async throws -> SettingsData { try await get("settings") }
     static func opportunities() async throws -> [WorkItem] { try await get("opportunities") }
     static func classSessions() async throws -> [SessionOption] { try await get("class-sessions") }
-    static func contentDraft(id: String) async throws -> ContentDetail { try await get("content-drafts/\(id)") }
+    static func booking(id: String) async throws -> BookingDetail { try await get("bookings/\(id)") }
+    static func classSession(id: String) async throws -> ClassSessionDetail { try await get("class-sessions/\(id)") }
+    static func bookings(sessionID: String) async throws -> AreaPage { try await get("bookings", query: ["session": sessionID]) }
+    static func card(kind: CardKind, id: String) async throws -> WorkItem { try await get("cards/\(kind.rawValue)/\(id)") }
+    static func assistantDraft(kind: DraftKind, id: String) async throws -> AssistantDraftDetail {
+        try await get("assistant-drafts/\(kind.rawValue)/\(id)")
+    }
 
     // MARK: Actions
 
@@ -90,7 +97,7 @@ enum RoundupAPI {
         case .completeTask:
             updated = try await post("tasks/\(item.id)/completion", Completion(done: true, expectedRevision: item.revision))
         case .registerInvoice, .reviewContent:
-            preconditionFailure("\(code) collects input in its own sheet")
+            preconditionFailure("\(code) is completed on its own screen")
         }
         _ = updated
     }
@@ -101,9 +108,31 @@ enum RoundupAPI {
             carrier: carrier, trackingNumber: trackingNumber, expectedRevision: item.revision))
     }
 
-    static func reviewContent(id: String, body: String, revision: Int) async throws {
-        struct Body: Encodable { let body: String; let expectedRevision: Int }
-        let _: WorkItem = try await post("content-drafts/\(id)/review", Body(body: body, expectedRevision: revision))
+    static func undo(_ undo: UndoAction, revision: Int) async throws {
+        let _: Acknowledged = try await post(undo.path, Revisioned(expectedRevision: revision))
+    }
+
+    static func confirmDeposit(bookingID: String, revision: Int) async throws {
+        let _: Acknowledged = try await post("bookings/\(bookingID)/confirm-deposit", Revisioned(expectedRevision: revision))
+    }
+
+    static func setSessionDone(id: String, done: Bool, revision: Int) async throws {
+        let _: Acknowledged = try await post("class-sessions/\(id)/completion", Completion(done: done, expectedRevision: revision))
+    }
+
+    static func saveAssistantDraft(kind: DraftKind, id: String, text: String, revision: Int) async throws {
+        let _: Acknowledged = try await send(
+            method: "PATCH", path: "assistant-drafts/\(kind.rawValue)/\(id)/draft",
+            body: InquiryDraft(draft: text, expectedRevision: revision))
+    }
+
+    static func decideAssistantDraft(kind: DraftKind, id: String, decision: InquiryDecision) async throws {
+        let _: Acknowledged = try await post("assistant-drafts/\(kind.rawValue)/\(id)/decision", decision)
+    }
+
+    static func reopenAssistantDraft(kind: DraftKind, id: String, revision: Int) async throws {
+        let _: Acknowledged = try await post(
+            "assistant-drafts/\(kind.rawValue)/\(id)/reopen", Revisioned(expectedRevision: revision))
     }
 
     static func setDone(_ item: TaskItem, done: Bool) async throws {
@@ -112,7 +141,8 @@ enum RoundupAPI {
         switch item.target {
         case .session: let _: State = try await post("class-sessions/\(item.id)/completion", body)
         case .task: let _: State = try await post("tasks/\(item.id)/completion", body)
-        case .shipment: preconditionFailure("shipments use their own actions")
+        case .event: let _: State = try await post("calendar/events/\(item.id)/completion", body)
+        case .shipment, .order: preconditionFailure("\(item.target) uses its own actions")
         }
     }
 
@@ -166,12 +196,31 @@ enum RoundupAPI {
         return reply.draft
     }
 
-    /// The server builds the workshop context from its own database.
-    static func ask(question: String) async throws -> String {
-        struct Body: Encodable { let question: String }
+    struct ChatTurn: Encodable {
+        enum Role: String, Encodable { case owner, assistant }
+        let role: Role
+        let text: String
+    }
+
+    /// The server builds the workshop context from its own database; earlier turns let follow-ups work.
+    static func ask(question: String, history: [ChatTurn] = []) async throws -> String {
+        struct Body: Encodable { let question: String; let history: [ChatTurn] }
         struct Reply: Decodable { let answer: String }
-        let reply: Reply = try await post("ask", Body(question: question))
+        let reply: Reply = try await post("ask", Body(question: question, history: Array(history.suffix(6))))
         return reply.answer
+    }
+
+    enum RewriteKind: String, Encodable {
+        case content
+        case recommendation
+        case inquiry
+    }
+
+    static func rewrite(kind: RewriteKind, title: String, text: String, instruction: String = "") async throws -> String {
+        struct Body: Encodable { let kind: RewriteKind; let title, text, instruction: String }
+        struct Reply: Decodable { let draft: String }
+        let reply: Reply = try await post("rewrite", Body(kind: kind, title: title, text: text, instruction: instruction))
+        return reply.draft
     }
 
     static func transcribe(wav: Data) async throws -> String {

@@ -12,6 +12,12 @@ final class ActionFlowUITests: RoundupUITestCase {
     }
 
     @MainActor
+    private func waitUntil(_ element: XCUIElement, isEnabled: Bool) {
+        let predicate = NSPredicate(format: "isEnabled == %@", NSNumber(value: isEnabled))
+        wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 10)
+    }
+
+    @MainActor
     private func goBack(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
     }
@@ -34,30 +40,49 @@ final class ActionFlowUITests: RoundupUITestCase {
     }
 
     @MainActor
-    func testContentReviewIsRecorded() throws {
-        let app = try launch()
-        openArea("channels", in: app)
-        app.segmentedControls.buttons["콘텐츠"].tap()
-        let review = app.buttons["action.draft-keyring-result"]
-        XCTAssertTrue(scrollTo(review, in: app))
-        review.tap()
-        let save = app.buttons["form.save"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
-        wait(for: [expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: save)], timeout: 10)
-        save.tap()
-        XCTAssertTrue(review.waitForNonExistence(timeout: 10))
+    private func approveThenReopenDraft(_ row: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let approve = app.buttons["draft.approve"]
+        XCTAssertTrue(approve.waitForExistence(timeout: 10))
+        approve.tap()
+        let reopen = app.buttons["draft.reopen"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 10))
+        reopen.tap()
+        XCTAssertTrue(app.buttons["draft.approve"].waitForExistence(timeout: 10))
     }
 
     @MainActor
-    func testRecommendationAcknowledgementIsRecorded() throws {
+    func testContentDraftCanBeApprovedAndUndone() throws {
+        let app = try launch()
+        openArea("channels", in: app)
+        app.segmentedControls.buttons["콘텐츠"].tap()
+        approveThenReopenDraft(app.buttons["draft.content.draft-keyring-result"], in: app)
+    }
+
+    @MainActor
+    func testRecommendationDraftCanBeApprovedAndUndone() throws {
         let app = try launch()
         let segment = app.segmentedControls.buttons["비서 추천"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10))
         segment.tap()
-        let acknowledge = app.buttons["action.recommendation-market"]
-        XCTAssertTrue(scrollTo(acknowledge, in: app))
-        acknowledge.tap()
-        XCTAssertTrue(acknowledge.waitForNonExistence(timeout: 10))
+        approveThenReopenDraft(app.buttons["draft.recommendation.recommendation-market"], in: app)
+    }
+
+    @MainActor
+    func testDepositConfirmationCanBeUndoneFromBookingDetail() throws {
+        let app = try launch()
+        openArea("bookings", in: app)
+        let row = app.buttons["booking.row.booking-minwoo"]
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let confirm = app.buttons["step.do.예약금"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        let undo = app.buttons["step.undo.예약금"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        undo.tap()
+        XCTAssertTrue(app.buttons["step.do.예약금"].waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -68,6 +93,45 @@ final class ActionFlowUITests: RoundupUITestCase {
         XCTAssertEqual(task.value as? String, "미완료")
         task.tap()
         waitFor(task, "value == %@", "완료")
+    }
+
+    @MainActor
+    func testCalendarRowTogglesInPlaceAndOpensItsDetail() throws {
+        let app = try launch()
+        app.tabBars.buttons["캘린더"].tap()
+        let order = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "#1042")).firstMatch
+        XCTAssertTrue(scrollTo(order, in: app))
+        order.tap()
+        XCTAssertTrue(app.navigationBars["머그컵 2종 세트"].waitForExistence(timeout: 10))
+        goBack(app)
+
+        let toggle = app.buttons["task.task-market"]
+        XCTAssertTrue(scrollTo(toggle, in: app))
+        XCTAssertEqual(toggle.value as? String, "미완료")
+        toggle.tap()
+        waitFor(toggle, "value == %@", "완료")
+        XCTAssertTrue(app.navigationBars["캘린더"].exists)
+        toggle.tap()
+        waitFor(toggle, "value == %@", "미완료")
+    }
+
+    @MainActor
+    func testCompletedInquiryReplyCanBeEditedAgain() throws {
+        let app = try launch()
+        let row = app.buttons["inquiry.inquiry-change"]
+        XCTAssertTrue(scrollTo(row, in: app))
+        row.tap()
+        let complete = app.buttons["inquiry.complete"]
+        XCTAssertTrue(scrollTo(complete, in: app))
+        complete.tap()
+        waitUntil(complete, isEnabled: false)
+
+        let editor = app.textViews["inquiry.draft"]
+        XCTAssertTrue(scrollTo(editor, in: app))
+        editor.tap()
+        editor.typeText("추가 안내")
+        XCTAssertTrue(scrollTo(complete, in: app))
+        waitUntil(complete, isEnabled: true)
     }
 
     @MainActor

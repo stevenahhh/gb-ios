@@ -54,8 +54,51 @@ struct CardAction: Decodable, Hashable {
     let label: String
 }
 
+enum CardKind: String, Decodable, Hashable {
+    case booking
+    case order
+    case shipment
+    case channel
+    case content
+    case task
+    case recommendation
+}
+
+struct UndoAction: Decodable, Hashable {
+    let label: String
+    let path: String
+}
+
+enum DraftKind: String, Decodable, Hashable {
+    case content
+    case recommendation
+
+    var rewriteKind: RoundupAPI.RewriteKind {
+        switch self {
+        case .content: .content
+        case .recommendation: .recommendation
+        }
+    }
+}
+
+struct DraftReference: Decodable, Hashable {
+    let kind: DraftKind
+    let id: String
+    let status: ReplyStatus
+    let preview: String
+}
+
+struct BookingSummary: Decodable, Hashable {
+    let day: String
+    let dayTitle: String
+    let time: String
+    let customer: String
+    let people: Int
+}
+
 struct WorkItem: Decodable, Identifiable, Hashable {
     let id: String
+    let kind: CardKind
     let title: String
     let status: Status?
     let lines: [String]
@@ -63,12 +106,71 @@ struct WorkItem: Decodable, Identifiable, Hashable {
     let tag: String?
     let revision: Int
     let action: CardAction?
+    let undo: UndoAction?
+    let draft: DraftReference?
+    let booking: BookingSummary?
+
+    var route: AppRoute? {
+        switch kind {
+        case .booking: .booking(id)
+        case .order, .shipment, .task: .work(kind, id)
+        case .channel, .content, .recommendation: nil
+        }
+    }
+}
+
+struct BookingDetail: Decodable {
+    struct Session: Decodable {
+        let id: String
+        let isDone: Bool
+        let revision: Int
+    }
+
+    let id: String
+    let title: String
+    let status: Status
+    let schedule: String
+    let customer: String
+    let people: Int
+    let minutes: Int
+    let source: String
+    let seatNote: String?
+    let depositDisplay: String
+    let depositConfirmed: Bool
+    let depositDeadline: String?
+    let revision: Int
+    let action: CardAction?
+    let undo: UndoAction?
+    let session: Session
+}
+
+struct ClassSessionDetail: Decodable {
+    let id: String
+    let title: String
+    let schedule: String
+    let isDone: Bool
+    let revision: Int
+    let bookingIds: [String]
+}
+
+struct AssistantDraftDetail: Decodable {
+    let id: String
+    let kind: DraftKind
+    let title: String
+    let lines: [String]
+    let text: String
+    let status: ReplyStatus
+    let revision: Int
+    let afterApproval: String
+    let canReopen: Bool
 }
 
 enum TaskTarget: String, Decodable, Hashable {
     case session
     case task
     case shipment
+    case order
+    case event
 }
 
 struct TaskItem: Decodable, Identifiable, Hashable {
@@ -80,6 +182,16 @@ struct TaskItem: Decodable, Identifiable, Hashable {
     let status: Status?
     let isDone: Bool?
     let revision: Int
+
+    var route: AppRoute? {
+        switch target {
+        case .session: .classSession(id)
+        case .task: .work(.task, id)
+        case .shipment: .work(.shipment, id)
+        case .order: .work(.order, id)
+        case .event: nil
+        }
+    }
 }
 
 struct TaskGroup: Decodable, Identifiable, Hashable {
@@ -128,23 +240,27 @@ enum EventKind: String, Decodable, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct DayEvent: Decodable, Hashable {
-    let kind: EventKind
-    let count: Int
-    let display: String
-}
-
 struct AgendaItem: Decodable, Identifiable, Hashable {
     let id: String
+    let target: TaskTarget
+    let targetId: String
     let time: String
     let title: String
     let kind: EventKind
     let detail: String
+    let status: Status?
+    let isDone: Bool?
+    let revision: Int
+
+    /// Calendar rows reuse the today row, so both act on the same database rows.
+    var task: TaskItem {
+        TaskItem(id: targetId, target: target, time: time, title: title, detail: detail,
+                 status: status, isDone: isDone, revision: revision)
+    }
 }
 
 struct CalendarDay: Decodable, Hashable {
     let date: String
-    let events: [DayEvent]
     let items: [AgendaItem]
 }
 
@@ -268,15 +384,6 @@ struct SessionOption: Decodable, Identifiable, Hashable {
     let schedule: String
     let remainingSeats: Int
     let deposit: String
-}
-
-struct ContentDetail: Decodable {
-    let id: String
-    let title: String
-    let channel: String
-    let body: String
-    let isReviewed: Bool
-    let revision: Int
 }
 
 extension Calendar {
