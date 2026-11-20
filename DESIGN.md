@@ -15,10 +15,10 @@ Ranked jobs:
 
 ## Principles
 
-- Native components only: TabView with Tab, NavigationStack, List with per-row card backgrounds (`CardSection`, so dark cards can use a smaller radius), Picker, Gauge, UICalendarView, searchable, ContentUnavailableView. No custom-drawn bars.
+- Native components only: TabView with Tab, NavigationStack, List with per-row card backgrounds (`CardSection`, so dark cards can use a smaller radius), Picker, Gauge, searchable, ContentUnavailableView. No custom-drawn bars. The calendar tab is the one exception: it draws its own week strip, month grid, and timeline (see 캘린더).
 - One prominent button per screen (borderedProminent). Every other state-changing action is bordered. Actions that only open something become whole-row navigation links.
 - Liquid Glass stays in the control layer: tab bar, toolbars, the assistant accessory, and the assistant composer. Content rows never use glass button styles.
-- Status never relies on color alone. Each status badge pairs a symbol with text. Status tones use orange (needs action), green (done), and gray (in progress or neutral). Operations and Calendar use no per-category color, leading icon, or row separator; event kinds are written as text. Today keeps its delivery and material tiles.
+- Status never relies on color alone. Each status badge pairs a symbol with text. Status tones use orange (needs action before a deadline), green (done), and gray (in progress or neutral); red (`overdueRed`) is reserved for "기한 지남", its clock, and the calendar's missed node. Color means status, never category: Operations uses no per-category color or row separator, and the calendar uses no color at all (see 캘린더). Only navigation rows to work areas and 기회 carry a monochrome secondary-colored symbol. Today keeps its delivery and material tiles.
 - Dynamic Type everywhere: scaled metrics for fixed widths, stacked layouts and menu pickers at accessibility sizes.
 - Text size floor: body text uses body (17pt) and secondary text uses subheadline (15pt) or larger, including status badges, metric labels, row details, legends, and kind tags. System chrome keeps Apple's own styles: navigation subtitles, section headers, tab labels, and the footnote-sized assistant disclaimer.
 - Korean text breaks only between words. Titles go through `Text(keepingWords:)`, which joins the characters inside each word with U+2060 and keeps the original string as the accessibility label. Detail lines go through `PhraseText`, a flow layout of plain Text pieces: a line with ` · ` separators wraps only at the separators, any other line wraps only between words.
@@ -40,17 +40,17 @@ Ranked jobs:
 - Primary action: the first state-changing card action of the selected segment (for example 포장 완료하기 on 배송).
 - Priorities: 1) the three numbers for today, 2) the segment control (할 일 / 채널 / 배송 / 비서 추천), 3) the grouped rows with done toggles and status badges.
 - Left out on purpose: monthly statistics, settings, a second prominent button.
-- Layout: List insetGrouped; scroll owner is the List; large title greeting by time of day with a subtitle showing the date and the last update time; pull to refresh. Anti-patterns: nested segmented controls, card buttons that only navigate.
+- Layout: List insetGrouped; scroll owner is the List; large title is a one-line headline of the most urgent work (`TodayHeadline`: overdue, class within two hours, waiting work, remaining today, all done, tomorrow/this week), always label-colored and at most 10 Hangul syllables, with a subtitle showing the date and the last update time; pull to refresh. Anti-patterns: nested segmented controls, card buttons that only navigate.
 
 ### 캘린더
 - Primary action: pick a day and read its schedule.
 - Priorities: 1) the week strip (default) or the month calendar, 2) the selected day's schedule.
-- Left out on purpose: a custom time grid.
-- Layout: List insetGrouped; scroll owner is the List; the month view is a UICalendarView inside one row that sizes to fit, capped at 380pt so neighbouring months never show; days with events show one single-color dot, and the agenda names each kind in text; days without events show an empty state with an add action. Anti-patterns: per-kind colors or symbols under dates, a dot on a day whose schedule is empty, a chevron on a row that does not navigate.
+- Left out on purpose: an hour grid; the timeline lists rows in time order instead.
+- Layout: "모노 타임라인". One white ScrollView, no cards on gray, margins 20pt, system large title "캘린더" with a "오늘 일정 N건" subtitle and + in the toolbar, like the other tabs. Colors come only from `CalendarTokens` (background, label, secondary, tertiary, separator, fill, pinned); label is the only accent. Week strip and month grid share `PeriodNavigator` and `DayCell`; dots under a date count schedule (1, 2, or 3 dots), never kind. All-day rows and the day's orders go to a pinned box; everything else is a timeline whose node shape is the kind (filled circle booking, square delivery, hollow circle task) and whose weight is the state (gray check done, boldest next with a duration bar, semibold upcoming). Today shows a current-time line, refreshed every minute. Date controls stop at xxxLarge Dynamic Type; at accessibility sizes the time moves above the title. A task whose time has passed unfinished is `missed`: red dashed node, "지남" in red, and an "오늘로 옮기기" button; a parcel past pickup shows "기한 지남". Red (`overdueRed`) appears only there. Days with no timed rows show an empty message and hide the legend. Anti-patterns: per-kind colors, orange emphasis, a system graphical date picker, order receipt times in the timeline.
 
 ### 운영
 - Primary action: open the first item under 먼저 확인해주세요.
-- Priorities: 1) 먼저 확인해주세요 with three tappable counts, 2) the monthly summary (labelled ring, four numbers, labelled comparison pair, a period button that opens a start-to-end calendar), 3) the four work areas, then 기회.
+- Priorities: 1) 먼저 확인해주세요 with three tappable counts, 2) the monthly summary (labelled ring with "N건 중 M건 처리", four numbers (예약, 주문, 배송, 문의) each with a one-line explanation, a period button that opens a start-to-end calendar), 3) the four work areas, then 기회.
 - Left out on purpose: charts.
 - Layout: List insetGrouped; scroll owner is the List; rows push OperationAreaView with an optional preset filter. Anti-patterns: a non-tappable urgent summary, a period control that looks like plain text.
 
