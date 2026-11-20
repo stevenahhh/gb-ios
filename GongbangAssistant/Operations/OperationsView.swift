@@ -55,8 +55,12 @@ struct OperationsView: View {
                             Text(summary.display)
                                 .monospacedDigit()
                         } label: {
-                            Text(summary.area.title)
-                            Text(summary.area.summary)
+                            Label {
+                                Text(summary.area.title)
+                                Text(summary.area.summary)
+                            } icon: {
+                                MenuIcon(systemName: summary.area.systemImage)
+                            }
                         }
                     }
                     .accessibilityIdentifier("operations.\(summary.area.rawValue)")
@@ -67,11 +71,11 @@ struct OperationsView: View {
                 NavigationLink {
                     OpportunitiesView()
                 } label: {
-                    VStack(alignment: .leading) {
+                    Label {
                         Text("기회")
                         Text("저장해 둔 마켓·공모·지원사업")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    } icon: {
+                        MenuIcon(systemName: "chart.line.uptrend.xyaxis")
                     }
                 }
                 .accessibilityIdentifier("operations.opportunities")
@@ -84,20 +88,22 @@ struct OperationsView: View {
     private func periodSection(_ data: OperationsData) -> some View {
         let period = data.period
         return CardSection {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 20) {
-                    gauge(period)
-                    summaryGrid(period)
+            HStack(spacing: 16) {
+                gauge(period)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(period.month.key == "custom" ? "선택 기간 처리율" : "\(period.month.title) 처리율")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text("\(period.total)건 중 \(period.handled)건 처리")
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
                 }
-                VStack(alignment: .leading, spacing: 12) {
-                    gauge(period)
-                    summaryGrid(period)
-                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 0)
             }
             .padding(.vertical, 4)
-            HStack(spacing: 16) {
-                ForEach(period.comparisons) { comparisonView($0) }
-            }
+            summaryGrid(period)
+                .padding(.vertical, 4)
         } header: {
             ViewThatFits(in: .horizontal) {
                 HStack {
@@ -116,7 +122,7 @@ struct OperationsView: View {
     }
 
     private func periodTitle(_ period: OperationsData.Period) -> some View {
-        Text("\(period.month.title) 운영 현황")
+        Text("운영 현황")
             .tracking(0.6)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("operations.periodTitle")
@@ -127,7 +133,7 @@ struct OperationsView: View {
             isPickingPeriod = true
         } label: {
             HStack(spacing: 4) {
-                Text(period.month.range).monospacedDigit()
+                Text(period.month.key == "custom" ? period.month.range : period.month.title).monospacedDigit()
                 Image(systemName: "chevron.down").imageScale(.small)
             }
             .font(.footnote.weight(.semibold))
@@ -142,10 +148,17 @@ struct OperationsView: View {
 
     private func attentionRow(_ metric: Metric) -> some View {
         NavigationLink(value: route(for: metric)) {
-            LabeledContent(metric.label) {
+            LabeledContent {
                 Text(metric.display)
                     .font(.body.weight(.semibold))
                     .monospacedDigit()
+            } label: {
+                Text(metric.label)
+                if let due = metric.due {
+                    DueLabel(due: due)
+                } else if let detail = metric.detail {
+                    Text(detail)
+                }
             }
         }
     }
@@ -167,9 +180,6 @@ struct OperationsView: View {
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(.accentColor)
-            Text("처리율")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(period.month.title) 처리율")
@@ -189,28 +199,19 @@ struct OperationsView: View {
         }
     }
 
-    private func comparisonView(_ comparison: OperationsData.Comparison) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(comparison.label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(comparison.display)
-                .font(.title2.bold())
-                .monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 4)
-        .accessibilityElement(children: .combine)
-    }
-
     private func summary(_ metric: Metric) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(metric.label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Text(metric.display)
-                .font(.headline)
+                .font(.title3.weight(.semibold))
                 .monospacedDigit()
+            if let detail = metric.detail {
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
