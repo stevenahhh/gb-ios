@@ -7,17 +7,10 @@ struct CalendarData {
 }
 
 struct CalendarScreen: View {
-    private struct UndoToast: Identifiable {
-        let id = UUID()
-        let message: String
-        let undo: @MainActor () async -> Void
-    }
-
     @SceneStorage("calendar.mode") private var mode: CalendarMode = .week
     @State private var selectedDay = Calendar.workshop.startOfDay(for: Self.clockOverride ?? .now)
     @State private var loader = Loader<CalendarData>()
     @State private var isAddingEvent = false
-    @State private var toast: UndoToast?
     @State private var now = Date.now
     @Environment(AppModel.self) private var app
 
@@ -64,25 +57,12 @@ struct CalendarScreen: View {
                     .accessibilityIdentifier("calendar.add")
                 }
             }
-            .overlay(alignment: .bottom) {
-                if let toast {
-                    toastView(toast)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(duration: 0.25), value: toast?.id)
             .sheet(isPresented: $isAddingEvent) {
                 EventFormSheet(day: selectedDay)
             }
             .appDestinations()
         }
         .task(id: loadKey) { await load() }
-        // The toast is a transient notice, so it leaves after a few seconds on its own.
-        .task(id: toast?.id) {
-            guard toast != nil else { return }
-            try? await Task.sleep(for: .seconds(6))
-            toast = nil
-        }
     }
 
     #if DEBUG
@@ -106,18 +86,18 @@ struct CalendarScreen: View {
     private func moveToToday(_ entry: TimelineEntry, now: Date) {
         guard let target = entry.ownerItem, let day = loader.value.flatMap({ data in
             data.days.values.first { $0.items.contains { $0.id == entry.id } }
-        }), let from = Self.moment(day: day.date, minutes: entry.start) else { return }
+        }), let from = entry.isAllDay ? Self.endOfDay(day.date) : Self.moment(day: day.date, minutes: entry.start) else { return }
         let today = calendar.startOfDay(for: now)
         var to = calendar.date(byAdding: .minute, value: entry.start, to: today) ?? today
+        // Past its time today: move it as an all-day task (23:59:59 is the all-day marker).
         if to <= now {
-            to = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: today) ?? today
+            to = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: today) ?? today
         }
         let destination = to
         Task {
             await app.run(id: entry.id) {
                 let revision = try await RoundupAPI.move(target, to: destination)
-                toast = UndoToast(message: "오늘로 옮겼어요") { [app] in
-                    toast = nil
+                app.showToast("오늘로 옮겼어요") { [app] in
                     await app.run(id: entry.id) {
                         _ = try await RoundupAPI.move(target.with(revision: revision), to: from)
                     }
@@ -126,21 +106,24 @@ struct CalendarScreen: View {
         }
     }
 
-    /// Completing shows an undo toast, because a quick tap on a busy screen is easy to get wrong.
+    /// Checking or unchecking shows an undo toast, because a quick tap on a busy screen is easy to get wrong.
     private func check(_ entry: TimelineEntry, done: Bool) async -> Bool {
         guard let item = entry.ownerItem else { return false }
         var revision: Int?
         let saved = await app.run(id: entry.id) {
             revision = try await RoundupAPI.setDone(item, done: done)
         }
-        guard saved, done, let revision else { return saved }
-        toast = UndoToast(message: "‘\(entry.title)’ 완료했어요") { [app] in
-            toast = nil
+        guard saved, let revision else { return saved }
+        app.showToast("‘\(entry.title)’ \(done ? "완료했어요" : "완료를 취소했어요")") { [app] in
             await app.run(id: entry.id) {
-                _ = try await RoundupAPI.setDone(item.with(revision: revision), done: false)
+                _ = try await RoundupAPI.setDone(item.with(revision: revision), done: !done)
             }
         }
         return true
+    }
+
+    private static func endOfDay(_ key: String) -> Date? {
+        moment(day: key, minutes: 0).flatMap { Calendar.workshop.date(bySettingHour: 23, minute: 59, second: 59, of: $0) }
     }
 
     private static func moment(day key: String, minutes: Int) -> Date? {
@@ -148,26 +131,6 @@ struct CalendarScreen: View {
         guard parts.count == 3 else { return nil }
         return Calendar.workshop.date(from: DateComponents(
             year: parts[0], month: parts[1], day: parts[2], hour: minutes / 60, minute: minutes % 60))
-    }
-
-    private func toastView(_ toast: UndoToast) -> some View {
-        HStack(spacing: 12) {
-            Text(toast.message)
-                .foregroundStyle(CalendarTokens.background)
-                .lineLimit(1)
-            Button("되돌리기") {
-                Task { await toast.undo() }
-            }
-            .fontWeight(.semibold)
-            .foregroundStyle(CalendarTokens.background)
-            .frame(minHeight: 44)
-            .accessibilityIdentifier("calendar.toast.undo")
-        }
-        .font(.subheadline)
-        .padding(.horizontal, 18)
-        .background(CalendarTokens.label, in: .capsule)
-        .padding(.bottom, 12)
-        .accessibilityElement(children: .contain)
     }
 }
 

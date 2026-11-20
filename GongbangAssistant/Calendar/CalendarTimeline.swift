@@ -57,11 +57,15 @@ struct TimelineEntry: Identifiable, Hashable {
     let reportsDone: Bool
     let destination: TimelineDestination?
     let ownerItem: OwnerItem?
+    /// A task or owner entry with no time of day; it leads the timeline and never ends by the clock.
+    let isAllDay: Bool
 
     var end: Int { start + (minutes ?? 0) }
 
     init?(_ item: AgendaItem) {
-        guard let start = Self.minutes(of: item.time) else { return nil }
+        let isAllDay = item.time == "종일"
+        guard let start = isAllDay ? 0 : Self.minutes(of: item.time) else { return nil }
+        self.isAllDay = isAllDay
         let parts = item.id.split(separator: ":", maxSplits: 1).map(String.init)
         let prefix = parts.first ?? ""
         switch prefix {
@@ -102,6 +106,7 @@ struct TimelineEntry: Identifiable, Hashable {
         reportsDone = pickups.allSatisfy { $0.isDone != nil }
         destination = .area(AreaRoute(area: .deliveries, filter: "scheduled"))
         ownerItem = nil
+        isAllDay = false
     }
 
     static func minutes(of time: String) -> Int? {
@@ -118,8 +123,10 @@ struct DaySchedule {
     let entries: [TimelineEntry]
 
     init(items: [AgendaItem]) {
-        allDay = items.filter { $0.time == "종일" }
-        let timed = items.filter { $0.time != "종일" }
+        // Arrivals and other all-day facts go to the pinned box; all-day tasks stay in the timeline.
+        let ownerAllDay = { (item: AgendaItem) in item.id.hasPrefix("task:") || item.id.hasPrefix("event:") }
+        allDay = items.filter { $0.time == "종일" && !ownerAllDay($0) }
+        let timed = items.filter { $0.time != "종일" || ownerAllDay($0) }
         orders = timed.filter { $0.id.hasPrefix("order:") }
         let rest = timed.filter { !$0.id.hasPrefix("order:") }
         var entries: [TimelineEntry] = []
@@ -154,6 +161,8 @@ struct TimelinePlan {
         let state: CalendarEventState
         /// A parcel past its pickup that has not been sent.
         let isOverdue: Bool
+        /// Only tasks missed on an earlier day can move to today; today's are simply checked off.
+        var canMoveToToday = false
         var id: String { entry.id }
     }
 
@@ -162,10 +171,12 @@ struct TimelinePlan {
 
     init(entries: [TimelineEntry], relation: DayRelation, now: Int) {
         var rows = entries.map { entry -> Row in
-            let hasPassed = relation == .past || (relation == .today && entry.start < now)
+            let hasPassed = relation == .past || (relation == .today && !entry.isAllDay && entry.start < now)
             switch entry.kind {
             case .task:
-                return Row(entry: entry, state: entry.isDone ? .done : hasPassed ? .missed : .upcoming, isOverdue: false)
+                let state: CalendarEventState = entry.isDone ? .done : hasPassed ? .missed : .upcoming
+                return Row(entry: entry, state: state, isOverdue: false,
+                           canMoveToToday: state == .missed && relation == .past)
             case .delivery where entry.reportsDone:
                 return Row(entry: entry, state: entry.isDone ? .done : .upcoming,
                            isOverdue: !entry.isDone && hasPassed)
@@ -183,12 +194,13 @@ struct TimelinePlan {
             nowIndex = nil
             return
         }
-        let next = rows.firstIndex { $0.state == .upcoming && !$0.isOverdue }
+        let next = rows.firstIndex { $0.state == .upcoming && !$0.isOverdue && !$0.entry.isAllDay }
         if let next {
             rows[next] = Row(entry: rows[next].entry, state: .next, isOverdue: false)
         }
         self.rows = rows
-        nowIndex = next ?? rows.count
+        // The line sits between rows that have started (including one in progress) and rows still ahead.
+        nowIndex = rows.firstIndex { !$0.entry.isAllDay && $0.entry.start > now } ?? rows.count
     }
 }
 
@@ -518,7 +530,8 @@ struct TimelineRow: View {
     private var shown: TimelinePlan.Row {
         guard let requestedDone else { return row }
         let state: CalendarEventState = requestedDone ? .done : row.state == .done ? .upcoming : row.state
-        return TimelinePlan.Row(entry: entry, state: state, isOverdue: row.isOverdue && !requestedDone)
+        return TimelinePlan.Row(entry: entry, state: state, isOverdue: row.isOverdue && !requestedDone,
+                                canMoveToToday: row.canMoveToToday && state == .missed)
     }
 
     private var state: CalendarEventState { shown.state }
@@ -586,7 +599,7 @@ struct TimelineRow: View {
     }
 
     private var time: some View {
-        Text(TimelineText.clock(entry.start))
+        Text(entry.isAllDay ? "종일" : TimelineText.clock(entry.start))
             .font(.subheadline.monospacedDigit().weight(timeWeight))
             .foregroundStyle(state == .done || state == .missed ? CalendarTokens.secondary : CalendarTokens.label)
             .accessibilityHidden(true)
@@ -631,11 +644,11 @@ struct TimelineRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, state == .missed && entry.ownerItem != nil ? 4 : 16)
+        .padding(.bottom, shown.canMoveToToday && entry.ownerItem != nil ? 4 : 16)
         .contentShape(.rect)
         VStack(alignment: .leading, spacing: 0) {
             link(text)
-            if state == .missed, entry.ownerItem != nil {
+            if shown.canMoveToToday, entry.ownerItem != nil {
                 Button {
                     move(entry)
                 } label: {
@@ -867,7 +880,7 @@ struct DayOrdersView: View {
             Text(keepingWords: order.title).font(.body.weight(.medium))
             Text("\(order.time) 접수 · \(order.detail)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
         .accessibilityElement(children: .combine)
     }

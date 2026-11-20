@@ -141,10 +141,6 @@ enum RoundupAPI {
         return moved.revision
     }
 
-    static func setTaskDone(id: String, done: Bool, revision: Int) async throws {
-        let _: Acknowledged = try await post("tasks/\(id)/completion", Completion(done: done, expectedRevision: revision))
-    }
-
     static func setSessionDone(id: String, done: Bool, revision: Int) async throws {
         let _: Acknowledged = try await post("class-sessions/\(id)/completion", Completion(done: done, expectedRevision: revision))
     }
