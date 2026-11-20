@@ -12,6 +12,10 @@ extension Color {
     /// Assistant only: its face, draft marks, and the composer icon.
     static let assistantAccent = dynamic(light: 0xA84A2A, dark: 0xE08A66)
 
+    /// Assistant text while it is being written: the newest glyphs, then the ones just behind them. Never a resting color.
+    static let writingLead = dynamic(light: 0xE6A800, dark: 0xFFD60A)
+    static let writingTrail = dynamic(light: 0x8E44D6, dark: 0xBF5AF2)
+
     // Nonisolated: SwiftUI resolves colors off the main thread, and a main-actor closure traps there.
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
         Color(uiColor: UIColor { @Sendable traits in

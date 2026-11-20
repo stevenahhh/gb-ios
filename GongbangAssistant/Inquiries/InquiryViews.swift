@@ -34,6 +34,7 @@ struct InquiryDetailView: View {
     @State private var editorRevision: Int?
     @State private var savedDraft = ""
     @State private var completionCount = 0
+    @State private var isDraftFresh = false
 
     private var isEditingLocked: Bool {
         isGenerating || store.isInquiryBusy || store.requiresInquiryReload
@@ -91,8 +92,11 @@ struct InquiryDetailView: View {
             }
 
             CardSection {
-                KoreanTextEditor(text: $draft)
+                KoreanTextEditor(text: $draft, isFresh: $isDraftFresh)
                     .frame(minHeight: 160)
+                    // The reply about to be replaced is dimmed while the assistant writes.
+                    .opacity(isGenerating ? 0.4 : 1)
+                    .animation(.default, value: isGenerating)
                     .accessibilityLabel("답변 작성")
                     .accessibilityIdentifier("inquiry.draft")
                     .disabled(isEditingLocked)
@@ -150,7 +154,7 @@ struct InquiryDetailView: View {
         } label: {
             Group {
                 if isGenerating {
-                    ProgressView()
+                    GeneratingIndicator(label: "쓰는 중이에요", showsFace: false)
                 } else {
                     HStack(spacing: 6) {
                         AssistantFace(size: .card)
@@ -171,16 +175,9 @@ struct InquiryDetailView: View {
         .accessibilityIdentifier("inquiry.generate")
 
         Button(action: complete) {
-            Group {
-                if store.isSavingInquiry {
-                    ProgressView()
-                } else {
-                    Text("답변 완료")
-                        .foregroundStyle(Color(.systemBackground))
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 30)
+            BusyLabel(title: "답변 완료", isBusy: store.isSavingInquiry, isProminent: true)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
@@ -190,6 +187,8 @@ struct InquiryDetailView: View {
 
     private func loadEditorFromStore() {
         guard let inquiry = store.inquiry(id: id) else { return }
+        // Server text is not something the assistant just wrote, so it never plays the reveal.
+        isDraftFresh = false
         draft = inquiry.draft
         savedDraft = inquiry.draft
         editorRevision = inquiry.revision
@@ -199,10 +198,8 @@ struct InquiryDetailView: View {
         isGenerating = true
         defer { isGenerating = false }
         do {
-            // Generated text is an unsaved edit, and never overwrites an in-flight completion.
-            draft = try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
-                                               question: inquiry.question, facts: inquiry.facts)
-            errorMessage = nil
+            show(generated: try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
+                                                       question: inquiry.question, facts: inquiry.facts))
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -212,12 +209,20 @@ struct InquiryDetailView: View {
         isGenerating = true
         defer { isGenerating = false }
         do {
-            draft = try await RoundupAPI.rewrite(kind: .inquiry, title: inquiry.subject, text: draft,
-                                                 instruction: style.instruction)
-            errorMessage = nil
+            show(generated: try await RoundupAPI.rewrite(kind: .inquiry, title: inquiry.subject, text: draft,
+                                                         instruction: style.instruction))
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Generated text is an unsaved edit, and never overwrites an in-flight completion.
+    /// The editor reveals it once, and VoiceOver hears about it once.
+    private func show(generated text: String) {
+        draft = text
+        isDraftFresh = true
+        errorMessage = nil
+        AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 다 썼어요. 내용을 확인해 주세요.").post()
     }
 
     /// The owner has no save button, so edits persist when the screen or app is left.

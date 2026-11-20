@@ -199,4 +199,22 @@ final class ActionFlowUITests: RoundupUITestCase {
         app.buttons["workshop.save"].tap()
         XCTAssertTrue(element(labelled: "오롯 공방 본점", in: app).waitForExistence(timeout: 10))
     }
+
+    /// Needs a server that can reach the model (CLOVA_STUDIO_API_KEY); set TEST_RUNNER_ROUNDUP_UITEST_AI=1 to run it.
+    @MainActor
+    func testAssistantAnswerWaitsThenSettles() throws {
+        guard ProcessInfo.processInfo.environment["ROUNDUP_UITEST_AI"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_ROUNDUP_UITEST_AI=1 to run against a server that can reach the model")
+        }
+        let app = try launch()
+        let accessory = app.buttons["assistant.accessory"]
+        XCTAssertTrue(accessory.waitForExistence(timeout: 5))
+        accessory.tap()
+        let suggestion = app.buttons["오늘 발송할 주문 알려줘"]
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5))
+        suggestion.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["assistant.generating"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["assistant.generated"].waitForExistence(timeout: 40))
+        XCTAssertFalse(app.descendants(matching: .any)["assistant.generating"].exists)
+    }
 }

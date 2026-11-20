@@ -161,11 +161,13 @@ struct AssistantDraftCard: View {
     @State private var buffer = ""
     @State private var editRevision = 0
     @State private var isRewriting = false
-    @State private var isSubmitting = false
+    /// The identifier of the button whose write is in flight.
+    @State private var runningID: String?
+    @State private var isBufferFresh = false
     @State private var errorMessage: String?
     @Environment(AppModel.self) private var app
 
-    private var isDisabled: Bool { isLocked || isRewriting || isSubmitting }
+    private var isDisabled: Bool { isLocked || isRewriting || runningID != nil }
 
     var body: some View {
         content
@@ -215,12 +217,15 @@ struct AssistantDraftCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.fill.tertiary, in: .rect(cornerRadius: 12))
+        // The text about to be replaced is dimmed while the assistant writes.
+        .opacity(isRewriting ? 0.4 : 1)
+        .animation(.default, value: isRewriting)
         .accessibilityIdentifier("draft.text")
     }
 
     private var editor: some View {
         VStack(spacing: 10) {
-            KoreanTextEditor(text: $buffer)
+            KoreanTextEditor(text: $buffer, isFresh: $isBufferFresh)
                 .frame(minHeight: 160)
                 .padding(8)
                 .background(.fill.tertiary, in: .rect(cornerRadius: 12))
@@ -232,7 +237,7 @@ struct AssistantDraftCard: View {
                     errorMessage = nil
                 }
                 primaryButton("저장", identifier: "draft.save") {
-                    run {
+                    run("draft.save") {
                         try await actions.save(buffer, editRevision)
                         isEditing = false
                     }
@@ -245,7 +250,7 @@ struct AssistantDraftCard: View {
     private var pendingActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             primaryButton("승인하기", identifier: "draft.approve") {
-                run {
+                run("draft.approve") {
                     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                         throw ReplyError.emptyDraft
                     }
@@ -254,12 +259,24 @@ struct AssistantDraftCard: View {
             }
             HStack(spacing: 8) {
                 secondaryButton("수정", identifier: "draft.edit") { beginEditing(with: text) }
-                secondaryButton(isRewriting ? "쓰는 중" : "다시 쓰기", identifier: "draft.rewrite") { rewrite() }
+                Button(action: rewrite) {
+                    Group {
+                        if isRewriting {
+                            GeneratingIndicator(label: "쓰는 중", showsFace: false)
+                        } else {
+                            Text("다시 쓰기")
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("draft.rewrite")
                 // No destructive red: a rejection can be undone.
                 Button {
-                    run { try await actions.decide(.reject, revision) }
+                    run("draft.reject") { try await actions.decide(.reject, revision) }
                 } label: {
-                    Text("반려")
+                    BusyLabel(title: "반려", isBusy: runningID == "draft.reject")
                         .foregroundStyle(.primary)
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 30)
@@ -285,7 +302,7 @@ struct AssistantDraftCard: View {
                 Spacer(minLength: 8)
                 if canReopen {
                     Button {
-                        run { try await actions.reopen(revision) }
+                        run("draft.reopen") { try await actions.reopen(revision) }
                     } label: {
                         Label("되돌리기", systemImage: "arrow.uturn.backward")
                             .font(.subheadline.weight(.semibold))
@@ -313,8 +330,7 @@ struct AssistantDraftCard: View {
 
     private func primaryButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .foregroundStyle(Color(.systemBackground))
+            BusyLabel(title: title, isBusy: runningID == identifier, isProminent: true)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 30)
         }
@@ -324,7 +340,7 @@ struct AssistantDraftCard: View {
 
     private func secondaryButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            BusyLabel(title: title, isBusy: runningID == identifier)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 30)
         }
@@ -332,8 +348,9 @@ struct AssistantDraftCard: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func beginEditing(with value: String) {
+    private func beginEditing(with value: String, isFresh: Bool = false) {
         buffer = value
+        isBufferFresh = isFresh
         editRevision = revision
         errorMessage = nil
         isEditing = true
@@ -345,17 +362,18 @@ struct AssistantDraftCard: View {
         Task {
             defer { isRewriting = false }
             do {
-                beginEditing(with: try await actions.rewrite())
+                beginEditing(with: try await actions.rewrite(), isFresh: true)
+                AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 다 썼어요. 내용을 확인해 주세요.").post()
             } catch {
                 show(error)
             }
         }
     }
 
-    private func run(_ operation: @escaping @MainActor () async throws -> Void) {
-        isSubmitting = true
+    private func run(_ identifier: String, _ operation: @escaping @MainActor () async throws -> Void) {
+        runningID = identifier
         Task {
-            defer { isSubmitting = false }
+            defer { runningID = nil }
             do {
                 try await operation()
                 errorMessage = nil

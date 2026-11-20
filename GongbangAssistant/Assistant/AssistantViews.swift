@@ -6,6 +6,8 @@ private struct ChatTurn: Identifiable {
     let role: Role
     let text: String
     var items: [WorkItem] = []
+    /// True until the answer has been revealed once.
+    var isFresh = false
 
     /// Failed turns stay on screen but never reach the model.
     var apiTurn: RoundupAPI.ChatTurn? {
@@ -141,47 +143,66 @@ struct AssistantSheet: View {
     }
 
     private var conversation: some View {
-        List {
-            ForEach(sent) { turn in
-                switch turn.role {
-                case .owner:
-                    HStack {
-                        Spacer(minLength: 40)
-                        Text(turn.text)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(.tint.opacity(0.15), in: .rect(cornerRadius: 16))
-                    }
-                    .listRowSeparator(.hidden)
-                case .assistant:
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label {
-                            Text(Self.rendered(turn.text)).textSelection(.enabled)
-                        } icon: {
-                            AssistantFace(size: .card)
+        ScrollViewReader { proxy in
+            List {
+                ForEach($sent) { $turn in
+                    switch turn.role {
+                    case .owner:
+                        HStack {
+                            Spacer(minLength: 40)
+                            Text(turn.text)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(.tint.opacity(0.15), in: .rect(cornerRadius: 16))
                         }
-                        .labelStyle(TopAlignedIconLabelStyle())
-                        // The items the answer names, each with its one next action.
-                        ForEach(turn.items) { item in
-                            WorkCard(item: item, isPrimary: false)
-                                .padding(12)
-                                .background(.fill.quaternary, in: .rect(cornerRadius: 14))
-                        }
-                    }
-                    .listRowSeparator(.hidden)
-                case .failure:
-                    Label(turn.text, systemImage: "exclamationmark.circle.fill")
-                        .foregroundStyle(.orange)
                         .listRowSeparator(.hidden)
+                    case .assistant:
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label {
+                                GeneratedText(Self.rendered(turn.text), isFresh: $turn.isFresh)
+                                    .textSelection(.enabled)
+                            } icon: {
+                                AssistantFace(size: .card)
+                            }
+                            .labelStyle(TopAlignedIconLabelStyle())
+                            // The items the answer names, each with its one next action. They stay hidden until the text has settled.
+                            ForEach(turn.items) { item in
+                                WorkCard(item: item, isPrimary: false)
+                                    .padding(12)
+                                    .background(.fill.quaternary, in: .rect(cornerRadius: 14))
+                            }
+                            .opacity(turn.isFresh ? 0 : 1)
+                        }
+                        .animation(.default, value: turn.isFresh)
+                        .listRowSeparator(.hidden)
+                    case .failure:
+                        Label(turn.text, systemImage: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
+                            .listRowSeparator(.hidden)
+                    }
+                }
+                if isAnswering {
+                    GeneratingIndicator(label: "비서가 현황을 보고 있어요")
+                        .font(.subheadline)
+                        .listRowSeparator(.hidden)
+                        .id(Self.waitingRow)
                 }
             }
-            if isAnswering {
-                ProgressView("비서가 현황을 보고 있어요")
-                    .listRowSeparator(.hidden)
+            .listStyle(.plain)
+            // A List has no bottom anchor, so the waiting row and then the answer's first line are scrolled into view.
+            .onChange(of: isAnswering) {
+                withAnimation {
+                    if isAnswering {
+                        proxy.scrollTo(Self.waitingRow, anchor: .bottom)
+                    } else if let last = sent.last {
+                        proxy.scrollTo(last.id, anchor: .top)
+                    }
+                }
             }
         }
-        .listStyle(.plain)
     }
+
+    private static let waitingRow = "assistant.waiting"
 
     /// At accessibility sizes the field takes its own full-width row, so its text is not squeezed.
     private var composerLayout: AnyLayout {
@@ -193,7 +214,7 @@ struct AssistantSheet: View {
     private var composer: some View {
         VStack(spacing: 6) {
             composerLayout {
-                TextField("무엇이든 물어보세요", text: $message)
+                TextField(isTranscribing ? "받아쓰는 중이에요" : "무엇이든 물어보세요", text: $message)
                     .font(.body)
                     .textFieldStyle(.plain)
                     .focused($isFieldFocused)
@@ -206,13 +227,12 @@ struct AssistantSheet: View {
                     Button {
                         Task { await toggleRecording() }
                     } label: {
-                        if isTranscribing {
-                            ProgressView()
-                        } else {
-                            Label(recorder.isRecording ? "녹음 끝내기" : "말로 입력",
-                                  systemImage: recorder.isRecording ? "stop.fill" : "mic.fill")
-                                .labelStyle(.iconOnly)
-                        }
+                        Label(isTranscribing ? "받아쓰는 중" : recorder.isRecording ? "녹음 끝내기" : "말로 입력",
+                              systemImage: isTranscribing ? "waveform" : recorder.isRecording ? "stop.fill" : "mic.fill")
+                            .labelStyle(.iconOnly)
+                            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isTranscribing)
+                            .symbolEffect(.breathe, options: .repeating, isActive: recorder.isRecording)
+                            .contentTransition(.symbolEffect(.replace))
                     }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
@@ -290,7 +310,8 @@ struct AssistantSheet: View {
         defer { isAnswering = false }
         do {
             let reply = try await RoundupAPI.ask(question: question, history: history)
-            sent.append(ChatTurn(role: .assistant, text: reply.answer, items: reply.items))
+            sent.append(ChatTurn(role: .assistant, text: reply.answer, items: reply.items, isFresh: true))
+            AccessibilityNotification.Announcement(reply.answer).post()
         } catch {
             sent.append(ChatTurn(role: .failure, text: error.localizedDescription))
         }
