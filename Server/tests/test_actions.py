@@ -10,6 +10,7 @@ from pydantic import JsonValue
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from main import plain_answer
 from tests.conftest import NOW
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
@@ -214,9 +215,57 @@ async def test_assistant_context_comes_from_rows_not_the_client(
     response = await client.post(
         "/ask", json={"question": "오늘 뭐 해?", "context": ["클라이언트가 보낸 거짓"]},
     )
-    assert response.json() == {"answer": "답변"}
+    assert response.json() == {"answer": "답변", "items": []}
     assert "클라이언트가 보낸 거짓" not in prompts[0]
     assert f"오늘 날짜: {NOW:%Y-%m-%d}" in prompts[0]
     assert "예약금 대기 2건" in prompts[0]
     assert "오늘 수업: 14:00 나만의 머그컵 만들기 · 예약 4/6명" in prompts[0]
     assert "010-" not in prompts[0].split("공방:")[0]
+
+
+async def test_assistant_answer_is_plain_and_names_its_cards(
+    database: AsyncEngine,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompts: list[str] = []
+
+    async def fake_chat(system: str, user: str, _temperature: float) -> str:
+        prompts.append(system + user)
+        return "오늘 보낼 택배는 '**머그컵 2종 세트**'예요."
+
+    async with database.begin() as connection:
+        _ = await connection.execute(text(
+            "UPDATE shipments SET ship_by_at = '2026-11-17T16:00:00+09:00' WHERE id = 'shipment-order-1040'",
+        ))
+    monkeypatch.setattr("main.chat", fake_chat)
+    body = (await client.post("/ask", json={"question": "오늘 발송할 주문 알려줘"})).json()
+    assert body["answer"] == "오늘 보낼 택배는 머그컵 2종 세트예요."
+    assert [item["id"] for item in body["items"]] == ["shipment-order-1040"]
+    assert "해요체" in prompts[0]
+    assert "발송 대기(기한 지남, 수거를 놓쳐 아직 안 보냄): 머그컵 2종 세트" in prompts[0]
+
+
+def test_plain_answer_keeps_masked_numbers() -> None:
+    assert plain_answer("연락처: ***-****-****") == "연락처: ***-****-****"
+    assert plain_answer("**머그컵**을 오늘 보내요.") == "머그컵을 오늘 보내요."
+
+
+async def test_assistant_activities_list_only_work_it_did(
+    database: AsyncEngine,
+    client: AsyncClient,
+) -> None:
+    async with database.begin() as connection:
+        _ = await connection.execute(text(
+            "UPDATE shipments SET ship_by_at = '2026-11-17T16:00:00+09:00' WHERE id = 'shipment-order-1040'",
+        ))
+    body = (await client.get("/assistant/activities")).json()
+    kinds = {item["kind"] for item in body}
+    assert kinds <= {"inquiryReply", "contentDraft", "missedPickup"}
+    pickup = next(item for item in body if item["kind"] == "missedPickup")
+    assert pickup["targetId"] == "shipment-order-1040"
+    assert pickup["status"] == "확인 필요"
+    reply = next(item for item in body if item["kind"] == "inquiryReply")
+    assert reply["summary"].endswith("님 문의에 답변을 써 뒀어요")
+    assert reply["evidence"][0].startswith("손님 문의 · ")
+    assert [item["at"] for item in body] == sorted((item["at"] for item in body), reverse=True)

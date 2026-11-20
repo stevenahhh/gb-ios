@@ -8,16 +8,19 @@
 """Roundup API server: the iOS app calls this server; only this server holds NCP keys."""
 
 import hmac
-from typing import Annotated, Literal
+import re
+from typing import Annotated, Final, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from activities import router as activity_router
 from assistant import build_context
 from bookings import router as booking_router
 from channels import router as channel_router
 from common import Now, Session
+from contracts import Card
 from database import database_lifespan, schema_is_current
 from details import router as detail_router
 from drafts import router as draft_router
@@ -55,7 +58,7 @@ app.add_middleware(RequestBoundary)
 for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
-    detail_router, draft_router, undo_router,
+    detail_router, draft_router, undo_router, activity_router,
 ):
     app.include_router(router)
 
@@ -82,9 +85,10 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """Assistant answer."""
+    """Assistant answer and the cards it names, so the owner can act on them."""
 
     answer: str
+    items: list[Card] = Field(default_factory=list)
 
 
 class Health(BaseModel):
@@ -131,10 +135,14 @@ async def ready(db: Session) -> Ready:
 async def draft(body: DraftRequest) -> DraftResponse:
     """Write a reply draft from the facts on the inquiry."""
     system = (
-        "당신은 작은 공방 사장님의 답변 초안을 쓰는 비서입니다. "
-        "아래 '공방 안내'에 있는 사실만 근거로 2~4문장의 정중한 존댓말 답변을 씁니다. "
-        "안내에 없는 내용은 추측하지 말고 '사장님이 확인 후 안내드리겠습니다'라고 씁니다. "
-        "예약 확정이나 결제를 약속하지 않습니다."
+        "당신은 공방이 손님에게 보내는 답장 초안을 써요. 공방이 직접 말하는 1인칭으로 쓰고, "
+        "'사장님께 문의하신 뒤'처럼 사장님을 3인칭으로 부르지 않아요. "
+        "아래 '공방 안내'에 있는 사실만 근거로 2~4문장을 써요. "
+        "모든 문장은 해요체로 끝내요(예: ~있어요, ~드릴게요, ~해 주세요). "
+        "'~습니다', '~입니다' 같은 합쇼체는 쓰지 않아요. "
+        "마크다운이나 별표 없이 평범한 문장으로만 써요. "
+        "안내에 없는 내용은 추측하지 말고 '확인해서 다시 알려드릴게요'라고 써요. "
+        "예약 확정이나 결제를 약속하지 않아요."
     )
     user = (
         "공방 안내:\n" + "\n".join(f"- {fact}" for fact in body.facts)
@@ -143,19 +151,41 @@ async def draft(body: DraftRequest) -> DraftResponse:
     return DraftResponse(draft=await chat(system, user, 0.3))
 
 
+ASK_ITEM_LIMIT: Final = 3
+QUOTES: Final = "'\"\u2018\u2019\u201c\u201d"
+# Only paired emphasis around real words; masked text such as ***-****-**** stays as written.
+EMPHASIS: Final = re.compile(
+    rf"[{QUOTES}]?(?<![*_])(\*\*|__)(?=[^\s*_])([^*_\n]+?)(?<=[^\s*_])\1(?![*_])[{QUOTES}]?",
+)
+
+
+def plain_answer(text: str) -> str:
+    """Strip markdown the model sometimes adds; the app shows plain sentences."""
+    text = EMPHASIS.sub(r"\2", text)
+    text = re.sub(r"^\s*(#+|[-*•])\s+", "", text, flags=re.MULTILINE)
+    return text.strip()
+
+
 @app.post("/ask")
 async def ask(body: AskRequest, now: Now) -> AskResponse:
     """Answer from facts read from PostgreSQL for this request."""
     system = (
-        "당신은 작은 공방 사장님의 업무 비서입니다. "
-        "아래 '현재 공방 현황'에 있는 사실만 근거로 1~4문장으로 짧게 답합니다. "
-        "현황에 없는 내용은 추측하지 말고 '지금 데이터로는 알 수 없어요'라고 답합니다. "
-        "예약 변경, 답변 발송, 결제 같은 일을 했다고 말하지 않습니다. "
-        "필요하면 사장님이 해당 화면에서 처리하도록 안내합니다."
+        "당신은 작은 공방 사장님의 업무 비서예요. "
+        "아래 '현재 공방 현황'에 있는 사실만 근거로 1~4문장으로 짧게 답해요. "
+        "모든 문장은 해요체로 끝내요(예: ~있어요, ~해요, ~해 주세요). "
+        "'~습니다', '~입니다' 같은 합쇼체는 쓰지 않아요. "
+        "마크다운, 별표, 따옴표 강조, 목록 기호 없이 평범한 문장으로만 써요. "
+        "'기한 지남'으로 표시된 발송 건은 수거를 놓친 것이니 오늘 수거할 건과 나눠서 말해요. "
+        "현황에 없는 내용은 추측하지 말고 '지금 데이터로는 알 수 없어요'라고 답해요. "
+        "예약 변경, 답변 발송, 결제 같은 일을 했다고 말하지 않아요. "
+        "필요하면 사장님이 해당 화면에서 처리하도록 안내해요."
     )
-    context = await build_context(now)
+    context, cards = await build_context(now)
     user = "현재 공방 현황:\n" + "\n".join(f"- {line}" for line in context) + f"\n\n질문: {body.question}"
-    return AskResponse(answer=await chat(system, user, 0.2))
+    answer = plain_answer(await chat(system, user, 0.2))
+    # One card per named product: a parcel to send comes before the order it belongs to.
+    named = list({card.title: card for card in reversed(cards) if card.title in answer}.values())[::-1]
+    return AskResponse(answer=answer, items=named[:ASK_ITEM_LIMIT])
 
 
 @app.post("/stt")
