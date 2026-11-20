@@ -46,19 +46,25 @@ struct RootTabView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(reduceMotion ? .never : .onScrollDown)
         .tabViewBottomAccessory {
-            AssistantAccessory(
-                openText: { assistant = .text },
-                openVoice: { assistant = .voice }
-            )
+            // The toast covers this slot, so the bar's own controls leave while one is up: the system-hosted
+            // accessory ignores accessibilityHidden, and its text would show through the glass.
+            ZStack {
+                if app.toast == nil {
+                    AssistantAccessory(
+                        openText: { assistant = .text },
+                        openVoice: { assistant = .voice }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { app.accessorySlot = $0 }
         }
         .sheet(item: $assistant) { launch in
             AssistantSheet(launch: launch)
         }
-        .overlay(alignment: .bottom) {
-            // Over the assistant bar's own slot, so the notice never hides the row that just changed.
-            ToastHost()
-                .padding(.bottom, 58)
-        }
+        // Over the assistant bar's own slot, so the notice never hides the row that just changed.
+        // The overlay spans the window, so it takes touches only while a toast is on screen.
+        .overlay { ToastHost().allowsHitTesting(app.toast != nil) }
         // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
         // Inquiries load on every tab, so their recovery is the app's "back online" moment.
         .onChange(of: store.inquiryLoadError == nil) { wasOK, isOK in

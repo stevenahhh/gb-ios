@@ -120,6 +120,10 @@ final class ActionFlowUITests: RoundupUITestCase {
         let undo = app.buttons["toast.undo"]
         XCTAssertTrue(undo.waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["캘린더"].exists)
+        let toast = app.otherElements["toast"]
+        XCTAssertTrue(toast.exists)
+        XCTAssertEqual(toast.buttons.count, 1, "되돌리기 is the toast's only button")
+        XCTAssertFalse(app.buttons["assistant.accessory"].exists, "the assistant bar is hidden under the toast")
         undo.tap()
         waitFor(check, "value == %@", "미완료")
 

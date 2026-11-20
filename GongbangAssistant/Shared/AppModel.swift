@@ -14,6 +14,8 @@ final class AppModel {
     var failureMessage: String?
     /// One short notice above the assistant bar, optionally with 되돌리기.
     var toast: AppToast?
+    /// The assistant bar's frame in window coordinates. The toast covers exactly this slot.
+    var accessorySlot: CGRect?
 
     func showToast(_ message: String, seconds: Int = 7, undo: (@MainActor () async -> Void)? = nil) {
         toast = AppToast(message: message, seconds: seconds, undo: undo)
@@ -187,54 +189,5 @@ struct ConnectionNotice: View {
         if !isStillOffline && !inquiriesWereFailing {
             app.showToast("다시 연결됐어요", seconds: 2)
         }
-    }
-}
-
-struct AppToast: Identifiable {
-    let id = UUID()
-    let message: String
-    let seconds: Int
-    let undo: (@MainActor () async -> Void)?
-}
-
-/// Covers the assistant bar for a moment instead of the list, so the changed row stays visible.
-/// It leaves after 7 seconds, or stays until closed while VoiceOver is running.
-struct ToastHost: View {
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        Group {
-            if let toast = app.toast {
-                HStack(spacing: 12) {
-                    // Completion toasts carry the row's title; one line keeps 되돌리기 in reach.
-                    Text(toast.message)
-                        .lineLimit(1)
-                    if let undo = toast.undo {
-                        Button("되돌리기") {
-                            app.toast = nil
-                            Task { await undo() }
-                        }
-                        .fontWeight(.semibold)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("toast.undo")
-                    }
-                    Button("닫기", systemImage: "xmark") { app.toast = nil }
-                        .labelStyle(.iconOnly)
-                        .frame(minWidth: 32, minHeight: 44)
-                }
-                .font(.subheadline)
-                .foregroundStyle(CalendarTokens.background)
-                .padding(.horizontal, 18)
-                .background(CalendarTokens.label, in: .capsule)
-                .accessibilityElement(children: .contain)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .task(id: toast.id) {
-                    guard !UIAccessibility.isVoiceOverRunning else { return }
-                    try? await Task.sleep(for: .seconds(toast.seconds))
-                    if app.toast?.id == toast.id { app.toast = nil }
-                }
-            }
-        }
-        .animation(.spring(duration: 0.25), value: app.toast?.id)
     }
 }
