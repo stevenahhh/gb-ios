@@ -36,7 +36,9 @@ struct SettingsView: View {
                     }
                 } icon: {
                     Image(systemName: "storefront")
-                        .font(.largeTitle.weight(.regular))
+                        // A list multiplies a label icon's font by the large symbol scale; medium keeps title2 at 28pt.
+                        .font(.title2)
+                        .imageScale(.medium)
                         .symbolRenderingMode(.monochrome)
                         .foregroundStyle(.primary)
                 }

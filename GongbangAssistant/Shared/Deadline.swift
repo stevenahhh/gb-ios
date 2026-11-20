@@ -97,16 +97,24 @@ extension Array where Element: HasDue {
     }
 }
 
-/// Menu icons share one weight, color, and column so every row's text starts at the same place.
+/// Menu icons share one weight and color. The list's label style sizes the symbol (body text style, large
+/// symbol scale) and reserves its column, so every row's text starts at the same place.
+/// A label icon inside a list never sets a point size; if it must be smaller, use `.imageScale(.medium)`.
 struct MenuIcon: View {
     let systemName: String
 
     var body: some View {
         Image(systemName: systemName.replacingOccurrences(of: ".fill", with: ""))
-            .font(.system(size: 22, weight: .regular))
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(.primary)
-            .frame(width: 28)
             .accessibilityHidden(true)
+    }
+}
+
+#Preview("메뉴 아이콘") {
+    List {
+        ForEach(["storefront", "link", "clock.arrow.circlepath", "bubble.left.and.bubble.right"], id: \.self) { symbol in
+            Label { Text(symbol) } icon: { MenuIcon(systemName: symbol) }
+        }
     }
 }
