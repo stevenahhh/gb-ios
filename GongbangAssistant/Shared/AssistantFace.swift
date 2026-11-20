@@ -28,7 +28,8 @@ struct AssistantFace: View {
 }
 
 /// A small pottery vase: a lip, a narrow neck, and a round body.
-private struct VaseShape: Shape {
+/// SwiftUI may draw shapes off the main actor, so this stateless shape opts out of the target's default isolation.
+nonisolated private struct VaseShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width, h = rect.height
         func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * w, y: rect.minY + y * h) }
