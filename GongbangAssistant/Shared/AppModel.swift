@@ -70,9 +70,13 @@ final class Loader<Value> {
         // A detached child survives SwiftUI cancelling `refreshable` when state changes.
         await Task {
             do {
-                value = try await fetch()
-                loadedAt = .now
-                errorMessage = nil
+                let fetched = try await fetch()
+                // Rows that arrive or leave animate the way a native list's do.
+                withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .snappy(duration: 0.25)) {
+                    value = fetched
+                    loadedAt = .now
+                    errorMessage = nil
+                }
             } catch is CancellationError {
                 return
             } catch {
