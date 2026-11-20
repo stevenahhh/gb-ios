@@ -9,9 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from channels import channel_cards
 from common import Now, Session
-from contracts import ApiModel, Card, EventKind, Metric, Status
-from display import clock, count, day_start, masked, next_day_start, people
-from metrics import UNSHIPPED, Counts, channel_metric, counted, delivery_metrics, load_counts, metric
+from contracts import ApiModel, Card, CardDue, EventKind, Metric, Status
+from display import clock, count, day_start, due, local, masked, next_day_start, people
+from metrics import (
+    UNSHIPPED,
+    Counts,
+    channel_metric,
+    counted,
+    delivery_metrics,
+    integers,
+    load_counts,
+    metric,
+    to_send,
+)
 from models import BookingRow, ClassSessionRow, CustomerRow, RecommendationRow, ShipmentRow, TaskRow
 from recommendations import recommendation_cards
 from shipments import ShipmentPage, shipment_cards
@@ -34,6 +44,7 @@ class TaskItem(ApiModel):
     status: Status | None
     is_done: bool | None
     revision: int
+    due: CardDue | None = None
 
 
 class TaskGroup(ApiModel):
@@ -77,6 +88,32 @@ class SuggestionsSegment(ApiModel):
     items: list[Card]
 
 
+class HeadlineSession(ApiModel):
+    """A class today, for the headline's "N분 뒤 / 진행 중" rule."""
+
+    title: str
+    starts_at: str
+    minutes: int
+    is_done: bool
+
+
+class HeadlineFacts(ApiModel):
+    """Counts the app's headline rules read; the wording itself is chosen on the device."""
+
+    overdue_shipments: int
+    overdue_tasks: int
+    sessions: list[HeadlineSession]
+    pending_inquiries: int
+    deposit_pending: int
+    pending_drafts: int
+    open_tasks_today: int
+    tasks_today: int
+    open_shipments_today: int
+    shipments_today: int
+    tomorrow_classes: int
+    week_classes_left: int
+
+
 class Today(ApiModel):
     """Everything shown on the today tab."""
 
@@ -87,6 +124,7 @@ class Today(ApiModel):
     channels: ChannelsSegment
     delivery: DeliverySegment
     suggestions: SuggestionsSegment
+    headline: HeadlineFacts
 
 
 async def session_group(db: AsyncSession, today: date) -> TaskGroup | None:
@@ -131,7 +169,7 @@ def shipment_group(cards: list[Card]) -> TaskGroup | None:
     items = [
         TaskItem(
             id=card.id, target="shipment", time=None, title=card.title,
-            detail=card.lines[0], status=card.status, is_done=None, revision=card.revision,
+            detail=card.lines[0], status=card.status, is_done=None, revision=card.revision, due=card.due,
         )
         for card in cards
     ]
@@ -156,6 +194,7 @@ async def task_group(db: AsyncSession, today: date, *, material: bool) -> TaskGr
             id=row.id, target="task", time=None if material else clock(row.due_at), title=row.title,
             detail=" · ".join(part for part in (row.vendor, row.detail) if part), status=None,
             is_done=row.status == "done", revision=row.revision,
+            due=None if row.status == "done" else due(row.due_at, suffix="까지"),
         )
         for row in rows
     ]
@@ -174,15 +213,54 @@ def transit_text(counts: Counts) -> tuple[str, str]:
     return summary, "도착 예정일이 지난 배송은 없어요."
 
 
+async def headline_facts(db: AsyncSession, now: datetime, counts: Counts) -> HeadlineFacts:
+    """Collect what the device needs to pick today's headline."""
+    today = now.date()
+    begin, end = day_start(today), next_day_start(today)
+    tomorrow_end = next_day_start(today + timedelta(days=1))
+    week_end = day_start(today + timedelta(days=7 - today.weekday()))
+    sessions = await db.scalars(
+        select(ClassSessionRow)
+        .where(ClassSessionRow.status != "cancelled", ClassSessionRow.starts_at >= begin,
+               ClassSessionRow.starts_at < end)
+        .order_by(ClassSessionRow.starts_at, ClassSessionRow.id),
+    )
+    unshipped, open_task = ShipmentRow.status.in_(UNSHIPPED), TaskRow.status == "open"
+    later_class = (ClassSessionRow.status != "cancelled", ClassSessionRow.starts_at >= end)
+    values = await integers(db, [
+        counted(ShipmentRow, unshipped, ShipmentRow.ship_by_at < now),
+        counted(TaskRow, open_task, TaskRow.due_at < now),
+        counted(TaskRow, open_task, TaskRow.due_at >= now, TaskRow.due_at < end),
+        counted(TaskRow, TaskRow.due_at >= begin, TaskRow.due_at < end),
+        counted(ShipmentRow, unshipped, ShipmentRow.ship_by_at >= now, ShipmentRow.ship_by_at < end),
+        counted(ShipmentRow, ShipmentRow.ship_by_at >= begin, ShipmentRow.ship_by_at < end),
+        counted(ClassSessionRow, *later_class, ClassSessionRow.starts_at < tomorrow_end),
+        counted(ClassSessionRow, *later_class, ClassSessionRow.starts_at < week_end),
+    ])
+    overdue_shipments, overdue_tasks, open_tasks, tasks, open_shipments, shipments, tomorrow, week = values
+    return HeadlineFacts(
+        overdue_shipments=overdue_shipments, overdue_tasks=overdue_tasks,
+        sessions=[
+            HeadlineSession(
+                title=row.title, starts_at=local(row.starts_at).isoformat(timespec="seconds"),
+                minutes=row.duration_minutes, is_done=row.status == "completed",
+            )
+            for row in sessions
+        ],
+        pending_inquiries=counts.pending_inquiries, deposit_pending=counts.deposit_pending,
+        pending_drafts=counts.drafts, open_tasks_today=open_tasks, tasks_today=tasks,
+        open_shipments_today=open_shipments, shipments_today=shipments,
+        tomorrow_classes=tomorrow, week_classes_left=week,
+    )
+
+
 @router.get("/today")
 async def today_screen(db: Session, now: Now) -> Today:
     """Build the whole today tab in one transaction."""
     today = now.date()
     counts = await load_counts(db, today)
     page = ShipmentPage("soonest", SECTION_LIMIT, 0)
-    ship_today = await shipment_cards(
-        db, [ShipmentRow.status.in_(UNSHIPPED), ShipmentRow.ship_by_at < next_day_start(today)], page, today,
-    )
+    ship_today = await shipment_cards(db, list(to_send(today)), page, today)
     in_transit = await shipment_cards(db, [ShipmentRow.status == "in_transit"], page, today)
     groups = [
         await session_group(db, today), shipment_group(ship_today),
@@ -230,4 +308,5 @@ async def today_screen(db: Session, now: Now) -> Today:
             ],
             items=suggestions,
         ),
+        headline=await headline_facts(db, now, counts),
     )
