@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from bookings import SessionState, booking_card, booking_records, schedule_text
 from common import Now, Session
-from contracts import ApiModel, Card, CardAction, CardUndo, Status
+from contracts import ApiModel, Card, CardAction, CardDue, CardUndo, Status
 from display import masked, won
 from models import BookingRow, ChannelRow, ClassSessionRow, OrderRow, ShipmentRow, TaskRow
 from orders import order_card, order_records
@@ -33,6 +33,7 @@ class BookingDetail(ApiModel):
     deposit_display: str
     deposit_confirmed: bool
     deposit_deadline: str | None
+    deposit_due: CardDue | None = None
     revision: int
     action: CardAction | None
     undo: CardUndo | None
@@ -64,7 +65,8 @@ async def booking_detail(booking_id: str, db: Session, now: Now) -> BookingDetai
         source=channel.name if channel else "직접 등록",
         seat_note=f"남은 자리 {max(session.capacity - taken, 0)}개",
         deposit_display=won(booking.deposit_won), deposit_confirmed=booking.status == "confirmed",
-        deposit_deadline=card.deadline, revision=booking.revision, action=card.action, undo=card.undo,
+        deposit_deadline=card.deadline, deposit_due=card.due,
+        revision=booking.revision, action=card.action, undo=card.undo,
         session=SessionState(id=session.id, is_done=session.status == "completed", revision=session.revision),
     )
 

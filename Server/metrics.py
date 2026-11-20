@@ -25,6 +25,14 @@ from models import (
 UNSHIPPED: Final = ("packing", "invoice_pending")
 
 
+def to_send(today: date) -> tuple[ColumnElement[bool], ColumnElement[bool]]:
+    """Parcels to send on a day: its own pickups plus earlier ones still unsent.
+
+    The today tab, the operations badge, and the calendar all count with this one condition.
+    """
+    return ShipmentRow.status.in_(UNSHIPPED), ShipmentRow.ship_by_at < next_day_start(today)
+
+
 @dataclass(frozen=True, slots=True)
 class Counts:
     """Current workload, independent of the requested page or filter."""
@@ -51,7 +59,7 @@ class Counts:
     @property
     def attention(self) -> int:
         """Count work the operations tab asks the owner to handle first."""
-        return self.deposit_pending + self.pending_inquiries + self.unshipped
+        return self.deposit_pending + self.pending_inquiries + self.ship_due_today
 
 
 def counted(model: type[Base], *conditions: ColumnElement[bool]) -> ColumnElement[int]:
@@ -85,7 +93,7 @@ async def load_counts(db: AsyncSession, today: date) -> Counts:
         select(func.coalesce(func.sum(OrderRow.amount_won), 0)).where(*today_orders).scalar_subquery(),
         select(func.coalesce(func.sum(OrderRow.amount_won), 0)).where(*month_orders).scalar_subquery(),
         counted(ShipmentRow, ShipmentRow.status.in_(UNSHIPPED)),
-        counted(ShipmentRow, ShipmentRow.status.in_(UNSHIPPED), ShipmentRow.ship_by_at < day_end),
+        counted(ShipmentRow, *to_send(today)),
         counted(ShipmentRow, transit),
         counted(ShipmentRow, transit, ShipmentRow.expected_arrival_on == today),
         counted(ShipmentRow, transit, ShipmentRow.expected_arrival_on < today),
@@ -103,9 +111,9 @@ async def load_counts(db: AsyncSession, today: date) -> Counts:
     return Counts(*values)
 
 
-def metric(key: str, label: str, value: int) -> Metric:
+def metric(key: str, label: str, value: int, detail: str | None = None) -> Metric:
     """Build a metric counted in items."""
-    return Metric(key=key, label=label, value=value, display=count(value))
+    return Metric(key=key, label=label, value=value, display=count(value), detail=detail)
 
 
 def channel_metric(value: int) -> Metric:
