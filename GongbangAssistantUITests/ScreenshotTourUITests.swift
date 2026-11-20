@@ -46,6 +46,16 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         scrollToEnd()
         capture("operations-end")
         scrollToTop()
+        let remaining = app.buttons["operations.remaining"]
+        if reveal(remaining) {
+            remaining.tap()
+            waitForPush(from: "운영")
+            capture("operations-remaining")
+            goBack()
+            scrollToTop()
+        } else {
+            XCTFail("operations 남은 N건 보기 was not reachable")
+        }
         for area in ["bookings", "orders", "deliveries", "channels"] {
             let row = app.buttons["operations.\(area)"]
             guard reveal(row) else { continue }
@@ -91,6 +101,17 @@ final class ScreenshotTourUITests: RoundupUITestCase {
             goBack()
         } else {
             XCTFail("settings row 공방 정보 was not reachable")
+        }
+        for (identifier, name) in [("settings.delegation", "settings-delegation"), ("settings.activities", "assistant-activities")] {
+            let row = app.buttons[identifier]
+            if reveal(row) {
+                row.tap()
+                waitForPush(from: "설정")
+                capture(name)
+                goBack()
+            } else {
+                XCTFail("settings row \(identifier) was not reachable")
+            }
         }
 
         selectTab("오늘")

@@ -117,7 +117,7 @@ final class ActionFlowUITests: RoundupUITestCase {
         XCTAssertEqual(check.value as? String, "미완료")
         check.tap()
         waitFor(check, "value == %@", "완료")
-        let undo = app.buttons["calendar.toast.undo"]
+        let undo = app.buttons["toast.undo"]
         XCTAssertTrue(undo.waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["캘린더"].exists)
         undo.tap()
@@ -127,6 +127,20 @@ final class ActionFlowUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(orders, in: app))
         orders.tap()
         XCTAssertTrue(element(labelled: "새 주문", in: app).waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    func testInquiryReplyCanBeCompletedAndUndoneFromToday() throws {
+        let app = try launch()
+        let complete = app.buttons["approval.approve.inquiry.inquiry-clay"]
+        XCTAssertTrue(scrollTo(complete, in: app))
+        complete.tap()
+        // The card stays with the next step: copy the reply, open the store, or undo.
+        XCTAssertTrue(app.buttons["draft.copy"].waitForExistence(timeout: 10))
+        let undo = app.buttons["approval.undo.inquiry.inquiry-clay"]
+        XCTAssertTrue(undo.exists)
+        undo.tap()
+        XCTAssertTrue(complete.waitForExistence(timeout: 10))
     }
 
     @MainActor
