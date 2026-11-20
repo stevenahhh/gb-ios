@@ -45,6 +45,7 @@ class TaskItem(ApiModel):
     is_done: bool | None
     revision: int
     due: CardDue | None = None
+    starts_at: datetime | None = None
 
 
 class TaskGroup(ApiModel):
@@ -157,7 +158,7 @@ async def session_group(db: AsyncSession, today: date) -> TaskGroup | None:
         items.append(TaskItem(
             id=session.id, target="session", time=clock(session.starts_at), title=session.title,
             detail=f"{who} · {session.duration_minutes}분", status=None,
-            is_done=session.status == "completed", revision=session.revision,
+            is_done=session.status == "completed", revision=session.revision, starts_at=session.starts_at,
         ))
     return TaskGroup(title="예약", kind="booking", area="bookings", items=items)
 

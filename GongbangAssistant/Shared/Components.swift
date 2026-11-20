@@ -203,6 +203,8 @@ struct TaskRow: View {
 
     private var isDone: Bool { requestedDone ?? item.isDone ?? false }
     private var isRunning: Bool { app.isRunning(item.id) }
+    /// Finished rows can always be reopened; an unfinished class waits for its start time.
+    private var isLocked: Bool { !isDone && !item.canComplete }
     private var visibleTimeline: TimelinePosition? { dynamicTypeSize.isAccessibilitySize ? nil : timeline }
 
     var body: some View {
@@ -229,7 +231,7 @@ struct TaskRow: View {
                     toggle()
                 }
                 .tint(.gray)
-                .disabled(isRunning)
+                .disabled(isRunning || isLocked)
             }
         }
         .onChange(of: item.revision) { requestedDone = nil }
@@ -305,9 +307,11 @@ struct TaskRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .disabled(isRunning)
+        .disabled(isRunning || isLocked)
+        .opacity(isLocked ? 0.35 : 1)
         .accessibilityLabel("\(item.title) 완료 표시")
         .accessibilityValue(isDone ? "완료" : "미완료")
+        .accessibilityHint(isLocked ? "수업이 시작되면 누를 수 있어요." : "")
         .accessibilityIdentifier("task.\(item.id)")
     }
 

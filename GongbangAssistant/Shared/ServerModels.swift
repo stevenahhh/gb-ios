@@ -194,6 +194,13 @@ struct TaskItem: Decodable, Identifiable, Hashable, HasDue {
     let isDone: Bool?
     let revision: Int
     let due: CardDue?
+    let startsAt: String?
+
+    /// A class can be marked done only once it has started; other rows have no such rule.
+    var canComplete: Bool {
+        guard target == .session, let startsAt, let start = try? Date(startsAt, strategy: .iso8601) else { return true }
+        return start <= .now
+    }
 
     var route: AppRoute? {
         switch target {
