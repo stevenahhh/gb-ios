@@ -2,23 +2,52 @@ import SwiftUI
 import RoundupCore
 
 extension ReplyStatus {
-    var badge: Status {
+    var badge: Status { badge() }
+
+    /// Inquiries say 답변 준비됨 once approved: the reply is ready for the owner to send by hand.
+    func badge(approved: String = "승인함") -> Status {
         switch self {
         case .pending: Status(text: "검토 대기", tone: .attention)
-        case .approved: Status(text: "승인함", tone: .done)
+        case .approved: Status(text: approved, tone: .done)
         case .rejected: Status(text: "반려함", tone: .neutral)
         }
     }
 }
 
+/// The card head: the assistant's face and who wrote this, in clay because it is the assistant's own mark.
 private struct AssistantDraftLabel: View {
+    let isReply: Bool
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "sparkles")
+        HStack(spacing: 6) {
+            AssistantFace(size: .card)
                 .accessibilityHidden(true)
-            Text("비서 초안")
+            Text(isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.assistantAccent)
         }
-        .font(.footnote.weight(.semibold))
+    }
+}
+
+/// "비서 초안" and its status; stacked at accessibility sizes so neither squeezes to one letter per line.
+private struct DraftHeader: View {
+    let badge: Status?
+    let isReply: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                AssistantDraftLabel(isReply: isReply)
+                if let badge { StatusBadge(badge) }
+            }
+        } else {
+            HStack {
+                AssistantDraftLabel(isReply: isReply)
+                Spacer(minLength: 8)
+                if let badge { StatusBadge(badge) }
+            }
+        }
     }
 }
 
@@ -28,6 +57,7 @@ struct AssistantDraftRow: View {
     let status: ReplyStatus
     let route: AppRoute
     let identifier: String
+    var approvedText = "승인함"
 
     init(title: String, reference: DraftReference) {
         self.title = title
@@ -43,21 +73,20 @@ struct AssistantDraftRow: View {
         status = inquiry.status
         route = .inquiry(inquiry.id)
         identifier = "inquiry.\(inquiry.id)"
+        approvedText = "답변 준비됨"
     }
 
     var body: some View {
         NavigationLink(value: route) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    AssistantDraftLabel()
-                    Spacer(minLength: 8)
-                    StatusBadge(status.badge)
-                }
+                // Waiting drafts share one state, which the section title already says; only different states get a badge.
+                DraftHeader(badge: status == .pending ? nil : status.badge(approved: approvedText),
+                            isReply: approvedText == "답변 준비됨")
                 Text(keepingWords: title)
                     .font(.headline)
-                Text(text.isEmpty ? "내용을 비운 초안이에요." : text)
+                Text(keepingWords: text.isEmpty ? "내용을 비운 초안이에요." : text)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(2)
             }
             .padding(.vertical, 4)
@@ -73,10 +102,59 @@ struct DraftCardActions {
     let rewrite: @MainActor () async throws -> String
 }
 
+/// What the owner does by hand after approval, while no channel is connected.
+struct DraftShare {
+    let copyLabel: String
+    let openLabel: String
+    let url: URL
+
+    static let inquiry = DraftShare(copyLabel: "답변 복사하기", openLabel: "네이버 스마트스토어 열기",
+                                    url: URL(string: "https://sell.smartstore.naver.com/")!)
+    static let content = DraftShare(copyLabel: "글 복사하기", openLabel: "Instagram 열기",
+                                    url: URL(string: "https://www.instagram.com/")!)
+}
+
+/// After approval with no connected channel: say so, copy the text, and open the channel to send it by hand.
+struct DraftShareActions: View {
+    let share: DraftShare
+    let text: String
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("채널이 아직 연결되지 않아 직접 보내야 해요.")
+                .font(.footnote)
+                .foregroundStyle(Color.secondaryText)
+            Button {
+                UIPasteboard.general.string = text
+                app.showToast("복사했어요")
+            } label: {
+                Text(share.copyLabel)
+                    .foregroundStyle(Color(.systemBackground))
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("draft.copy")
+            Link(destination: share.url) {
+                Text(share.openLabel)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("draft.open")
+        }
+    }
+}
+
 struct AssistantDraftCard: View {
     let text: String
     let status: ReplyStatus
+    var share: DraftShare?
+    /// Opened from 고치기 on an approval card: the editor is already open.
+    var startsEditing = false
     let revision: Int
+    private var isReply: Bool { share?.copyLabel == DraftShare.inquiry.copyLabel }
     let canReopen: Bool
     let afterApproval: String
     let isOwnerEdited: Bool
@@ -94,12 +172,15 @@ struct AssistantDraftCard: View {
     private var isDisabled: Bool { isLocked || isRewriting || isSubmitting }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                AssistantDraftLabel()
-                Spacer(minLength: 8)
-                StatusBadge(status.badge)
+        content
+            .task {
+                if startsEditing, status == .pending, !isEditing { beginEditing(with: text) }
             }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DraftHeader(badge: status.badge(approved: isReply ? "답변 준비됨" : "승인함"), isReply: isReply)
             if isEditing {
                 editor
             } else {
@@ -130,7 +211,7 @@ struct AssistantDraftCard: View {
         Group {
             if text.isEmpty {
                 Text(status == .pending ? "내용이 비어 있어요." : "내용을 비운 채 반려했어요.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             } else {
                 Text(text).textSelection(.enabled)
             }
@@ -143,8 +224,7 @@ struct AssistantDraftCard: View {
 
     private var editor: some View {
         VStack(spacing: 10) {
-            TextEditor(text: $buffer)
-                .scrollContentBackground(.hidden)
+            KoreanTextEditor(text: $buffer)
                 .frame(minHeight: 160)
                 .padding(8)
                 .background(.fill.tertiary, in: .rect(cornerRadius: 12))
@@ -179,10 +259,12 @@ struct AssistantDraftCard: View {
             HStack(spacing: 8) {
                 secondaryButton("수정", identifier: "draft.edit") { beginEditing(with: text) }
                 secondaryButton(isRewriting ? "쓰는 중" : "다시 쓰기", identifier: "draft.rewrite") { rewrite() }
-                Button(role: .destructive) {
+                // No destructive red: a rejection can be undone.
+                Button {
                     run { try await actions.decide(.reject, revision) }
                 } label: {
                     Text("반려")
+                        .foregroundStyle(.primary)
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 30)
                 }
@@ -201,7 +283,7 @@ struct AssistantDraftCard: View {
                     Text(status == .approved ? "승인했어요" : "반려했어요").foregroundStyle(.primary)
                 } icon: {
                     Image(systemName: status == .approved ? "checkmark.circle.fill" : "xmark.circle")
-                        .foregroundStyle(status == .approved ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .font(.subheadline.weight(.medium))
                 Spacer(minLength: 8)
@@ -218,7 +300,11 @@ struct AssistantDraftCard: View {
                 }
             }
             if status == .approved {
-                hint(afterApproval)
+                if let share {
+                    DraftShareActions(share: share, text: text)
+                } else {
+                    hint(afterApproval)
+                }
             }
         }
     }
@@ -226,7 +312,7 @@ struct AssistantDraftCard: View {
     private func hint(_ text: String) -> some View {
         PhraseText(text: text)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.secondaryText)
     }
 
     private func primaryButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
@@ -292,6 +378,7 @@ struct AssistantDraftCard: View {
 struct AssistantDraftDetailView: View {
     let kind: DraftKind
     let id: String
+    var startsEditing = false
     @State private var loader = Loader<AssistantDraftDetail>()
     @Environment(AppModel.self) private var app
 
@@ -304,7 +391,7 @@ struct AssistantDraftDetailView: View {
                         ForEach(draft.lines, id: \.self) { line in
                             PhraseText(text: line)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                     .padding(.vertical, 4)
@@ -329,7 +416,8 @@ struct AssistantDraftDetailView: View {
     private func card(_ draft: AssistantDraftDetail) -> some View {
         let (kind, id) = (kind, id)
         return AssistantDraftCard(
-            text: draft.text, status: draft.status, revision: draft.revision, canReopen: draft.canReopen,
+            text: draft.text, status: draft.status, share: kind == .content ? .content : nil,
+            startsEditing: startsEditing, revision: draft.revision, canReopen: draft.canReopen,
             afterApproval: draft.afterApproval, isOwnerEdited: app.ownerEditedDraftIDs.contains(id), isLocked: false,
             actions: DraftCardActions(
                 save: { text, revision in
@@ -348,7 +436,7 @@ struct AssistantDraftDetailView: View {
                     app.dataDidChange()
                 },
                 rewrite: {
-                    try await RoundupAPI.ask(question: "아래 글을 같은 내용으로 다시 써 줘. 다시 쓴 글만 답해 줘.\n\n\(draft.text)")
+                    try await RoundupAPI.ask(question: "아래 글을 같은 내용으로 다시 써 줘. 다시 쓴 글만 답해 줘.\n\n\(draft.text)").answer
                 }
             )
         )

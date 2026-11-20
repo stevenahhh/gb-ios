@@ -3,6 +3,7 @@ import RoundupCore
 
 struct InquiryDetailView: View {
     let id: String
+    var startsEditing = false
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
 
@@ -30,7 +31,7 @@ struct InquiryDetailView: View {
                         .font(.headline)
                     Text(inquiry.customer)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .padding(.vertical, 4)
                 Text(inquiry.question)
@@ -54,7 +55,8 @@ struct InquiryDetailView: View {
     private func card(_ inquiry: Inquiry) -> some View {
         let id = id
         return AssistantDraftCard(
-            text: inquiry.draft, status: inquiry.status, revision: inquiry.revision,
+            text: inquiry.draft, status: inquiry.status, share: .inquiry, startsEditing: startsEditing,
+            revision: inquiry.revision,
             canReopen: inquiry.canReopen, afterApproval: "승인해도 아직 손님께 발송되지는 않아요.",
             isOwnerEdited: app.ownerEditedDraftIDs.contains(id),
             isLocked: store.isInquiryBusy || store.requiresInquiryReload,
