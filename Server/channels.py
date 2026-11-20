@@ -65,7 +65,7 @@ def channel_metrics(counts: Counts) -> list[Metric]:
     """Summarize channel work from rows."""
     return [
         channel_metric(counts.channels),
-        metric("pendingInquiries", "미답변 문의", counts.pending_inquiries),
+        metric("pendingInquiries", "답변 기다리는 문의", counts.pending_inquiries),
         metric("drafts", "홍보 초안", counts.drafts),
     ]
 
@@ -105,7 +105,7 @@ async def channel_cards(db: AsyncSession, today: date, text: str = "") -> list[C
                 tag="채널",
                 status=Status(text="연결됨", tone="done")
                 if connected
-                else Status(text="자동 연동 전", tone="neutral"),
+                else Status(text="아직 연결 안 됨", tone="neutral"),
                 deadline=f"문의 {count(inquiries)}이 답을 기다려요" if inquiries else None,
                 revision=channel.revision,
             ),

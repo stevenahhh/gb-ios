@@ -223,7 +223,7 @@ async def operations(
         attention_count=counts.attention,
         attention=[
             metric("depositPending", "예약금 미확인", counts.deposit_pending, deposit),
-            metric("pendingInquiries", "미답변 문의", counts.pending_inquiries, drafted),
+            metric("pendingInquiries", "답변 기다리는 문의", counts.pending_inquiries, drafted),
             Metric(
                 key="unshipped", label="발송 대기", value=counts.ship_due_today,
                 display=count(counts.ship_due_today), detail=pickup, due=pickup_due,
@@ -249,7 +249,7 @@ async def operations(
                 ),
                 metric(
                     "inquiries", "문의", numbers.inquiries,
-                    f"미답변 {numbers.inquiries - numbers.inquiries_handled:,}건",
+                    f"답변 기다리는 문의 {numbers.inquiries - numbers.inquiries_handled:,}건",
                 ),
             ],
             comparisons=[
