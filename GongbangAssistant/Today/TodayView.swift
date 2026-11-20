@@ -32,6 +32,17 @@ struct TodayView: View {
             .navigationTitle(headline(now: now))
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
             .navigationSubtitle(subtitle)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        AssistantActivityView()
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .accessibilityLabel("\(AssistantIdentity.name)가 한 일")
+                    .accessibilityIdentifier("today.activities")
+                }
+            }
             .appDestinations()
         }
         .task(id: app.dataVersion) { await load() }
@@ -57,6 +68,8 @@ struct TodayView: View {
             CardSection {
                 MetricStrip(metrics: metrics(today))
             }
+
+            ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
 
             Section {
                 Picker("보기", selection: $segment) {
@@ -93,34 +106,44 @@ struct TodayView: View {
     private func segmentContent(_ today: TodayScreenData) -> some View {
         switch segment {
         case .tasks:
-            CardSection {
-                if !store.hasLoadedInquiries {
-                    Text("서버 문의를 불러오면 대기 목록이 보여요.")
-                        .foregroundStyle(.secondary)
-                } else if store.pendingInquiries.isEmpty {
-                    Label("답변을 기다리는 문의가 없어요", systemImage: "checkmark.circle")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(store.pendingInquiries) { AssistantDraftRow(inquiry: $0) }
-                }
-            } header: {
-                SectionHeader(title: "답변 대기 문의 \(store.pendingCount)건", area: .channels, filter: "inquiries")
-            }
-            ForEach(today.tasks.groups) { group in
+            // Overdue rows move into one group at the top with a single red title; their own sections drop them.
+            let overdue = OverdueEntry.collect(today.tasks.groups, now: .now)
+            if !overdue.isEmpty {
                 CardSection {
-                    ForEach(group.items.overdueFirst()) { item in
-                        TaskRow(item: item, kind: group.kind)
+                    ForEach(overdue.prefix(3)) { entry in
+                        TaskRow(item: entry.item, kind: entry.kind, isInOverdueGroup: true)
+                    }
+                    if overdue.count > 3 {
+                        NavigationLink("모두 보기") { OverdueListView() }
+                            .accessibilityIdentifier("today.overdue.all")
                     }
                 } header: {
-                    SectionHeader(title: group.title, area: group.area)
+                    OverdueHeader(count: overdue.count)
+                }
+            }
+            // Waiting inquiry replies live in 확인해 주실 일 above, so this tab does not repeat them.
+            ForEach(today.tasks.groups) { group in
+                let rows = group.items.filter { item in !overdue.contains { $0.item.id == item.id } }
+                if !rows.isEmpty {
+                    CardSection {
+                        ForEach(rows) { item in
+                            TaskRow(item: item, kind: group.kind)
+                        }
+                    } header: {
+                        SectionHeader(title: group.title, area: group.area)
+                    }
                 }
             }
         case .channels:
             CardSection {
+                if today.channels.cards.allChannelsUnconnected {
+                    UnconnectedChannelsNote()
+                }
                 ForEach(today.channels.cards) { WorkCard(item: $0) }
             } header: {
                 SectionHeader(title: "채널 현황", area: .channels)
             }
+            .environment(\.hidesCardStatus, today.channels.cards.allChannelsUnconnected)
             CardSection {
                 cards(today.channels.todos, empty: "오늘 챙길 채널 일이 없어요")
             } header: {
@@ -139,7 +162,7 @@ struct TodayView: View {
                             .font(.headline)
                         Text(keepingWords: today.delivery.transitDetail)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -162,7 +185,7 @@ struct TodayView: View {
     private func cards(_ items: [WorkItem], empty: String) -> some View {
         if items.isEmpty {
             Text(empty)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         } else {
             let primaryID = items.primaryActionID
             ForEach(items.overdueFirst()) { item in
@@ -200,5 +223,71 @@ struct TodayView: View {
         let style = Date.FormatStyle(date: .omitted, time: .shortened, locale: Locale(identifier: "ko_KR"),
                                      timeZone: Calendar.workshop.timeZone)
         return "\(date) · \(loadedAt.formatted(style)) 기준"
+    }
+}
+
+struct OverdueEntry: Identifiable {
+    let kind: EventKind
+    let item: TaskItem
+    var id: String { item.id }
+
+    static func collect(_ groups: [TaskGroup], now: Date) -> [OverdueEntry] {
+        groups.flatMap { group in
+            group.items.filter { $0.isDone != true && $0.due?.isOverdue(at: now) == true }
+                .map { OverdueEntry(kind: group.kind, item: $0) }
+        }
+        .sorted { ($0.item.due?.date ?? .distantPast) < ($1.item.due?.date ?? .distantPast) }
+    }
+}
+
+struct OverdueHeader: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock")
+                .accessibilityHidden(true)
+            Text("기한 지난 일 \(count)건")
+                .fontWeight(.semibold)
+        }
+        .foregroundStyle(Color.overdueRed)
+        .textCase(nil)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("today.overdue")
+    }
+}
+
+/// Loads its own copy of the today screen, so checks made here show up without leaving the list.
+/// Rows it has shown stay put once finished (the server drops a finished task's deadline), so a check can be undone in place.
+struct OverdueListView: View {
+    @State private var loader = Loader<TodayScreenData>()
+    @State private var shownIDs: [String] = []
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        LoadableContent(loader: loader, retry: load) { today in
+            let rows = Dictionary(today.tasks.groups.flatMap { group in
+                group.items.map { ($0.id, OverdueEntry(kind: group.kind, item: $0)) }
+            }, uniquingKeysWith: { first, _ in first })
+            let entries = shownIDs.compactMap { rows[$0] }
+            List {
+                CardSection {
+                    ForEach(entries) { TaskRow(item: $0.item, kind: $0.kind, isInOverdueGroup: true) }
+                } header: {
+                    OverdueHeader(count: entries.filter { $0.item.isDone != true }.count)
+                }
+            }
+            .cardList()
+        }
+        .navigationTitle("기한 지난 일")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: app.dataVersion) { await load() }
+    }
+
+    private func load() async {
+        await loader.load { try await RoundupAPI.today() }
+        guard let groups = loader.value?.tasks.groups else { return }
+        let added = OverdueEntry.collect(groups, now: .now).map(\.id).filter { !shownIDs.contains($0) }
+        shownIDs.append(contentsOf: added)
     }
 }
