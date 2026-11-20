@@ -10,12 +10,12 @@ from pydantic import AwareDatetime, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bookings import seats_taken
-from common import LongText, Now, Session, ShortText, required_text
-from contracts import ApiModel, ApiRequest, EventKind
+from bookings import ExpectedRevision, seats_taken
+from common import LongText, Now, Session, ShortText, locked, required_text
+from contracts import ApiModel, ApiRequest, EventKind, Moved
 from display import clock, count, day_start, local, masked, next_day_start, people, won
 from metrics import UNSHIPPED
-from models import CalendarEventRow, ClassSessionRow, CustomerRow, OrderRow, ShipmentRow, TaskRow
+from models import BookingRow, CalendarEventRow, ClassSessionRow, CustomerRow, OrderRow, ShipmentRow, TaskRow
 
 router = APIRouter()
 MAX_RANGE_DAYS: Final = 62
@@ -32,6 +32,10 @@ class AgendaItem(ApiModel):
     kind: EventKind
     detail: str
     is_done: bool | None = None
+    minutes: int | None = None
+    subject: str | None = None
+    amount_won: int | None = None
+    revision: int | None = None
 
 
 class DayEvent(ApiModel):
@@ -57,6 +61,7 @@ class CalendarRange(ApiModel):
     start: date
     end: date
     days: list[CalendarDay]
+    overdue_shipments: list[AgendaItem] = Field(default_factory=list)
 
 
 class EventCreate(ApiRequest):
@@ -68,10 +73,27 @@ class EventCreate(ApiRequest):
     starts_at: Annotated[AwareDatetime, Field(strict=False)]
 
 
+def booker_text(name: str | None, seats: int) -> str:
+    """Name the first booker and how many other people come."""
+    if name is None:
+        return "아직 예약 없음"
+    others = f" 외 {seats - 1}명" if seats > 1 else ""
+    return f"{masked(name)} 님{others}"
+
+
 async def session_items(db: AsyncSession, begin: datetime, end: datetime) -> list[Dated]:
-    """Add one booking row per scheduled class."""
+    """Add one booking row per scheduled class, named after its first booker."""
+    first_booker = (
+        select(CustomerRow.name)
+        .join(BookingRow, BookingRow.customer_id == CustomerRow.id)
+        .where(BookingRow.session_id == ClassSessionRow.id, BookingRow.status != "cancelled")
+        .order_by(BookingRow.created_at, BookingRow.id)
+        .limit(1)
+        .correlate(ClassSessionRow)
+        .scalar_subquery()
+    )
     rows = await db.execute(
-        select(ClassSessionRow, seats_taken()).where(
+        select(ClassSessionRow, seats_taken(), first_booker).where(
             ClassSessionRow.status != "cancelled",
             ClassSessionRow.starts_at >= begin,
             ClassSessionRow.starts_at < end,
@@ -87,9 +109,11 @@ async def session_items(db: AsyncSession, begin: datetime, end: datetime) -> lis
                 kind="booking",
                 detail=f"예약 {people(seats)} · {row.duration_minutes}분",
                 is_done=row.status == "completed",
+                minutes=row.duration_minutes,
+                subject=booker_text(name, seats),
             ),
         )
-        for row, seats in rows.tuples()
+        for row, seats, name in rows.tuples()
     ]
 
 
@@ -113,6 +137,8 @@ async def order_items(db: AsyncSession, begin: datetime, end: datetime) -> list[
                 title=order.product_name,
                 kind="order",
                 detail=f"#{order.order_number} · {masked(customer.name)} · {won(order.amount_won)}",
+                subject=masked(customer.name),
+                amount_won=order.amount_won,
             ),
         )
         for order, customer in orders.tuples()
@@ -142,12 +168,16 @@ async def shipment_items(db: AsyncSession, begin: datetime, end: datetime) -> li
     )
     items: list[Dated] = []
     for shipment, order in rows.tuples():
+        done: bool | None
         if shipment.delivered_at is not None:
             day, time, detail = local(shipment.delivered_at).date(), clock(shipment.delivered_at), "배송 완료"
+            done = True
         elif shipment.expected_arrival_on is not None:
             day, time, detail = shipment.expected_arrival_on, "종일", "도착 예정"
+            done = None
         else:
             day, time, detail = local(shipment.ship_by_at).date(), clock(shipment.ship_by_at), "택배 수거"
+            done = False
         items.append(
             (
                 day,
@@ -157,6 +187,7 @@ async def shipment_items(db: AsyncSession, begin: datetime, end: datetime) -> li
                     title=order.product_name,
                     kind="delivery",
                     detail=f"#{order.order_number} · {detail}",
+                    is_done=done,
                 ),
             ),
         )
@@ -176,9 +207,11 @@ async def owner_items(db: AsyncSession, begin: datetime, end: datetime) -> list[
                 id=f"task:{task.id}",
                 time=clock(task.due_at),
                 title=task.title,
-                kind="order" if task.kind == "material" else "todo",
+                kind="todo",
                 detail=" · ".join(part for part in (task.vendor, task.detail) if part),
                 is_done=task.status == "done",
+                subject=task.vendor or task.detail or None,
+                revision=task.revision,
             ),
         )
         for task in tasks
@@ -196,6 +229,7 @@ def event_item(event: CalendarEventRow) -> AgendaItem:
             "title": event.title,
             "kind": event.kind,
             "detail": event.detail,
+            "revision": event.revision,
         },
     )
 
@@ -207,7 +241,7 @@ async def calendar_range(
     start: Annotated[date, Query()],
     end: Annotated[date, Query()],
 ) -> CalendarRange:
-    """Return days with rows; each marker count equals that day's agenda rows."""
+    """Return days with rows; all-day rows lead, and each marker count equals that day's rows."""
     if end < start or (end - start).days >= MAX_RANGE_DAYS:
         raise HTTPException(422, "date range must be ascending and at most 62 days")
     begin, stop = day_start(start), next_day_start(end)
@@ -218,7 +252,7 @@ async def calendar_range(
             grouped[day].append(item)
     days: list[CalendarDay] = []
     for day in sorted(grouped):
-        items = sorted(grouped[day], key=lambda item: (item.time == "종일", item.time, item.id))
+        items = sorted(grouped[day], key=lambda item: (item.time != "종일", item.time, item.id))
         kinds: list[tuple[EventKind, int]] = [
             (kind, sum(item.kind == kind for item in items)) for kind in KIND_ORDER
         ]
@@ -231,7 +265,22 @@ async def calendar_range(
                 ],
             ),
         )
-    return CalendarRange(today=now.date(), start=start, end=end, days=days)
+    overdue = await db.execute(
+        select(ShipmentRow, OrderRow)
+        .join(OrderRow, OrderRow.id == ShipmentRow.order_id)
+        .where(ShipmentRow.status.in_(UNSHIPPED), ShipmentRow.ship_by_at < day_start(now.date()))
+        .order_by(ShipmentRow.ship_by_at, ShipmentRow.id),
+    )
+    return CalendarRange(
+        today=now.date(), start=start, end=end, days=days,
+        overdue_shipments=[
+            AgendaItem(
+                id=f"shipment:{shipment.id}", time=clock(shipment.ship_by_at), title=order.product_name,
+                kind="delivery", detail=f"#{order.order_number} · 택배 수거", is_done=False,
+            )
+            for shipment, order in overdue.tuples()
+        ],
+    )
 
 
 @router.post("/calendar/events", status_code=201)
@@ -247,3 +296,19 @@ async def create_event(body: EventCreate, db: Session) -> AgendaItem:
     db.add(event)
     await db.flush()
     return event_item(event)
+
+
+class EventMove(ExpectedRevision):
+    """Move an owner-added entry to a new moment."""
+
+    starts_at: Annotated[AwareDatetime, Field(strict=False)]
+
+
+@router.post("/calendar/events/{event_id}/move")
+async def move_event(event_id: str, body: EventMove, db: Session) -> Moved:
+    """Reschedule an owner-added entry, keeping everything else."""
+    event = await locked(db, CalendarEventRow, event_id, body.expected_revision)
+    event.starts_at = body.starts_at
+    event.revision += 1
+    await db.flush()
+    return Moved(revision=event.revision)
