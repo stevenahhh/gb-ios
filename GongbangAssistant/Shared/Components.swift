@@ -261,6 +261,10 @@ struct TaskRow: View {
                 PhraseText(text: item.detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                // Parcels always show their pickup; timed rows show theirs only once it has passed.
+                if let due = item.due, item.target == .shipment || due.isOverdue(at: .now) {
+                    DueLabel(due: due)
+                }
             }
         }
         .accessibilityElement(children: .combine)
@@ -347,7 +351,9 @@ struct WorkCardContent: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            if let deadline = item.deadline {
+            if let due = item.due {
+                DueLabel(due: due)
+            } else if let deadline = item.deadline {
                 Label {
                     Text(keepingWords: deadline)
                         .foregroundStyle(.primary)
@@ -401,60 +407,6 @@ struct WorkCard: View {
 
 extension [WorkItem] {
     var primaryActionID: WorkItem.ID? { first { $0.action != nil && $0.draft == nil }?.id }
-}
-
-struct AgendaRow: View {
-    let item: AgendaItem
-    @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    private var isDone: Bool { item.isDone ?? false }
-
-    var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 6) {
-                    time
-                    titles
-                    kind
-                }
-            } else {
-                HStack(spacing: 12) {
-                    time
-                        .frame(minWidth: timeWidth, alignment: .leading)
-                    titles
-                    Spacer(minLength: 8)
-                    kind
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var time: some View {
-        Text(keepingWords: item.time)
-            .font(.subheadline.monospacedDigit())
-            .foregroundStyle(.secondary)
-    }
-
-    private var titles: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(keepingWords: item.title)
-                .font(.body.weight(.semibold))
-                .strikethrough(isDone)
-                .foregroundStyle(isDone ? .secondary : .primary)
-            PhraseText(text: item.detail)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var kind: some View {
-        Text(item.kind.label)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .fixedSize()
-    }
 }
 
 struct SectionHeader: View {
