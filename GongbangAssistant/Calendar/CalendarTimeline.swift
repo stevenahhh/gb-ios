@@ -26,12 +26,12 @@ enum CalendarEventState: Hashable {
     case done, next, upcoming, missed
 }
 
-/// What "오늘로 옮기기" reschedules.
-enum MoveTarget: Hashable {
+/// A row the owner made or owns: it can be checked off and moved to today.
+enum OwnerItem: Hashable {
     case task(id: String, revision: Int)
     case event(id: String, revision: Int)
 
-    func with(revision: Int) -> MoveTarget {
+    func with(revision: Int) -> OwnerItem {
         switch self {
         case .task(let id, _): .task(id: id, revision: revision)
         case .event(let id, _): .event(id: id, revision: revision)
@@ -56,9 +56,7 @@ struct TimelineEntry: Identifiable, Hashable {
     /// Whether the server states completion; parcels waiting for pickup say `false` explicitly.
     let reportsDone: Bool
     let destination: TimelineDestination?
-    let taskID: String?
-    let taskRevision: Int?
-    let moveTarget: MoveTarget?
+    let ownerItem: OwnerItem?
 
     var end: Int { start + (minutes ?? 0) }
 
@@ -85,12 +83,10 @@ struct TimelineEntry: Identifiable, Hashable {
         isDone = item.isDone ?? false
         reportsDone = item.isDone != nil
         destination = item.route.map(TimelineDestination.app)
-        taskID = prefix == "task" && parts.count == 2 ? parts[1] : nil
-        taskRevision = item.revision
         switch (prefix, item.revision) {
-        case ("task", let revision?) where parts.count == 2: moveTarget = .task(id: parts[1], revision: revision)
-        case ("event", let revision?) where parts.count == 2: moveTarget = .event(id: parts[1], revision: revision)
-        default: moveTarget = nil
+        case ("task", let revision?) where parts.count == 2: ownerItem = .task(id: parts[1], revision: revision)
+        case ("event", let revision?) where parts.count == 2: ownerItem = .event(id: parts[1], revision: revision)
+        default: ownerItem = nil
         }
     }
 
@@ -105,9 +101,7 @@ struct TimelineEntry: Identifiable, Hashable {
         isDone = pickups.allSatisfy { $0.isDone == true }
         reportsDone = pickups.allSatisfy { $0.isDone != nil }
         destination = .area(AreaRoute(area: .deliveries, filter: "scheduled"))
-        taskID = nil
-        taskRevision = nil
-        moveTarget = nil
+        ownerItem = nil
     }
 
     static func minutes(of time: String) -> Int? {
@@ -271,6 +265,7 @@ struct DaySection: View {
     let now: Date
     let add: () -> Void
     let move: (TimelineEntry) -> Void
+    let check: (TimelineEntry, Bool) async -> Bool
 
     private var calendar: Calendar { .workshop }
 
@@ -310,7 +305,7 @@ struct DaySection: View {
                 emptyTimeline(hasPinned ? "시간이 정해진 일정이 없어요" : "일정이 없어요")
             } else {
                 TimelineList(plan: TimelinePlan(entries: schedule.entries, relation: relation, now: nowMinutes),
-                             now: nowMinutes, move: move)
+                             now: nowMinutes, move: move, check: check)
                     .padding(.top, hasPinned ? 20 : 14)
                 TimelineLegend()
                     .padding(.top, 8)
@@ -464,6 +459,7 @@ struct TimelineList: View {
     let plan: TimelinePlan
     let now: Int
     let move: (TimelineEntry) -> Void
+    let check: (TimelineEntry, Bool) async -> Bool
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
@@ -471,7 +467,7 @@ struct TimelineList: View {
                 if plan.nowIndex == index {
                     NowIndicator(minutes: now, isFirst: index == 0, isLast: false)
                 }
-                TimelineRow(row: row, now: now, move: move,
+                TimelineRow(row: row, now: now, move: move, check: check,
                             isFirst: index == 0 && plan.nowIndex != 0,
                             isLast: index == plan.rows.count - 1 && plan.nowIndex != plan.rows.count)
             }
@@ -506,13 +502,26 @@ struct TimelineRow: View {
     let row: TimelinePlan.Row
     let now: Int
     let move: (TimelineEntry) -> Void
+    let check: (TimelineEntry, Bool) async -> Bool
     let isFirst: Bool
     let isLast: Bool
+    @State private var requestedDone: Bool?
     @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
 
     private var entry: TimelineEntry { row.entry }
+    private var isDone: Bool { requestedDone ?? entry.isDone }
+
+    /// A tap shows its result at once; the reloaded row or a failure settles it.
+    private var shown: TimelinePlan.Row {
+        guard let requestedDone else { return row }
+        let state: CalendarEventState = requestedDone ? .done : row.state == .done ? .upcoming : row.state
+        return TimelinePlan.Row(entry: entry, state: state, isOverdue: row.isOverdue && !requestedDone)
+    }
+
+    private var state: CalendarEventState { shown.state }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -530,56 +539,73 @@ struct TimelineRow: View {
             .frame(maxHeight: .infinity)
             content
                 .padding(.leading, 8)
+            if entry.ownerItem != nil {
+                checkButton
+            }
         }
-        .frame(minHeight: row.state == .next ? 96 : 68, alignment: .top)
+        .frame(minHeight: state == .next ? 96 : 68, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
+        .onChange(of: entry.isDone) { requestedDone = nil }
+    }
+
+    private var checkButton: some View {
+        Button(action: toggle) {
+            ZStack {
+                Circle()
+                    .strokeBorder(isDone ? CalendarTokens.label : CalendarTokens.tertiary, lineWidth: 1.5)
+                    .background(isDone ? CalendarTokens.label : Color.clear, in: .circle)
+                if isDone {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CalendarTokens.background)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(width: 26, height: 26)
+            .frame(width: 44, height: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .offset(y: -11)
+        .disabled(app.isRunning(entry.id))
+        .sensoryFeedback(.success, trigger: isDone) { _, done in done }
+        .accessibilityLabel("\(entry.title) 완료 표시")
+        .accessibilityValue(isDone ? "완료" : "미완료")
+        .accessibilityHint(isDone ? "완료를 취소해요" : "완료로 표시해요")
+        .accessibilityIdentifier("timeline.check.\(entry.id)")
+    }
+
+    private func toggle() {
+        let target = !isDone
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { requestedDone = target }
+        Task {
+            if await !check(entry, target) {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { requestedDone = nil }
+            }
+        }
     }
 
     private var time: some View {
         Text(TimelineText.clock(entry.start))
             .font(.subheadline.monospacedDigit().weight(timeWeight))
-            .foregroundStyle(row.state == .done || row.state == .missed ? CalendarTokens.secondary : CalendarTokens.label)
+            .foregroundStyle(state == .done || state == .missed ? CalendarTokens.secondary : CalendarTokens.label)
             .accessibilityHidden(true)
     }
 
-    private var nodeSize: CGFloat { row.state == .next ? 16 : 14 }
+    private var nodeSize: CGFloat { state == .next ? 16 : 14 }
 
     private var timeWeight: Font.Weight {
-        switch row.state {
+        switch state {
         case .done, .missed: .regular
         case .next: .bold
         case .upcoming: .semibold
         }
     }
 
-    @ViewBuilder
     private var node: some View {
-        let shape = TimelineNode(kind: entry.kind, state: row.state, durationMinutes: entry.minutes)
-        if let taskID = entry.taskID, let revision = entry.taskRevision {
-            Button {
-                Task {
-                    await app.run(id: entry.id) {
-                        try await RoundupAPI.setTaskDone(id: taskID, done: !entry.isDone, revision: revision)
-                    }
-                }
-            } label: {
-                shape.frame(width: 44, height: 44, alignment: .top)
-                    .padding(.top, TimelineMetrics.nodeCenter - nodeSize / 2)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .frame(width: 44, height: 44)
-            .offset(y: -(TimelineMetrics.nodeCenter - nodeSize / 2))
-            .disabled(app.isRunning(entry.id))
-            .sensoryFeedback(.selection, trigger: entry.isDone)
-            .accessibilityLabel("\(entry.title) 할 일")
-            .accessibilityValue(entry.isDone ? "완료" : "미완료")
-            .accessibilityHint(entry.isDone ? "완료 취소" : "완료로 표시")
-            .accessibilityIdentifier("timeline.toggle.\(taskID)")
-        } else {
-            shape.padding(.top, TimelineMetrics.nodeCenter - nodeSize / 2)
-                .accessibilityHidden(true)
-        }
+        TimelineNode(kind: entry.kind, state: state, durationMinutes: entry.minutes)
+            .padding(.top, TimelineMetrics.nodeCenter - nodeSize / 2)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -590,13 +616,14 @@ struct TimelineRow: View {
             }
             Text(entry.title)
                 .font(titleFont)
-                .foregroundStyle(row.state == .done ? CalendarTokens.secondary : CalendarTokens.label)
+                .strikethrough(state == .done && entry.ownerItem != nil, color: CalendarTokens.secondary)
+                .foregroundStyle(state == .done ? CalendarTokens.secondary : CalendarTokens.label)
                 .lineLimit(2)
             metaText
                 .font(.footnote)
                 .foregroundStyle(CalendarTokens.secondary)
                 .lineLimit(2)
-            if row.state == .next {
+            if state == .next {
                 Text(TimelineText.next(entry, now: now))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(CalendarTokens.label)
@@ -604,11 +631,11 @@ struct TimelineRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, row.state == .missed && entry.moveTarget != nil ? 4 : 16)
+        .padding(.bottom, state == .missed && entry.ownerItem != nil ? 4 : 16)
         .contentShape(.rect)
         VStack(alignment: .leading, spacing: 0) {
             link(text)
-            if row.state == .missed, entry.moveTarget != nil {
+            if state == .missed, entry.ownerItem != nil {
                 Button {
                     move(entry)
                 } label: {
@@ -642,12 +669,12 @@ struct TimelineRow: View {
     }
 
     private var metaText: Text {
-        guard let word = TimelineText.overdueWord(row) else { return Text(TimelineText.meta(row)) }
-        return Text("\(TimelineText.meta(row)) · \(Text(word).foregroundStyle(Color.overdueRed).fontWeight(.semibold))")
+        guard let word = TimelineText.overdueWord(shown) else { return Text(TimelineText.meta(shown)) }
+        return Text("\(TimelineText.meta(shown)) · \(Text(word).foregroundStyle(Color.overdueRed).fontWeight(.semibold))")
     }
 
     private var titleFont: Font {
-        switch row.state {
+        switch state {
         case .done, .missed: .callout.weight(.medium)
         case .next: .headline.bold()
         case .upcoming: .callout.weight(.semibold)
@@ -661,7 +688,7 @@ struct TimelineRow: View {
             : "\(TimelineText.spoken(entry.start))부터 \(TimelineText.spoken(entry.end))")
         parts.append(entry.title)
         if !entry.subject.isEmpty { parts.append(entry.subject) }
-        switch row.state {
+        switch state {
         case .done: parts.append("완료됨")
         case .next: parts.append(TimelineText.next(entry, now: now))
         case .missed: parts.append("기한 지남")
@@ -897,7 +924,7 @@ private struct CalendarPreview: View {
     var body: some View {
         NavigationStack {
             CalendarContent(days: days, overdueShipments: [], selectedDay: $day, mode: $mode,
-                            now: CalendarPreviewData.now, add: {}, move: { _ in })
+                            now: CalendarPreviewData.now, add: {}, move: { _ in }, check: { _, _ in true })
                 .navigationTitle("캘린더")
                 .navigationSubtitle("오늘 일정 11건")
         }

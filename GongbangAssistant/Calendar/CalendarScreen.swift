@@ -7,8 +7,9 @@ struct CalendarData {
 }
 
 struct CalendarScreen: View {
-    private struct MoveToast: Identifiable {
+    private struct UndoToast: Identifiable {
         let id = UUID()
+        let message: String
         let undo: @MainActor () async -> Void
     }
 
@@ -16,7 +17,7 @@ struct CalendarScreen: View {
     @State private var selectedDay = Calendar.workshop.startOfDay(for: Self.clockOverride ?? .now)
     @State private var loader = Loader<CalendarData>()
     @State private var isAddingEvent = false
-    @State private var toast: MoveToast?
+    @State private var toast: UndoToast?
     @State private var now = Date.now
     @Environment(AppModel.self) private var app
 
@@ -44,7 +45,8 @@ struct CalendarScreen: View {
                 CalendarContent(
                     days: data.days, overdueShipments: data.overdueShipments,
                     selectedDay: $selectedDay, mode: $mode, now: Self.clockOverride ?? now,
-                    add: { isAddingEvent = true }, move: { moveToToday($0, now: Self.clockOverride ?? now) }
+                    add: { isAddingEvent = true }, move: { moveToToday($0, now: Self.clockOverride ?? now) },
+                    check: check
                 )
                 .refreshable { await load() }
             }
@@ -102,7 +104,7 @@ struct CalendarScreen: View {
 
     /// Keeps the time of day; if that time has already passed today, the row moves to the end of today.
     private func moveToToday(_ entry: TimelineEntry, now: Date) {
-        guard let target = entry.moveTarget, let day = loader.value.flatMap({ data in
+        guard let target = entry.ownerItem, let day = loader.value.flatMap({ data in
             data.days.values.first { $0.items.contains { $0.id == entry.id } }
         }), let from = Self.moment(day: day.date, minutes: entry.start) else { return }
         let today = calendar.startOfDay(for: now)
@@ -114,7 +116,7 @@ struct CalendarScreen: View {
         Task {
             await app.run(id: entry.id) {
                 let revision = try await RoundupAPI.move(target, to: destination)
-                toast = MoveToast { [app] in
+                toast = UndoToast(message: "오늘로 옮겼어요") { [app] in
                     toast = nil
                     await app.run(id: entry.id) {
                         _ = try await RoundupAPI.move(target.with(revision: revision), to: from)
@@ -124,6 +126,23 @@ struct CalendarScreen: View {
         }
     }
 
+    /// Completing shows an undo toast, because a quick tap on a busy screen is easy to get wrong.
+    private func check(_ entry: TimelineEntry, done: Bool) async -> Bool {
+        guard let item = entry.ownerItem else { return false }
+        var revision: Int?
+        let saved = await app.run(id: entry.id) {
+            revision = try await RoundupAPI.setDone(item, done: done)
+        }
+        guard saved, done, let revision else { return saved }
+        toast = UndoToast(message: "‘\(entry.title)’ 완료했어요") { [app] in
+            toast = nil
+            await app.run(id: entry.id) {
+                _ = try await RoundupAPI.setDone(item.with(revision: revision), done: false)
+            }
+        }
+        return true
+    }
+
     private static func moment(day key: String, minutes: Int) -> Date? {
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
@@ -131,10 +150,11 @@ struct CalendarScreen: View {
             year: parts[0], month: parts[1], day: parts[2], hour: minutes / 60, minute: minutes % 60))
     }
 
-    private func toastView(_ toast: MoveToast) -> some View {
+    private func toastView(_ toast: UndoToast) -> some View {
         HStack(spacing: 12) {
-            Text("오늘로 옮겼어요")
+            Text(toast.message)
                 .foregroundStyle(CalendarTokens.background)
+                .lineLimit(1)
             Button("되돌리기") {
                 Task { await toast.undo() }
             }
@@ -160,6 +180,7 @@ struct CalendarContent: View {
     let now: Date
     let add: () -> Void
     let move: (TimelineEntry) -> Void
+    let check: (TimelineEntry, Bool) async -> Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var calendar: Calendar { .workshop }
@@ -191,7 +212,7 @@ struct CalendarContent: View {
                     .frame(height: 1)
                     .padding(.top, 12)
                 DaySection(date: selectedDay, day: days[selectedDay.dayKey], overdueShipments: overdueShipments,
-                           now: now, add: add, move: move)
+                           now: now, add: add, move: move, check: check)
                     .padding(.top, 24)
                     .id(selectedDay.dayKey)
                     .transition(.opacity)

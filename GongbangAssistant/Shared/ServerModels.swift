@@ -176,8 +176,6 @@ enum TaskTarget: String, Decodable, Hashable {
     case session
     case task
     case shipment
-    case order
-    case event
 }
 
 struct TaskItem: Decodable, Identifiable, Hashable, HasDue {
@@ -196,8 +194,6 @@ struct TaskItem: Decodable, Identifiable, Hashable, HasDue {
         case .session: .classSession(id)
         case .task: .work(.task, id)
         case .shipment: .work(.shipment, id)
-        case .order: .work(.order, id)
-        case .event: nil
         }
     }
 }
