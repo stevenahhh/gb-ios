@@ -65,6 +65,7 @@ struct ProcessStepRow: View {
     let doneText: String
     var actionTitle: String?
     var deadline: String?
+    var due: CardDue?
     var isRunning = false
     var isPrimary = true
     let perform: () -> Void
@@ -84,6 +85,8 @@ struct ProcessStepRow: View {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                         }
                         .font(.subheadline.weight(.medium))
+                    } else if let due {
+                        DueLabel(due: due)
                     } else if let deadline {
                         Label {
                             Text(keepingWords: deadline).foregroundStyle(.primary)
@@ -199,7 +202,7 @@ struct BookingDetailView: View {
         CardSection("처리") {
             ProcessStepRow(
                 label: "예약금", isDone: detail.depositConfirmed, doneText: "입금을 확인했어요",
-                actionTitle: detail.action?.label, deadline: detail.depositDeadline,
+                actionTitle: detail.action?.label, deadline: detail.depositDeadline, due: detail.depositDue,
                 isRunning: app.isRunning(detail.id),
                 perform: { run(detail.id) { try await RoundupAPI.confirmDeposit(bookingID: detail.id, revision: detail.revision) } },
                 undo: detail.undo.map { undo in
@@ -306,8 +309,12 @@ struct WorkDetailView: View {
     var body: some View {
         LoadableContent(loader: loader, retry: load) { item in
             List {
-                CardSection("정보") {
-                    WorkCardContent(item: item, selectable: true)
+                if let progress = item.progress {
+                    OrderSummarySections(item: item, progress: progress)
+                } else {
+                    CardSection("정보") {
+                        WorkCardContent(item: item, selectable: true)
+                    }
                 }
                 if item.action != nil || item.undo != nil {
                     CardSection("처리") {
@@ -330,7 +337,7 @@ struct WorkDetailView: View {
             }
             .cardList()
             .refreshable { await load() }
-            .navigationTitle(item.title)
+            .navigationTitle(item.progress == nil ? item.title : kind == .shipment ? "배송 상세" : "주문 상세")
         }
         .navigationBarTitleDisplayMode(.inline)
         .task(id: app.dataVersion) { await load() }
@@ -339,5 +346,126 @@ struct WorkDetailView: View {
     private func load() async {
         let (kind, id) = (kind, id)
         await loader.load { try await RoundupAPI.card(kind: kind, id: id) }
+    }
+}
+
+/// Order and shipment details share one label-value template and the fulfilment steps.
+struct OrderSummarySections: View {
+    let item: WorkItem
+    let progress: CardProgress
+
+    /// The first card line, without the sales channel already shown above the title.
+    private var headline: String? {
+        guard let line = item.lines.first else { return nil }
+        guard let source = item.source else { return line }
+        return line.hasSuffix(" · \(source)") ? String(line.dropLast(source.count + 3)) : line
+    }
+
+    var body: some View {
+        CardSection {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    if let source = item.source {
+                        Text(source)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    if let status = item.status {
+                        StatusBadge(status)
+                    }
+                }
+                Text(keepingWords: item.title)
+                    .font(.title3.bold())
+                if let line = headline {
+                    PhraseText(text: line)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let due = item.due {
+                    DueLabel(due: due)
+                } else if let deadline = item.deadline {
+                    Label {
+                        Text(keepingWords: deadline).foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "clock.fill").foregroundStyle(.orange)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        CardSection {
+            ProgressSteps(progress: progress)
+        }
+        if let fields = item.fields, !fields.isEmpty {
+            CardSection(item.kind == .shipment ? "배송 정보" : "주문 정보") {
+                ForEach(fields, id: \.label) { DetailValueRow(label: $0.label, value: $0.value) }
+            }
+        }
+    }
+}
+
+struct ProgressSteps: View {
+    let progress: CardProgress
+    @ScaledMetric(relativeTo: .body) private var marker = 22
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(progress.steps.enumerated()), id: \.offset) { index, step in
+                VStack(spacing: 6) {
+                    ZStack {
+                        connectors(index)
+                        dot(index)
+                    }
+                    Text(step)
+                        .font(.subheadline.weight(index == progress.current ? .semibold : .regular))
+                        .foregroundStyle(index <= progress.current ? .primary : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("진행 단계")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: String {
+        guard progress.current < progress.steps.count else { return "모든 단계 완료" }
+        let done = progress.current > 0 ? "\(progress.steps[progress.current - 1]) 완료, " : ""
+        return "\(done)다음 단계 \(progress.steps[progress.current])"
+    }
+
+    private func connectors(_ index: Int) -> some View {
+        HStack(spacing: marker + 8) {
+            Rectangle()
+                .fill(index == 0 ? Color.clear : segment(done: index <= progress.current))
+            Rectangle()
+                .fill(index == progress.steps.count - 1 ? Color.clear : segment(done: index < progress.current))
+        }
+        .frame(height: 2)
+    }
+
+    private func segment(done: Bool) -> Color {
+        done ? .primary : Color.secondary.opacity(0.35)
+    }
+
+    @ViewBuilder
+    private func dot(_ index: Int) -> some View {
+        if index < progress.current {
+            Image(systemName: "checkmark")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color(.systemBackground))
+                .frame(width: marker, height: marker)
+                .background(.primary, in: .circle)
+        } else {
+            Circle()
+                .strokeBorder(index == progress.current ? Color.primary : Color.secondary.opacity(0.5),
+                              lineWidth: index == progress.current ? 2.5 : 1.5)
+                .frame(width: marker, height: marker)
+        }
     }
 }
