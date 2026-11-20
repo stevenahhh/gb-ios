@@ -192,7 +192,9 @@ struct ToastHost: View {
         Group {
             if let toast = app.toast {
                 HStack(spacing: 12) {
+                    // Completion toasts carry the row's title; one line keeps 되돌리기 in reach.
                     Text(toast.message)
+                        .lineLimit(1)
                     if let undo = toast.undo {
                         Button("되돌리기") {
                             app.toast = nil
