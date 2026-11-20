@@ -34,9 +34,10 @@ struct SettingsView: View {
                         }
                     }
                 } icon: {
-                    Image(systemName: "storefront.circle.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tint)
+                    Image(systemName: "storefront")
+                        .font(.largeTitle.weight(.regular))
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(.primary)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -45,14 +46,14 @@ struct SettingsView: View {
                 NavigationLink {
                     WorkshopInfoView(workshop: data.workshop)
                 } label: {
-                    Label("공방 정보", systemImage: "storefront")
+                    Label { Text("공방 정보") } icon: { MenuIcon(systemName: "storefront") }
                 }
                 .accessibilityIdentifier("settings.workshop")
                 rows(sections["공방"] ?? [])
                 NavigationLink {
                     ChannelStatusView(channels: data.channels)
                 } label: {
-                    Label("채널 연결", systemImage: "link")
+                    Label { Text("채널 연결") } icon: { MenuIcon(systemName: "link") }
                 }
             }
 
@@ -69,7 +70,7 @@ struct SettingsView: View {
             NavigationLink {
                 SettingTextView(item: item)
             } label: {
-                Label(item.title, systemImage: item.symbol)
+                Label { Text(item.title) } icon: { MenuIcon(systemName: item.symbol) }
             }
         }
     }

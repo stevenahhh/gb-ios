@@ -39,7 +39,7 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
 
     var systemImage: String {
         switch self {
-        case .bookings: "calendar.badge.checkmark"
+        case .bookings: "calendar"
         case .orders: "bag"
         case .deliveries: "shippingbox"
         case .channels: "bubble.left.and.bubble.right"
@@ -220,7 +220,7 @@ struct OperationAreaView: View {
     }
 
     private func list(_ page: AreaPage) -> some View {
-        let items = page.items + extraItems
+        let items = (page.items + extraItems).overdueFirst()
         let inquiries = (page.inquiries ?? []) + extraInquiries
         let primaryID = items.primaryActionID
         return List {
@@ -254,8 +254,13 @@ struct OperationAreaView: View {
                 moreSection
             } else {
                 CardSection {
+                    // Overdue rows lead the whole list, above the inquiries too.
+                    let overdue = items.filter { $0.due?.isOverdue(at: .now) == true }
+                    ForEach(overdue) { item in
+                        WorkCard(item: item, isPrimary: item.id == primaryID)
+                    }
                     ForEach(inquiries) { AssistantDraftRow(inquiry: $0) }
-                    ForEach(items) { item in
+                    ForEach(items.filter { $0.due?.isOverdue(at: .now) != true }) { item in
                         WorkCard(item: item, isPrimary: item.id == primaryID)
                     }
                     moreButton
