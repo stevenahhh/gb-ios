@@ -23,7 +23,7 @@ from common import (
     required_text,
 )
 from contracts import ApiModel, ApiRequest, Card, CardAction, CardBooking, CardUndo, Page, Status
-from display import clock, day_start, local, masked, month_day_weekday, relative_moment, won
+from display import clock, day_start, due, local, masked, month_day_weekday, relative_moment, won
 from metrics import load_counts, metric
 from models import BookingRow, ClassSessionRow, CustomerRow
 
@@ -130,12 +130,13 @@ def booking_card(record: BookingRecord, now: datetime) -> Card:
             )
         case "deposit_pending":
             lines.append(f"{who} · 예약금 {won(booking.deposit_won)}")
-            due = booking.deposit_due_at or now
-            phrase = relative_moment(due, now.date())
+            deposit_due = booking.deposit_due_at or now
+            phrase = relative_moment(deposit_due, now.date())
             return Card(
                 id=booking.id, kind="booking", title=session.title, lines=lines, tag="예약금 대기",
                 status=Status(text="예약금 대기", tone="attention"), revision=booking.revision,
-                deadline=f"입금 기한 {phrase}" if due >= now else f"입금 기한 지남 · {phrase}",
+                deadline=f"입금 기한 {phrase}" if deposit_due >= now else f"입금 기한 지남 · {phrase}",
+                due=due(deposit_due, prefix="입금 기한"),
                 action=CardAction(code="confirmDeposit", label="입금 확인하기"),
                 booking=info,
             )

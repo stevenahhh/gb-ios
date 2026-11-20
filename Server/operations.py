@@ -9,10 +9,22 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common import Now, Session
-from contracts import ApiModel, Metric
-from display import count, day_start, month_start, next_day_start, next_month, previous_month
-from metrics import counted, integers, load_counts, metric
-from models import BookingRow, ClassSessionRow, ContentDraftRow, InquiryRow, OrderRow, ShipmentRow
+from contracts import ApiModel, CardDue, Metric
+from display import (
+    count,
+    day_start,
+    due,
+    local,
+    masked,
+    month_start,
+    next_day_start,
+    next_month,
+    previous_month,
+    relative_day,
+    relative_moment,
+)
+from metrics import counted, integers, load_counts, metric, to_send
+from models import BookingRow, ClassSessionRow, CustomerRow, InquiryRow, OrderRow, ShipmentRow
 
 router = APIRouter()
 MONTHS_SHOWN: Final = 6
@@ -76,7 +88,6 @@ class MonthNumbers:
     shipments_handled: int
     inquiries: int
     inquiries_handled: int
-    drafts: int
 
     @property
     def total(self) -> int:
@@ -124,7 +135,6 @@ async def month_numbers(db: AsyncSession, first: date, stop: date | None = None)
             counted(ShipmentRow, *shipments, ShipmentRow.status.in_(("in_transit", "delivered"))),
             counted(InquiryRow, *inquiries),
             counted(InquiryRow, *inquiries, InquiryRow.status != "pending"),
-            counted(ContentDraftRow, ContentDraftRow.created_at >= begin, ContentDraftRow.created_at < end),
         ],
     )
     return MonthNumbers(*values)
@@ -135,6 +145,43 @@ def change(current: int, previous: int) -> str:
     if previous == 0:
         return "—"
     return f"{round((current - previous) * 100 / previous):+d}%"
+
+
+def compared(current: int, previous: int, since: str) -> str:
+    """Describe a count change in items, which reads better than a percentage."""
+    diff = current - previous
+    return f"{since}보다 {diff:+d}건" if diff else f"{since}과 같아요"
+
+
+async def attention_details(
+    db: AsyncSession, today: date,
+) -> tuple[str | None, str | None, str | None, CardDue | None]:
+    """Name the first deposit, drafted inquiries, and the earliest pickup behind each count."""
+    deposits = (
+        await db.execute(
+            select(ClassSessionRow.starts_at, CustomerRow.name)
+            .join(BookingRow, BookingRow.session_id == ClassSessionRow.id)
+            .join(CustomerRow, CustomerRow.id == BookingRow.customer_id)
+            .where(BookingRow.status == "deposit_pending")
+            .order_by(ClassSessionRow.starts_at, BookingRow.id),
+        )
+    ).tuples().all()
+    deposit = None
+    if deposits:
+        starts_at, name = deposits[0]
+        others = f" 외 {len(deposits) - 1}명" if len(deposits) > 1 else ""
+        deposit = f"{relative_day(local(starts_at).date(), today)} {masked(name)} 님{others}"
+    drafted = await db.scalar(
+        select(func.count()).select_from(InquiryRow)
+        .where(InquiryRow.status == "pending", func.btrim(InquiryRow.draft) != ""),
+    ) or 0
+    pickup = await db.scalar(select(func.min(ShipmentRow.ship_by_at)).where(*to_send(today)))
+    return (
+        deposit,
+        f"비서 초안 {drafted}건 준비됨" if drafted else None,
+        f"{relative_moment(pickup, today)} 택배 수거" if pickup else None,
+        due(pickup, suffix=" 택배 수거", missed="수거 놓침") if pickup else None,
+    )
 
 
 @router.get("/operations")
@@ -156,7 +203,7 @@ async def operations(
     if (start is None) != (end is None) or (month is not None and start is not None):
         raise HTTPException(422, "provide either month or both start and end")
     option = month_option(selected)
-    comparison_period = "전월"
+    comparison_period, since = "전월", "지난달"
     if start is not None and end is not None:
         span = (end - start).days + 1
         if span < 1 or span > MAX_RANGE_DAYS or start.toordinal() <= span or end == date.max:
@@ -166,17 +213,21 @@ async def operations(
         option = MonthOption(
             key="custom", title="선택 기간", range=f"{start:%m.%d} – {end:%m.%d}",  # noqa: RUF001
         )
-        comparison_period = "이전 기간"
+        comparison_period, since = "이전 기간", "이전 기간"
     else:
         numbers = await month_numbers(db, selected)
         baseline = await month_numbers(db, previous_month(selected))
     rate = round(numbers.handled * 100 / numbers.total) if numbers.total else None
+    deposit, drafted, pickup, pickup_due = await attention_details(db, today)
     return Operations(
         attention_count=counts.attention,
         attention=[
-            metric("depositPending", "예약금 미확인", counts.deposit_pending),
-            metric("pendingInquiries", "미답변 문의", counts.pending_inquiries),
-            metric("unshipped", "발송 대기", counts.unshipped),
+            metric("depositPending", "예약금 미확인", counts.deposit_pending, deposit),
+            metric("pendingInquiries", "미답변 문의", counts.pending_inquiries, drafted),
+            Metric(
+                key="unshipped", label="발송 대기", value=counts.ship_due_today,
+                display=count(counts.ship_due_today), detail=pickup, due=pickup_due,
+            ),
         ],
         period=Period(
             month=option,
@@ -185,10 +236,21 @@ async def operations(
             rate_percent=rate,
             rate_display="—" if rate is None else f"{rate}%",
             metrics=[
-                metric("bookings", "예약", numbers.bookings),
-                metric("orders", "주문", numbers.orders),
-                metric("shipments", "배송", numbers.shipments),
-                metric("drafts", "콘텐츠", numbers.drafts),
+                metric(
+                    "bookings", "예약", numbers.bookings,
+                    compared(numbers.bookings, baseline.bookings, since),
+                ),
+                metric(
+                    "orders", "주문", numbers.orders, compared(numbers.orders, baseline.orders, since),
+                ),
+                metric(
+                    "shipments", "배송", numbers.shipments,
+                    f"발송 대기 {numbers.shipments - numbers.shipments_handled:,}건",
+                ),
+                metric(
+                    "inquiries", "문의", numbers.inquiries,
+                    f"미답변 {numbers.inquiries - numbers.inquiries_handled:,}건",
+                ),
             ],
             comparisons=[
                 Comparison(

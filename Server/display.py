@@ -4,6 +4,8 @@ from datetime import date, datetime, time, timedelta
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from contracts import CardDue
+
 SEOUL: Final = ZoneInfo("Asia/Seoul")
 WEEKDAYS: Final = "월화수목금토일"
 TWO_LETTER_NAME: Final = 2
@@ -92,3 +94,11 @@ def masked(name: str) -> str:
     if len(name) == TWO_LETTER_NAME:
         return f"{name[0]}*"
     return f"{name[0]}{'*' * (len(name) - 2)}{name[-1]}"
+
+
+def due(
+    moment: datetime, *, prefix: str | None = None, suffix: str = "", missed: str | None = None,
+) -> CardDue:
+    """Send a deadline as a Seoul-time moment; the client phrases it against its own clock."""
+    at = local(moment).isoformat(timespec="seconds")
+    return CardDue(at=at, prefix=prefix, suffix=suffix, missed=missed)
