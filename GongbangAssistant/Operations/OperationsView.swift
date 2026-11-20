@@ -54,10 +54,12 @@ struct OperationsView: View {
                         LabeledContent {
                             Text(summary.display)
                                 .monospacedDigit()
+                                .foregroundStyle(Color.secondaryText)
                         } label: {
                             Label {
                                 Text(summary.area.title)
                                 Text(summary.area.summary)
+                                    .foregroundStyle(Color.secondaryText)
                             } icon: {
                                 MenuIcon(systemName: summary.area.systemImage)
                             }
@@ -74,6 +76,7 @@ struct OperationsView: View {
                     Label {
                         Text("기회")
                         Text("저장해 둔 마켓·공모·지원사업")
+                            .foregroundStyle(Color.secondaryText)
                     } icon: {
                         MenuIcon(systemName: "chart.line.uptrend.xyaxis")
                     }
@@ -93,12 +96,24 @@ struct OperationsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(period.month.key == "custom" ? "선택 기간 처리율" : "\(period.month.title) 처리율")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                     Text("\(period.total)건 중 \(period.handled)건 처리")
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                    if period.total > period.handled {
+                        NavigationLink {
+                            RemainingWorkView()
+                        } label: {
+                            Text("남은 \(period.total - period.handled)건 보기 ›")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(minHeight: 44, alignment: .leading)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .navigationLinkIndicatorVisibility(.hidden)
+                        .accessibilityIdentifier("operations.remaining")
+                    }
                 }
-                .accessibilityElement(children: .combine)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 4)
@@ -152,12 +167,14 @@ struct OperationsView: View {
                 Text(metric.display)
                     .font(.body.weight(.semibold))
                     .monospacedDigit()
+                    .foregroundStyle(Color.secondaryText)
             } label: {
                 Text(metric.label)
                 if let due = metric.due {
                     DueLabel(due: due)
                 } else if let detail = metric.detail {
                     Text(detail)
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
         }
@@ -172,15 +189,19 @@ struct OperationsView: View {
     }
 
     private func gauge(_ period: OperationsData.Period) -> some View {
-        VStack(spacing: 4) {
-            Gauge(value: Double(period.ratePercent ?? 0), in: 0...100) {
-                Text("처리율")
-            } currentValueLabel: {
-                Text(period.rateDisplay)
-            }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(.accentColor)
+        ZStack {
+            Circle()
+                .stroke(Color.ringTrack, lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: Double(period.ratePercent ?? 0) / 100)
+                .stroke(CalendarTokens.label, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(period.rateDisplay)
+                .font(.system(size: 19, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.6)
         }
+        .frame(width: 76, height: 76)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(period.month.title) 처리율")
         .accessibilityValue(period.rateDisplay)
@@ -203,14 +224,14 @@ struct OperationsView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(metric.label)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             Text(metric.display)
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()
             if let detail = metric.detail {
                 Text(detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -228,8 +249,16 @@ struct OpportunitiesView: View {
                 ContentUnavailableView("저장된 기회가 없어요", systemImage: "flag")
             } else {
                 List {
+                    // No detail screen exists yet, so the cards show no chevron and only their own action.
                     CardSection {
-                        ForEach(items) { WorkCard(item: $0) }
+                        ForEach(items) { item in
+                            VStack(alignment: .leading, spacing: 8) {
+                                WorkCardContent(item: item)
+                                if let action = item.action {
+                                    CardActionButton(item: item, action: action)
+                                }
+                            }
+                        }
                     }
                 }
                 .cardList(separators: .hidden)
@@ -243,5 +272,34 @@ struct OpportunitiesView: View {
 
     private func load() async {
         await loader.load { try await RoundupAPI.opportunities() }
+    }
+}
+
+/// Where the period's unprocessed work lives: each row opens that area already filtered.
+struct RemainingWorkView: View {
+    private let rows: [(OperationArea, String, String)] = [
+        (.bookings, "deposit_pending", "예약금을 기다리는 예약"),
+        (.orders, "paid", "확인할 주문"),
+        (.deliveries, "scheduled", "보낼 택배"),
+        (.channels, "inquiries", "답변 기다리는 문의"),
+    ]
+
+    var body: some View {
+        List {
+            CardSection {
+                ForEach(rows, id: \.0) { area, filter, title in
+                    NavigationLink(value: AreaRoute(area: area, filter: filter)) {
+                        Label {
+                            Text(title)
+                        } icon: {
+                            MenuIcon(systemName: area.systemImage)
+                        }
+                    }
+                }
+            }
+        }
+        .cardList(separators: .hidden)
+        .navigationTitle("남은 일")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -30,7 +30,7 @@ struct SettingsView: View {
                         if let owner = data.workshop?.ownerTitle {
                             Text(owner)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                 } icon: {
@@ -55,6 +55,18 @@ struct SettingsView: View {
                 } label: {
                     Label { Text("채널 연결") } icon: { MenuIcon(systemName: "link") }
                 }
+                NavigationLink {
+                    AssistantDelegationView()
+                } label: {
+                    Label { Text("\(AssistantIdentity.name)에게 맡기기") } icon: { MenuIcon(systemName: "hand.raised") }
+                }
+                .accessibilityIdentifier("settings.delegation")
+                NavigationLink {
+                    AssistantActivityView()
+                } label: {
+                    Label { Text("\(AssistantIdentity.name)가 한 일") } icon: { MenuIcon(systemName: "clock.arrow.circlepath") }
+                }
+                .accessibilityIdentifier("settings.activities")
             }
 
             if let support = sections["지원"] {
@@ -84,10 +96,9 @@ struct ChannelStatusView: View {
             CardSection {
                 ForEach(channels) { WorkCard(item: $0) }
             } header: {
-                EmptyView()
-            } footer: {
-                Text("채널 자동 연동은 아직 지원하지 않아요. 주문과 문의는 이 앱에 등록된 내용만 보여요.")
+                if channels.allChannelsUnconnected { UnconnectedChannelsNote() }
             }
+            .environment(\.hidesCardStatus, channels.allChannelsUnconnected)
         }
         .cardList()
         .navigationTitle("채널 연결")
@@ -112,7 +123,7 @@ struct SettingTextView: View {
         List {
             CardSection {
                 if item.isEditable {
-                    TextEditor(text: $text)
+                    KoreanTextEditor(text: $text)
                         .frame(minHeight: 200)
                         .accessibilityLabel(item.title)
                         .accessibilityIdentifier("setting.body")
