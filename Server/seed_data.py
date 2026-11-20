@@ -317,7 +317,7 @@ def tasks(cal: SeedCalendar) -> list[SeedRow]:
         row(
             "keyring",
             "channel",
-            ("행운의 거북이 도자기 키링 이벤트 결과 올리기", "오늘이 결과 발표일이에요.", None),
+            ("행운의 거북이 도자기 키링 이벤트 결과 올리기", "키링 이벤트 결과 발표", None),
             cal.at(0, 20),
         ),
     ]
