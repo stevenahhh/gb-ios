@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import RoundupCore
 
@@ -13,6 +14,7 @@ enum TodaySegment: String, CaseIterable, Identifiable {
 struct TodayView: View {
     @SceneStorage("today.segment") private var segment: TodaySegment = .tasks
     @State private var loader = Loader<TodayScreenData>()
+    @State private var now = Date.now
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
 
@@ -25,7 +27,10 @@ struct TodayView: View {
                     list(today)
                 }
             }
-            .navigationTitle(greeting)
+            // The headline is recomputed every minute and whenever the data reloads. A TimelineView
+            // around the list looped with the collapsing large title, so a minute timer drives `now`.
+            .navigationTitle(headline(now: now))
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
             .navigationSubtitle(subtitle)
             .appDestinations()
         }
@@ -103,10 +108,11 @@ struct TodayView: View {
             }
             ForEach(today.tasks.groups) { group in
                 CardSection {
-                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                    let items = group.items.overdueFirst()
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         TaskRow(item: item, kind: group.kind,
                                 timeline: group.kind == .booking
-                                    ? TimelinePosition(index: index, count: group.items.count) : nil)
+                                    ? TimelinePosition(index: index, count: items.count) : nil)
                     }
                 } header: {
                     SectionHeader(title: group.title, area: group.area)
@@ -163,19 +169,33 @@ struct TodayView: View {
                 .foregroundStyle(.secondary)
         } else {
             let primaryID = items.primaryActionID
-            ForEach(items) { item in
+            ForEach(items.overdueFirst()) { item in
                 WorkCard(item: item, isPrimary: item.id == primaryID)
             }
         }
     }
 
-    private var greeting: String {
-        switch Calendar.workshop.component(.hour, from: .now) {
-        case 5..<11: "사장님, 좋은 아침이에요"
-        case 11..<17: "사장님, 좋은 오후예요"
-        case 17..<22: "사장님, 좋은 저녁이에요"
-        default: "사장님, 오늘도 수고했어요"
+    private func headline(now: Date) -> String {
+        guard let facts = loader.value?.headline else { return "오늘" }
+        var core = TodayHeadlineFacts()
+        core.overdueShipments = facts.overdueShipments
+        core.overdueTasks = facts.overdueTasks
+        core.sessions = facts.sessions.compactMap { session in
+            (try? Date(session.startsAt, strategy: .iso8601)).map {
+                TodayHeadlineFacts.Session(title: session.title, start: $0, minutes: session.minutes,
+                                           isDone: session.isDone)
+            }
         }
+        core.pendingInquiries = facts.pendingInquiries
+        core.depositPending = facts.depositPending
+        core.pendingDrafts = facts.pendingDrafts
+        core.openTasksToday = facts.openTasksToday
+        core.tasksToday = facts.tasksToday
+        core.openShipmentsToday = facts.openShipmentsToday
+        core.shipmentsToday = facts.shipmentsToday
+        core.tomorrowClasses = facts.tomorrowClasses
+        core.weekClassesLeft = facts.weekClassesLeft
+        return TodayHeadline.make(core, now: now)
     }
 
     private var subtitle: String {

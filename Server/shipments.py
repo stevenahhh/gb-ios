@@ -21,10 +21,11 @@ from common import (
     matches,
     required_text,
 )
-from contracts import Card, CardAction, CardUndo, Page, Status
-from display import local, masked, relative_day, relative_moment
+from contracts import Card, CardAction, CardDue, CardField, CardUndo, Page, Status
+from display import due, local, masked, relative_day, relative_moment
 from metrics import UNSHIPPED, delivery_metrics, load_counts
 from models import CustomerRow, OrderRow, ShipmentRow
+from orders import order_fields, order_progress
 
 router = APIRouter()
 ESTIMATED_TRANSIT: Final = timedelta(days=2)
@@ -68,6 +69,11 @@ def arrival_text(arrival: date | None, today: date) -> str:
     return f"{relative_day(arrival, today)} 도착 예정"
 
 
+def pickup_due(shipment: ShipmentRow) -> CardDue:
+    """Describe the courier pickup an unshipped parcel must make."""
+    return due(shipment.ship_by_at, suffix=" 택배 수거", missed="수거 놓침")
+
+
 def shipment_card(record: ShipmentRecord, today: date) -> Card:
     """Present one shipment and the action its state allows."""
     shipment, order, customer = record
@@ -95,7 +101,12 @@ def shipment_card(record: ShipmentRecord, today: date) -> Card:
     return Card(
         id=shipment.id, kind="shipment", title=order.product_name, status=status, lines=lines,
         deadline=deadline, tag=tag, revision=shipment.revision, action=action,
+        due=pickup_due(shipment) if shipment.status in UNSHIPPED else None,
         undo=CardUndo(path=f"/shipments/{shipment.id}/undo") if shipment.status != "packing" else None,
+        fields=order_fields(order, customer) + (
+            [CardField(label="송장", value=tracking)] if shipment.tracking_number else []
+        ),
+        progress=order_progress(order.status, shipment.status),
     )
 
 

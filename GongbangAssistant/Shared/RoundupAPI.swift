@@ -116,6 +116,35 @@ enum RoundupAPI {
         let _: Acknowledged = try await post("bookings/\(bookingID)/confirm-deposit", Revisioned(expectedRevision: revision))
     }
 
+    /// Checks off a task or owner event, or clears the mark, and returns its new revision for undo.
+    static func setDone(_ item: OwnerItem, done: Bool) async throws -> Int {
+        struct Saved: Decodable { let revision: Int }
+        let saved: Saved = switch item {
+        case .task(let id, let revision): try await post("tasks/\(id)/completion", Completion(done: done, expectedRevision: revision))
+        case .event(let id, let revision):
+            try await post("calendar/events/\(id)/completion", Completion(done: done, expectedRevision: revision))
+        }
+        return saved.revision
+    }
+
+    /// Reschedules a task or owner event and returns its new revision for undo.
+    static func move(_ target: OwnerItem, to moment: Date) async throws -> Int {
+        struct Moved: Decodable { let revision: Int }
+        struct TaskMove: Encodable { let dueAt: String; let expectedRevision: Int }
+        struct EventMove: Encodable { let startsAt: String; let expectedRevision: Int }
+        let at = moment.ISO8601Format()
+        let moved: Moved = switch target {
+        case .task(let id, let revision): try await post("tasks/\(id)/move", TaskMove(dueAt: at, expectedRevision: revision))
+        case .event(let id, let revision):
+            try await post("calendar/events/\(id)/move", EventMove(startsAt: at, expectedRevision: revision))
+        }
+        return moved.revision
+    }
+
+    static func setTaskDone(id: String, done: Bool, revision: Int) async throws {
+        let _: Acknowledged = try await post("tasks/\(id)/completion", Completion(done: done, expectedRevision: revision))
+    }
+
     static func setSessionDone(id: String, done: Bool, revision: Int) async throws {
         let _: Acknowledged = try await post("class-sessions/\(id)/completion", Completion(done: done, expectedRevision: revision))
     }
@@ -141,8 +170,7 @@ enum RoundupAPI {
         switch item.target {
         case .session: let _: State = try await post("class-sessions/\(item.id)/completion", body)
         case .task: let _: State = try await post("tasks/\(item.id)/completion", body)
-        case .event: let _: State = try await post("calendar/events/\(item.id)/completion", body)
-        case .shipment, .order: preconditionFailure("\(item.target) uses its own actions")
+        case .shipment: preconditionFailure("shipments use their own actions")
         }
     }
 

@@ -96,23 +96,24 @@ final class ActionFlowUITests: RoundupUITestCase {
     }
 
     @MainActor
-    func testCalendarRowTogglesInPlaceAndOpensItsDetail() throws {
+    func testCalendarCheckIsInstantAndCanBeUndone() throws {
         let app = try launch()
         app.tabBars.buttons["캘린더"].tap()
-        let order = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "#1042")).firstMatch
-        XCTAssertTrue(scrollTo(order, in: app))
-        order.tap()
-        XCTAssertTrue(app.navigationBars["머그컵 2종 세트"].waitForExistence(timeout: 10))
-        goBack(app)
-
-        let toggle = app.buttons["task.task-market"]
-        XCTAssertTrue(scrollTo(toggle, in: app))
-        XCTAssertEqual(toggle.value as? String, "미완료")
-        toggle.tap()
-        waitFor(toggle, "value == %@", "완료")
+        let check = app.buttons["timeline.check.task:task-market"]
+        XCTAssertTrue(scrollTo(check, in: app))
+        XCTAssertEqual(check.value as? String, "미완료")
+        check.tap()
+        waitFor(check, "value == %@", "완료")
+        let undo = app.buttons["calendar.toast.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["캘린더"].exists)
-        toggle.tap()
-        waitFor(toggle, "value == %@", "미완료")
+        undo.tap()
+        waitFor(check, "value == %@", "미완료")
+
+        let orders = app.buttons["calendar.orders"]
+        XCTAssertTrue(scrollTo(orders, in: app))
+        orders.tap()
+        XCTAssertTrue(element(labelled: "새 주문", in: app).waitForExistence(timeout: 10))
     }
 
     @MainActor

@@ -57,6 +57,10 @@ struct RootTabView: View {
         .safeAreaInset(edge: .top) {
             InquirySyncStatus()
         }
+        // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            app.dataDidChange()
+        }
         .task(id: app.dataVersion) {
             await store.loadInquiries()
             await app.refreshAttention()

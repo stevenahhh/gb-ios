@@ -2,7 +2,7 @@ import XCTest
 
 final class TabNavigationUITests: RoundupUITestCase {
     private let tabs: [(label: String, titlePrefix: String)] = [
-        ("오늘", "사장님"),
+        ("오늘", ""), // The today headline changes with the day's work, so any title counts.
         ("캘린더", "캘린더"),
         ("운영", "운영"),
         ("설정", "설정"),
@@ -20,7 +20,9 @@ final class TabNavigationUITests: RoundupUITestCase {
             let button = app.tabBars.buttons[tab.label]
             XCTAssertTrue(button.waitForExistence(timeout: 5), "tab \(tab.label) is missing")
             button.tap()
-            let title = app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH %@", tab.titlePrefix)).firstMatch
+            let title = tab.titlePrefix.isEmpty
+                ? app.navigationBars.firstMatch
+                : app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH %@", tab.titlePrefix)).firstMatch
             XCTAssertTrue(title.waitForExistence(timeout: 5), "navigation title starting with \(tab.titlePrefix) is missing")
             keepScreenshot(of: app, named: "tab-\(tab.label)")
         }

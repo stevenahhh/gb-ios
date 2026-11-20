@@ -322,6 +322,10 @@ struct TaskRow: View {
                 PhraseText(text: item.detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                // Parcels always show their pickup; timed rows show theirs only once it has passed.
+                if let due = item.due, item.target == .shipment || due.isOverdue(at: .now) {
+                    DueLabel(due: due)
+                }
             }
         }
         .accessibilityElement(children: .combine)
@@ -408,7 +412,9 @@ struct WorkCardContent: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            if let deadline = item.deadline {
+            if let due = item.due {
+                DueLabel(due: due)
+            } else if let deadline = item.deadline {
                 Label {
                     Text(keepingWords: deadline)
                         .foregroundStyle(.primary)

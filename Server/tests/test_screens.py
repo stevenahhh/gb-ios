@@ -84,9 +84,9 @@ async def test_calendar_markers_equal_agenda_rows(database: AsyncEngine, client:
     day = next(item for item in body["days"] if item["date"] == TODAY)
     assert {event["kind"]: event["count"] for event in day["events"]} == {
         "booking": 2,
-        "order": 4,
+        "order": 3,
         "delivery": 3,
-        "todo": 2,
+        "todo": 3,
     }
     for item in body["days"]:
         assert sum(event["count"] for event in item["events"]) == len(item["items"])

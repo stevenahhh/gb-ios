@@ -6,6 +6,8 @@ struct Metric: Decodable, Identifiable, Hashable {
     let key: String
     let label: String
     let display: String
+    let detail: String?
+    let due: CardDue?
     var id: String { key }
 }
 
@@ -96,7 +98,7 @@ struct BookingSummary: Decodable, Hashable {
     let people: Int
 }
 
-struct WorkItem: Decodable, Identifiable, Hashable {
+struct WorkItem: Decodable, Identifiable, Hashable, HasDue {
     let id: String
     let kind: CardKind
     let title: String
@@ -109,6 +111,10 @@ struct WorkItem: Decodable, Identifiable, Hashable {
     let undo: UndoAction?
     let draft: DraftReference?
     let booking: BookingSummary?
+    let due: CardDue?
+    let source: String?
+    let fields: [CardField]?
+    let progress: CardProgress?
 
     var route: AppRoute? {
         switch kind {
@@ -138,6 +144,7 @@ struct BookingDetail: Decodable {
     let depositDisplay: String
     let depositConfirmed: Bool
     let depositDeadline: String?
+    let depositDue: CardDue?
     let revision: Int
     let action: CardAction?
     let undo: UndoAction?
@@ -169,11 +176,9 @@ enum TaskTarget: String, Decodable, Hashable {
     case session
     case task
     case shipment
-    case order
-    case event
 }
 
-struct TaskItem: Decodable, Identifiable, Hashable {
+struct TaskItem: Decodable, Identifiable, Hashable, HasDue {
     let id: String
     let target: TaskTarget
     let time: String?
@@ -182,14 +187,13 @@ struct TaskItem: Decodable, Identifiable, Hashable {
     let status: Status?
     let isDone: Bool?
     let revision: Int
+    let due: CardDue?
 
     var route: AppRoute? {
         switch target {
         case .session: .classSession(id)
         case .task: .work(.task, id)
         case .shipment: .work(.shipment, id)
-        case .order: .work(.order, id)
-        case .event: nil
         }
     }
 }
@@ -240,32 +244,80 @@ enum EventKind: String, Decodable, CaseIterable, Identifiable, Hashable {
     }
 }
 
+struct DayEvent: Decodable, Hashable {
+    let kind: EventKind
+    let count: Int
+    let display: String
+}
+
+struct CardField: Decodable, Hashable {
+    let label: String
+    let value: String
+}
+
+/// Fixed fulfilment steps; `current` is the index of the first unfinished step.
+struct CardProgress: Decodable, Hashable {
+    let steps: [String]
+    let current: Int
+}
+
 struct AgendaItem: Decodable, Identifiable, Hashable {
     let id: String
-    let target: TaskTarget
-    let targetId: String
     let time: String
     let title: String
     let kind: EventKind
     let detail: String
-    let status: Status?
     let isDone: Bool?
-    let revision: Int
+    let minutes: Int?
+    let subject: String?
+    let amountWon: Int?
+    let revision: Int?
 
-    /// Calendar rows reuse the today row, so both act on the same database rows.
-    var task: TaskItem {
-        TaskItem(id: targetId, target: target, time: time, title: title, detail: detail,
-                 status: status, isDone: isDone, revision: revision)
+    var route: AppRoute? {
+        let parts = id.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        switch parts[0] {
+        case "session": return .classSession(parts[1])
+        case "order": return .work(.order, parts[1])
+        case "shipment": return .work(.shipment, parts[1])
+        case "task": return .work(.task, parts[1])
+        default: return nil
+        }
     }
 }
 
 struct CalendarDay: Decodable, Hashable {
     let date: String
+    let events: [DayEvent]
     let items: [AgendaItem]
 }
 
 struct CalendarRange: Decodable {
     let days: [CalendarDay]
+    let overdueShipments: [AgendaItem]?
+}
+
+/// Counts behind the today headline; `TodayHeadline` in RoundupCore picks the words.
+struct HeadlineFacts: Decodable, Hashable {
+    struct Session: Decodable, Hashable {
+        let title: String
+        let startsAt: String
+        let minutes: Int
+        let isDone: Bool
+    }
+
+    let overdueShipments: Int
+    let overdueTasks: Int
+    let sessions: [Session]
+    let pendingInquiries: Int
+    let depositPending: Int
+    let pendingDrafts: Int
+    let openTasksToday: Int
+    let tasksToday: Int
+    let openShipmentsToday: Int
+    let shipmentsToday: Int
+    let tomorrowClasses: Int
+    let weekClassesLeft: Int
 }
 
 struct TodayScreenData: Decodable {
@@ -304,6 +356,7 @@ struct TodayScreenData: Decodable {
         tasks.groups.isEmpty && channels.cards.isEmpty && channels.todos.isEmpty
             && delivery.shipToday.isEmpty && delivery.inTransit.isEmpty && suggestions.items.isEmpty
     }
+    let headline: HeadlineFacts?
 }
 
 struct AreaPage: Decodable {

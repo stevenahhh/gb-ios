@@ -2,12 +2,12 @@ import SwiftUI
 import UIKit
 
 enum AppPalette {
-    static let listBackground = Color(uiColor: UIColor { traits in
+    static let listBackground = Color(uiColor: UIColor { @Sendable traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 16 / 255, green: 16 / 255, blue: 18 / 255, alpha: 1)
             : .systemGroupedBackground
     })
-    static let card = Color(uiColor: UIColor { traits in
+    static let card = Color(uiColor: UIColor { @Sendable traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 26 / 255, green: 26 / 255, blue: 29 / 255, alpha: 1)
             : .secondarySystemGroupedBackground

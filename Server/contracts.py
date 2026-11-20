@@ -33,6 +33,15 @@ class ApiRequest(BaseModel):
     )
 
 
+class CardDue(ApiModel):
+    """A deadline sent as a moment, so clients phrase 오늘/어제 and 기한 지남 when they draw it."""
+
+    at: str
+    prefix: str | None = None
+    suffix: str = ""
+    missed: str | None = None
+
+
 class Metric(ApiModel):
     """A computed number and its server-formatted text."""
 
@@ -40,6 +49,8 @@ class Metric(ApiModel):
     label: str
     value: int | None
     display: str
+    detail: str | None = None
+    due: CardDue | None = None
 
 
 class Status(ApiModel):
@@ -82,6 +93,20 @@ class CardBooking(ApiModel):
     people: int
 
 
+class CardField(ApiModel):
+    """One labelled value on a detail screen."""
+
+    label: str
+    value: str
+
+
+class CardProgress(ApiModel):
+    """Fixed steps; ``current`` is the index of the first unfinished step."""
+
+    steps: list[str]
+    current: int
+
+
 class Card(ApiModel):
     """One list row, fully derived from database rows."""
 
@@ -97,6 +122,10 @@ class Card(ApiModel):
     undo: CardUndo | None = None
     draft: CardDraft | None = None
     booking: CardBooking | None = None
+    due: CardDue | None = None
+    source: str | None = None
+    fields: list[CardField] | None = None
+    progress: CardProgress | None = None
 
 
 class Page(ApiModel):
@@ -108,3 +137,9 @@ class Page(ApiModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class Moved(ApiModel):
+    """The revision after a reschedule, so the client can undo it."""
+
+    revision: int
