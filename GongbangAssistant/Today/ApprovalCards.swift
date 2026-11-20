@@ -185,15 +185,9 @@ struct ApprovalCard: View {
             } else {
                 HStack(spacing: 10) {
                     Button(action: approve) {
-                        Group {
-                            if isWorking {
-                                ProgressView()
-                            } else {
-                                Text(item.isReply ? "답변 완료" : "승인").foregroundStyle(Color(.systemBackground))
-                            }
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, minHeight: 40)
+                        BusyLabel(title: item.isReply ? "답변 완료" : "승인", isBusy: isWorking, isProminent: true)
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 40)
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("approval.approve.\(item.id)")

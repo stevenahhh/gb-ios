@@ -140,13 +140,13 @@ struct SettingTextView: View {
         .toolbar {
             if item.isEditable {
                 ToolbarItem(placement: .confirmationAction) {
-                    if app.isRunning(runID) {
-                        ProgressView()
-                    } else {
-                        Button("저장", action: save)
-                            .disabled(text == item.body || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .accessibilityIdentifier("setting.save")
+                    // One button whose title is replaced by the spinner, so the toolbar item keeps its shape.
+                    Button(action: save) {
+                        BusyLabel(title: "저장", isBusy: app.isRunning(runID))
                     }
+                    .disabled(app.isRunning(runID) || text == item.body
+                        || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("setting.save")
                 }
             }
         }

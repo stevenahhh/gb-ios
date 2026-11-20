@@ -273,6 +273,8 @@ struct DaySection: View {
     let now: Date
     let add: () -> Void
     let check: (TimelineEntry, Bool) async -> Bool
+    /// The month this day belongs to has not loaded yet.
+    var isLoading = false
 
     private var calendar: Calendar { .workshop }
 
@@ -295,7 +297,7 @@ struct DaySection: View {
                     .foregroundStyle(CalendarTokens.label)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                Text(relation == .today ? "오늘" : "일정 \(day?.items.count ?? 0)건")
+                Text(relation == .today ? "오늘" : isLoading ? "" : "일정 \(day?.items.count ?? 0)건")
                     .font(.subheadline)
                     .foregroundStyle(CalendarTokens.secondary)
             }
@@ -305,7 +307,13 @@ struct DaySection: View {
                 PinnedSummaryCard(date: date, overdue: overdue, allDay: schedule.allDay, orders: schedule.orders)
                     .padding(.top, 14)
             }
-            if schedule.entries.isEmpty {
+            if isLoading {
+                // Not yet "일정이 없어요": this month's rows have not loaded.
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .accessibilityIdentifier("calendar.day.loading")
+            } else if schedule.entries.isEmpty {
                 if hasPinned {
                     Rectangle().fill(CalendarTokens.separator).frame(height: 1).padding(.top, 20)
                 }

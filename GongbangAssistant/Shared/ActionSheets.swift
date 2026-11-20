@@ -20,13 +20,11 @@ struct FormSheet<Fields: View>: View {
                         Button("취소") { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Button(saveLabel, action: save)
-                                .disabled(!canSave)
-                                .accessibilityIdentifier("form.save")
+                        Button(action: save) {
+                            BusyLabel(title: saveLabel, isBusy: isSaving)
                         }
+                        .disabled(isSaving || !canSave)
+                        .accessibilityIdentifier("form.save")
                     }
                 }
         }
@@ -163,7 +161,10 @@ struct BookingFormSheet: View {
                 Label(message, systemImage: "exclamationmark.circle")
                 Button("다시 시도") { Task { await load() } }
             } else {
-                ProgressView("불러오는 중이에요")
+                // The spinner sits where the picker will be, so the form does not jump when the classes arrive.
+                Section("수업") {
+                    LabeledContent("수업") { ProgressView() }
+                }
             }
         }
         .task { await load() }

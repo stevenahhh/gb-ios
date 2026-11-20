@@ -27,7 +27,7 @@ Ranked jobs:
 - Undo is one toast for the whole app (`ToastHost`), laid over the assistant accessory so the row that changed stays visible. A completion toast names its row on one line ("‘제목’ 완료했어요" or "‘제목’ 완료를 취소했어요"). It leaves after 7 seconds, or stays until closed while VoiceOver runs.
 - The assistant sheet keeps a typed draft: swipe-to-dismiss is disabled while a draft exists, and 닫기 asks 버리기 / 계속 쓰기 first.
 - Counts agree across screens because the server computes them from the same rows; the app never derives or stores display numbers.
-- Every server-backed screen has loaded, loading (progress indicator), empty, and error-with-retry states. A failed refresh keeps the last loaded data and says so.
+- Every server-backed screen has loaded, loading (a progress indicator that shows after 0.35 s, so a quick load shows none), empty, and error-with-retry states. A failed refresh keeps the last loaded data and says so.
 
 ## Screens
 

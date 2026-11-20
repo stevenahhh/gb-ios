@@ -102,9 +102,11 @@ struct WorkshopInfoView: View {
                         } else {
                             ProgressView()
                                 .frame(maxWidth: .infinity, minHeight: 160)
+                                .background(CalendarTokens.fill)
                         }
                     }
                     .clipShape(.rect(cornerRadius: 12))
+                    .animation(.default, value: mapImage == nil)
                 }
             }
         }
@@ -113,13 +115,11 @@ struct WorkshopInfoView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                if app.isRunning(runID) {
-                    ProgressView()
-                } else {
-                    Button("저장", action: save)
-                        .disabled(!canSave)
-                        .accessibilityIdentifier("workshop.save")
+                Button(action: save) {
+                    BusyLabel(title: "저장", isBusy: app.isRunning(runID))
                 }
+                .disabled(app.isRunning(runID) || !canSave)
+                .accessibilityIdentifier("workshop.save")
             }
         }
     }

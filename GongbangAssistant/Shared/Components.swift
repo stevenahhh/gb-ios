@@ -114,6 +114,8 @@ struct MetricStrip: View {
                         Text(metric.display)
                             .font(.title3.bold())
                             .monospacedDigit()
+                            .contentTransition(.numericText())
+                            .animation(.default, value: metric.display)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -128,6 +130,8 @@ struct MetricStrip: View {
                         Text(metric.display)
                             .font(.title3.bold())
                             .monospacedDigit()
+                            .contentTransition(.numericText())
+                            .animation(.default, value: metric.display)
                         Text(metric.label)
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
@@ -194,6 +198,7 @@ struct TaskRow: View {
     @State private var requestedDone: Bool?
     @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
     @ScaledMetric(relativeTo: .body) private var iconSize = 36
     @ScaledMetric(relativeTo: .body) private var nodeSize = 24
@@ -280,12 +285,13 @@ struct TaskRow: View {
     private func toggle() {
         let item = item
         let target = !isDone
-        requestedDone = target
+        // Moves like the calendar's check, so both marks flip alike.
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { requestedDone = target }
         Task {
             var revision: Int?
             let saved = await app.run(id: item.id) { revision = try await RoundupAPI.setDone(item, done: target) }
             guard saved, let revision else {
-                requestedDone = nil
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { requestedDone = nil }
                 return
             }
             app.showToast("‘\(item.title)’ \(target ? "완료했어요" : "완료를 취소했어요")") { [app] in
@@ -377,18 +383,9 @@ struct CardActionButton: View {
         let button = Button {
             start()
         } label: {
-            Group {
-                if isRunning {
-                    ProgressView()
-                } else if isPrimary {
-                    Text(action.label)
-                        .foregroundStyle(Color(.systemBackground))
-                } else {
-                    Text(action.label)
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 30)
+            BusyLabel(title: action.label, isBusy: isRunning, isProminent: isPrimary)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 30)
         }
         .controlSize(.large)
         .disabled(isRunning)
@@ -411,6 +408,39 @@ struct CardActionButton: View {
         case .confirmDeposit, .confirmOrder, .pack, .markDelivered, .completeTask, .acknowledgeRecommendation, .reviewContent:
             let (item, code) = (item, action.code)
             Task { await app.run(id: item.id) { try await RoundupAPI.perform(code, on: item) } }
+        }
+    }
+}
+
+/// A button title that is replaced by a spinner while its action runs. The button keeps its size and its name.
+struct BusyLabel: View {
+    let title: String
+    let isBusy: Bool
+    /// On a prominent button the title takes the background color.
+    var isProminent = false
+
+    var body: some View {
+        ZStack {
+            text
+                .opacity(isBusy ? 0 : 1)
+            if isBusy {
+                ProgressView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: isBusy)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isBusy ? "처리 중" : "")
+    }
+
+    @ViewBuilder
+    private var text: some View {
+        if isProminent {
+            Text(title)
+                .foregroundStyle(Color(.systemBackground))
+        } else {
+            Text(title)
         }
     }
 }

@@ -300,7 +300,7 @@ struct OperationAreaView: View {
             Button {
                 Task { await loadMore() }
             } label: {
-                if isLoadingMore { ProgressView() } else { Text("더 보기") }
+                BusyLabel(title: "더 보기", isBusy: isLoadingMore)
             }
             .disabled(isLoadingMore)
             .accessibilityIdentifier("area.more")

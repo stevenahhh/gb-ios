@@ -4,6 +4,8 @@ import SwiftUI
 struct CalendarData {
     let days: [String: CalendarDay]
     let overdueShipments: [AgendaItem]
+    /// Day keys the last load covered. A day outside it is still loading, not empty.
+    let loaded: ClosedRange<String>
 }
 
 struct CalendarScreen: View {
@@ -38,7 +40,8 @@ struct CalendarScreen: View {
                 CalendarContent(
                     days: data.days, overdueShipments: data.overdueShipments,
                     selectedDay: $selectedDay, mode: $mode, now: Self.clockOverride ?? now,
-                    add: { isAddingEvent = true }, check: check
+                    add: { isAddingEvent = true }, check: check,
+                    isDayLoaded: data.loaded.contains(selectedDay.dayKey)
                 )
                 .refreshable { await load() }
             }
@@ -77,7 +80,8 @@ struct CalendarScreen: View {
         await loader.load {
             let response = try await RoundupAPI.calendar(start: range.start, end: range.end)
             return CalendarData(days: Dictionary(uniqueKeysWithValues: response.days.map { ($0.date, $0) }),
-                                overdueShipments: response.overdueShipments ?? [])
+                                overdueShipments: response.overdueShipments ?? [],
+                                loaded: range.start.dayKey...range.end.dayKey)
         }
     }
 
@@ -107,6 +111,7 @@ struct CalendarContent: View {
     let now: Date
     let add: () -> Void
     let check: (TimelineEntry, Bool) async -> Bool
+    var isDayLoaded = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var calendar: Calendar { .workshop }
@@ -138,7 +143,7 @@ struct CalendarContent: View {
                     .frame(height: 1)
                     .padding(.top, 12)
                 DaySection(date: selectedDay, day: days[selectedDay.dayKey], overdueShipments: overdueShipments,
-                           now: now, add: add, check: check)
+                           now: now, add: add, check: check, isLoading: !isDayLoaded)
                     .padding(.top, 24)
                     .id(selectedDay.dayKey)
                     .transition(.opacity)

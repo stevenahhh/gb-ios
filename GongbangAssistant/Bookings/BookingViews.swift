@@ -105,17 +105,8 @@ struct ProcessStepRow: View {
             }
             if !isDone, let actionTitle {
                 let button = Button(action: perform) {
-                    Group {
-                        if isRunning {
-                            ProgressView()
-                        } else if isPrimary {
-                            Text(actionTitle)
-                                .foregroundStyle(Color(.systemBackground))
-                        } else {
-                            Text(actionTitle)
-                        }
-                    }
-                    .font(.subheadline.weight(.semibold))
+                    BusyLabel(title: actionTitle, isBusy: isRunning, isProminent: isPrimary)
+                        .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 30)
                 }
                 .controlSize(.large)
@@ -524,13 +515,15 @@ struct TaskScheduleSection: View {
             if !isAllDay {
                 DatePicker("시각", selection: $date, displayedComponents: .hourAndMinute)
             }
-            Button("저장") {
+            Button {
                 let (item, target) = (item, target)
                 Task {
                     await app.run(id: item.id) {
                         _ = try await RoundupAPI.move(.task(id: item.id, revision: item.revision), to: target)
                     }
                 }
+            } label: {
+                BusyLabel(title: "저장", isBusy: app.isRunning(item.id))
             }
             .disabled(target == due || app.isRunning(item.id))
             .accessibilityIdentifier("task.schedule.save")

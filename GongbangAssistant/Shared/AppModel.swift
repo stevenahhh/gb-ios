@@ -88,24 +88,34 @@ struct LoadableContent<Value, Content: View>: View {
     let retry: () async -> Void
     @ViewBuilder let content: (Value) -> Content
     @Environment(InquiryStore.self) private var store
+    @State private var showsSpinner = false
 
     var body: some View {
-        if let value = loader.value {
-            content(value)
-                .safeAreaInset(edge: .top) {
-                    if loader.errorMessage != nil || store.inquiryLoadError != nil || store.requiresInquiryReload {
-                        ConnectionNotice(retry: retry) {
-                            loader.errorMessage != nil || store.inquiryLoadError != nil
+        Group {
+            if let value = loader.value {
+                content(value)
+                    .safeAreaInset(edge: .top) {
+                        if loader.errorMessage != nil || store.inquiryLoadError != nil || store.requiresInquiryReload {
+                            ConnectionNotice(retry: retry) {
+                                loader.errorMessage != nil || store.inquiryLoadError != nil
+                            }
                         }
                     }
-                }
-        } else if let message = loader.errorMessage {
-            LoadErrorView(message: message) { Task { await retry() } }
-        } else {
-            ProgressView("불러오는 중이에요")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityIdentifier("screen.loading")
+            } else if let message = loader.errorMessage {
+                LoadErrorView(message: message) { Task { await retry() } }
+            } else {
+                // A load that finishes within a moment shows no spinner at all.
+                ProgressView("불러오는 중이에요")
+                    .opacity(showsSpinner ? 1 : 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("screen.loading")
+                    .task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        withAnimation { showsSpinner = true }
+                    }
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: loader.value == nil)
     }
 }
 

@@ -49,6 +49,8 @@ struct OperationsView: View {
                     Text("\(data.attentionCount)건")
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.default, value: data.attentionCount)
                         .foregroundStyle(.primary)
                 }
             }
@@ -262,6 +264,7 @@ struct OperationsView: View {
                 .trim(from: 0, to: Double(period.ratePercent ?? 0) / 100)
                 .stroke(CalendarTokens.label, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .animation(.snappy, value: period.ratePercent)
             Text(period.rateDisplay)
                 .font(.system(size: 19, weight: .bold))
                 .monospacedDigit()
