@@ -17,11 +17,13 @@ public enum ReplyDecision: String, Encodable, Sendable {
 public enum ReplyError: Error, LocalizedError, Equatable {
     case missingInquiry
     case emptyDraft
+    case notCompleted
 
     public var errorDescription: String? {
         switch self {
         case .missingInquiry: return "문의를 찾을 수 없습니다. 문의 목록에서 다시 열어 주세요."
         case .emptyDraft: return "빈 내용으로는 저장하거나 완료할 수 없어요. 내용을 입력해 주세요."
+        case .notCompleted: return "아직 완료하지 않은 답변이에요."
         }
     }
 }

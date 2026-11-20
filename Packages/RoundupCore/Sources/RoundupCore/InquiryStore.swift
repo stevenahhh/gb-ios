@@ -72,6 +72,22 @@ public final class InquiryStore {
         }
     }
 
+    /// Returns a completed reply to waiting with its text. Completing sent nothing, so nothing is recalled.
+    @MainActor
+    public func undoCompletion(id: String, expectedRevision: Int) async throws {
+        let current = try writableInquiry(id: id)
+        guard current.status == .approved else { throw ReplyError.notCompleted }
+        guard current.revision == expectedRevision else { throw InquiryPersistenceError.conflict }
+        isSavingInquiry = true
+        defer { isSavingInquiry = false }
+        do {
+            replace(try await repository.undoCompletion(id: id, expectedRevision: expectedRevision))
+        } catch {
+            requiresInquiryReload = true
+            throw error
+        }
+    }
+
     @MainActor
     private func writableInquiry(id: String) throws -> Inquiry {
         guard !isInquiryBusy else { throw InquiryPersistenceError.busy }

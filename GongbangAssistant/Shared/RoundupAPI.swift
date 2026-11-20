@@ -208,6 +208,10 @@ enum RoundupAPI {
         try await post("inquiries/\(id)/decision", decision)
     }
 
+    static func undoInquiryCompletion(id: String, revision: Int) async throws -> Inquiry {
+        try await post("inquiries/\(id)/undo-completion", Revisioned(expectedRevision: revision))
+    }
+
     // MARK: Provider proxies
 
     static func staticMap(for place: GeocodeResult) async throws -> Data {
@@ -382,6 +386,9 @@ struct APIInquiryRepository: InquiryRepository {
     }
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry {
         try await RoundupAPI.decideInquiry(id: id, decision: decision)
+    }
+    func undoCompletion(id: String, expectedRevision: Int) async throws -> Inquiry {
+        try await RoundupAPI.undoInquiryCompletion(id: id, revision: expectedRevision)
     }
 }
 
