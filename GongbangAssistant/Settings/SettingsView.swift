@@ -11,6 +11,7 @@ struct SettingsView: View {
             }
             .navigationTitle("설정")
             .navigationSubtitle(loader.value?.workshop?.name ?? "")
+            .appDestinations()
         }
         .task(id: app.dataVersion) { await load() }
     }
@@ -30,12 +31,14 @@ struct SettingsView: View {
                         if let owner = data.workshop?.ownerTitle {
                             Text(owner)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                 } icon: {
                     Image(systemName: "storefront")
-                        .font(.largeTitle.weight(.regular))
+                        // A list multiplies a label icon's font by the large symbol scale; medium keeps title2 at 28pt.
+                        .font(.title2)
+                        .imageScale(.medium)
                         .symbolRenderingMode(.monochrome)
                         .foregroundStyle(.primary)
                 }
@@ -55,6 +58,18 @@ struct SettingsView: View {
                 } label: {
                     Label { Text("채널 연결") } icon: { MenuIcon(systemName: "link") }
                 }
+                NavigationLink {
+                    AssistantDelegationView()
+                } label: {
+                    Label { Text("\(AssistantIdentity.name)에게 맡기기") } icon: { MenuIcon(systemName: "hand.raised") }
+                }
+                .accessibilityIdentifier("settings.delegation")
+                NavigationLink {
+                    AssistantActivityView()
+                } label: {
+                    Label { Text("\(AssistantIdentity.name)가 한 일") } icon: { MenuIcon(systemName: "clock.arrow.circlepath") }
+                }
+                .accessibilityIdentifier("settings.activities")
             }
 
             if let support = sections["지원"] {
@@ -84,10 +99,9 @@ struct ChannelStatusView: View {
             CardSection {
                 ForEach(channels) { WorkCard(item: $0) }
             } header: {
-                EmptyView()
-            } footer: {
-                Text("채널 자동 연동은 아직 지원하지 않아요. 주문과 문의는 이 앱에 등록된 내용만 보여요.")
+                if channels.allChannelsUnconnected { UnconnectedChannelsNote() }
             }
+            .environment(\.hidesCardStatus, channels.allChannelsUnconnected)
         }
         .cardList()
         .navigationTitle("채널 연결")
@@ -112,7 +126,7 @@ struct SettingTextView: View {
         List {
             CardSection {
                 if item.isEditable {
-                    TextEditor(text: $text)
+                    KoreanTextEditor(text: $text)
                         .frame(minHeight: 200)
                         .accessibilityLabel(item.title)
                         .accessibilityIdentifier("setting.body")
@@ -128,13 +142,13 @@ struct SettingTextView: View {
         .toolbar {
             if item.isEditable {
                 ToolbarItem(placement: .confirmationAction) {
-                    if app.isRunning(runID) {
-                        ProgressView()
-                    } else {
-                        Button("저장", action: save)
-                            .disabled(text == item.body || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .accessibilityIdentifier("setting.save")
+                    // One button whose title is replaced by the spinner, so the toolbar item keeps its shape.
+                    Button(action: save) {
+                        BusyLabel(title: "저장", isBusy: app.isRunning(runID))
                     }
+                    .disabled(app.isRunning(runID) || text == item.body
+                        || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("setting.save")
                 }
             }
         }

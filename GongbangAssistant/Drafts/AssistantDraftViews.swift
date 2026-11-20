@@ -11,28 +11,57 @@ extension ReplyStatus {
     }
 }
 
+/// The card head: the assistant's face and who wrote this, in clay because it is the assistant's own mark.
 private struct AssistantDraftLabel: View {
+    let isReply: Bool
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "sparkles")
+        HStack(spacing: 6) {
+            AssistantFace(size: .card)
                 .accessibilityHidden(true)
-            Text("비서 초안")
+            Text(isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.assistantAccent)
         }
-        .font(.footnote.weight(.semibold))
+    }
+}
+
+/// "비서 초안" and its status; stacked at accessibility sizes so neither squeezes to one letter per line.
+private struct DraftHeader: View {
+    let badge: Status?
+    let isReply: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                AssistantDraftLabel(isReply: isReply)
+                if let badge { StatusBadge(badge) }
+            }
+        } else {
+            HStack {
+                AssistantDraftLabel(isReply: isReply)
+                Spacer(minLength: 8)
+                if let badge { StatusBadge(badge) }
+            }
+        }
     }
 }
 
 struct AssistantDraftRow: View {
     let title: String
     let text: String
-    let badge: Status
+    /// Waiting drafts share one state, which the section title already says; only different states get a badge.
+    let badge: Status?
+    let isReply: Bool
     let route: AppRoute
     let identifier: String
 
     init(title: String, reference: DraftReference) {
         self.title = title
         text = reference.preview
-        badge = reference.status.badge
+        badge = reference.status == .pending ? nil : reference.status.badge
+        isReply = false
         route = .draft(reference.kind, reference.id)
         identifier = "draft.\(reference.kind.rawValue).\(reference.id)"
     }
@@ -40,7 +69,8 @@ struct AssistantDraftRow: View {
     init(inquiry: Inquiry) {
         title = inquiry.subject
         text = inquiry.draft
-        badge = inquiry.badge
+        badge = inquiry.status == .pending ? nil : inquiry.badge
+        isReply = true
         route = .inquiry(inquiry.id)
         identifier = "inquiry.\(inquiry.id)"
     }
@@ -48,16 +78,12 @@ struct AssistantDraftRow: View {
     var body: some View {
         NavigationLink(value: route) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    AssistantDraftLabel()
-                    Spacer(minLength: 8)
-                    StatusBadge(badge)
-                }
+                DraftHeader(badge: badge, isReply: isReply)
                 Text(keepingWords: title)
                     .font(.headline)
-                Text(text.isEmpty ? "내용을 비운 초안이에요." : text)
+                Text(keepingWords: text.isEmpty ? "내용을 비운 초안이에요." : text)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(2)
             }
             .padding(.vertical, 4)
@@ -73,9 +99,57 @@ struct DraftCardActions {
     let rewrite: @MainActor () async throws -> String
 }
 
+/// What the owner does by hand after approval or completion, while no channel is connected.
+struct DraftShare {
+    let copyLabel: String
+    let openLabel: String
+    let url: URL
+
+    static let inquiry = DraftShare(copyLabel: "답변 복사하기", openLabel: "네이버 스마트스토어 열기",
+                                    url: URL(string: "https://sell.smartstore.naver.com/")!)
+    static let content = DraftShare(copyLabel: "글 복사하기", openLabel: "Instagram 열기",
+                                    url: URL(string: "https://www.instagram.com/")!)
+}
+
+/// After approval with no connected channel: say so, copy the text, and open the channel to send it by hand.
+struct DraftShareActions: View {
+    let share: DraftShare
+    let text: String
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("채널이 아직 연결되지 않아 직접 보내야 해요.")
+                .font(.footnote)
+                .foregroundStyle(Color.secondaryText)
+            Button {
+                UIPasteboard.general.string = text
+                app.showToast("복사했어요")
+            } label: {
+                Text(share.copyLabel)
+                    .foregroundStyle(Color(.systemBackground))
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("draft.copy")
+            Link(destination: share.url) {
+                Text(share.openLabel)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("draft.open")
+        }
+    }
+}
+
 struct AssistantDraftCard: View {
     let text: String
     let status: ReplyStatus
+    var share: DraftShare?
+    /// Opened from 고치기 on an approval card: the editor is already open.
+    var startsEditing = false
     let revision: Int
     let canReopen: Bool
     let afterApproval: String
@@ -87,19 +161,24 @@ struct AssistantDraftCard: View {
     @State private var buffer = ""
     @State private var editRevision = 0
     @State private var isRewriting = false
-    @State private var isSubmitting = false
+    /// The identifier of the button whose write is in flight.
+    @State private var runningID: String?
+    @State private var isBufferFresh = false
     @State private var errorMessage: String?
     @Environment(AppModel.self) private var app
 
-    private var isDisabled: Bool { isLocked || isRewriting || isSubmitting }
+    private var isDisabled: Bool { isLocked || isRewriting || runningID != nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                AssistantDraftLabel()
-                Spacer(minLength: 8)
-                StatusBadge(status.badge)
+        content
+            .task {
+                if startsEditing, status == .pending, !isEditing { beginEditing(with: text) }
             }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DraftHeader(badge: status.badge, isReply: false)
             if isEditing {
                 editor
             } else {
@@ -130,7 +209,7 @@ struct AssistantDraftCard: View {
         Group {
             if text.isEmpty {
                 Text(status == .pending ? "내용이 비어 있어요." : "내용을 비운 채 반려했어요.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             } else {
                 Text(text).textSelection(.enabled)
             }
@@ -138,13 +217,15 @@ struct AssistantDraftCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.fill.tertiary, in: .rect(cornerRadius: 12))
+        // The text about to be replaced is dimmed while the assistant writes.
+        .opacity(isRewriting ? 0.4 : 1)
+        .animation(.default, value: isRewriting)
         .accessibilityIdentifier("draft.text")
     }
 
     private var editor: some View {
         VStack(spacing: 10) {
-            TextEditor(text: $buffer)
-                .scrollContentBackground(.hidden)
+            KoreanTextEditor(text: $buffer, isFresh: $isBufferFresh)
                 .frame(minHeight: 160)
                 .padding(8)
                 .background(.fill.tertiary, in: .rect(cornerRadius: 12))
@@ -156,7 +237,7 @@ struct AssistantDraftCard: View {
                     errorMessage = nil
                 }
                 primaryButton("저장", identifier: "draft.save") {
-                    run {
+                    run("draft.save") {
                         try await actions.save(buffer, editRevision)
                         isEditing = false
                     }
@@ -169,7 +250,7 @@ struct AssistantDraftCard: View {
     private var pendingActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             primaryButton("승인하기", identifier: "draft.approve") {
-                run {
+                run("draft.approve") {
                     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                         throw ReplyError.emptyDraft
                     }
@@ -178,11 +259,25 @@ struct AssistantDraftCard: View {
             }
             HStack(spacing: 8) {
                 secondaryButton("수정", identifier: "draft.edit") { beginEditing(with: text) }
-                secondaryButton(isRewriting ? "쓰는 중" : "다시 쓰기", identifier: "draft.rewrite") { rewrite() }
-                Button(role: .destructive) {
-                    run { try await actions.decide(.reject, revision) }
+                Button(action: rewrite) {
+                    Group {
+                        if isRewriting {
+                            GeneratingIndicator(label: "쓰는 중", showsFace: false)
+                        } else {
+                            Text("다시 쓰기")
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("draft.rewrite")
+                // No destructive red: a rejection can be undone.
+                Button {
+                    run("draft.reject") { try await actions.decide(.reject, revision) }
                 } label: {
-                    Text("반려")
+                    BusyLabel(title: "반려", isBusy: runningID == "draft.reject")
+                        .foregroundStyle(.primary)
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 30)
                 }
@@ -201,13 +296,13 @@ struct AssistantDraftCard: View {
                     Text(status == .approved ? "승인했어요" : "반려했어요").foregroundStyle(.primary)
                 } icon: {
                     Image(systemName: status == .approved ? "checkmark.circle.fill" : "xmark.circle")
-                        .foregroundStyle(status == .approved ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .font(.subheadline.weight(.medium))
                 Spacer(minLength: 8)
                 if canReopen {
                     Button {
-                        run { try await actions.reopen(revision) }
+                        run("draft.reopen") { try await actions.reopen(revision) }
                     } label: {
                         Label("되돌리기", systemImage: "arrow.uturn.backward")
                             .font(.subheadline.weight(.semibold))
@@ -218,7 +313,11 @@ struct AssistantDraftCard: View {
                 }
             }
             if status == .approved {
-                hint(afterApproval)
+                if let share {
+                    DraftShareActions(share: share, text: text)
+                } else {
+                    hint(afterApproval)
+                }
             }
         }
     }
@@ -226,13 +325,12 @@ struct AssistantDraftCard: View {
     private func hint(_ text: String) -> some View {
         PhraseText(text: text)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.secondaryText)
     }
 
     private func primaryButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .foregroundStyle(Color(.systemBackground))
+            BusyLabel(title: title, isBusy: runningID == identifier, isProminent: true)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 30)
         }
@@ -242,7 +340,7 @@ struct AssistantDraftCard: View {
 
     private func secondaryButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            BusyLabel(title: title, isBusy: runningID == identifier)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 30)
         }
@@ -250,8 +348,9 @@ struct AssistantDraftCard: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func beginEditing(with value: String) {
+    private func beginEditing(with value: String, isFresh: Bool = false) {
         buffer = value
+        isBufferFresh = isFresh
         editRevision = revision
         errorMessage = nil
         isEditing = true
@@ -263,17 +362,18 @@ struct AssistantDraftCard: View {
         Task {
             defer { isRewriting = false }
             do {
-                beginEditing(with: try await actions.rewrite())
+                beginEditing(with: try await actions.rewrite(), isFresh: true)
+                AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 다 썼어요. 내용을 확인해 주세요.").post()
             } catch {
                 show(error)
             }
         }
     }
 
-    private func run(_ operation: @escaping @MainActor () async throws -> Void) {
-        isSubmitting = true
+    private func run(_ identifier: String, _ operation: @escaping @MainActor () async throws -> Void) {
+        runningID = identifier
         Task {
-            defer { isSubmitting = false }
+            defer { runningID = nil }
             do {
                 try await operation()
                 errorMessage = nil
@@ -292,6 +392,7 @@ struct AssistantDraftCard: View {
 struct AssistantDraftDetailView: View {
     let kind: DraftKind
     let id: String
+    var startsEditing = false
     @State private var loader = Loader<AssistantDraftDetail>()
     @Environment(AppModel.self) private var app
 
@@ -304,7 +405,7 @@ struct AssistantDraftDetailView: View {
                         ForEach(draft.lines, id: \.self) { line in
                             PhraseText(text: line)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                     .padding(.vertical, 4)
@@ -329,7 +430,8 @@ struct AssistantDraftDetailView: View {
     private func card(_ draft: AssistantDraftDetail) -> some View {
         let (kind, id) = (kind, id)
         return AssistantDraftCard(
-            text: draft.text, status: draft.status, revision: draft.revision, canReopen: draft.canReopen,
+            text: draft.text, status: draft.status, share: kind == .content ? .content : nil,
+            startsEditing: startsEditing, revision: draft.revision, canReopen: draft.canReopen,
             afterApproval: draft.afterApproval, isOwnerEdited: app.ownerEditedDraftIDs.contains(id), isLocked: false,
             actions: DraftCardActions(
                 save: { text, revision in

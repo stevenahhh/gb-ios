@@ -40,6 +40,9 @@ async def test_today_numbers_come_from_seeded_rows(database: AsyncEngine, client
     assert today["delivery"]["transitSummary"] == "배송 중 2건 · 오늘 도착 1건"
     assert today["attentionCount"] == 7
     assert [group["title"] for group in today["tasks"]["groups"]] == ["예약", "배송", "재료 주문", "할 일"]
+    sessions = today["tasks"]["groups"][0]["items"]
+    assert sessions
+    assert all(item["startsAt"] for item in sessions)
 
 
 async def test_metric_changes_when_a_row_changes(database: AsyncEngine, client: AsyncClient) -> None:
@@ -146,6 +149,6 @@ async def test_channels_report_real_connection_state(database: AsyncEngine, clie
     page = await get(client, "/channels", section="channels")
     assert displays(page["metrics"])["channels"] == "3개"
     channel = next(item for item in page["items"] if item["id"] == "channel-naver-store")
-    assert channel["status"] == {"text": "자동 연동 전", "tone": "neutral"}
+    assert channel["status"] == {"text": "아직 연결 안 됨", "tone": "neutral"}
     assert channel["lines"][1] == "오늘 주문 3건 · 결제금액 126,000원"
     assert channel["deadline"] == "문의 3건이 답을 기다려요"

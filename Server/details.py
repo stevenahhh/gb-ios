@@ -8,7 +8,7 @@ from sqlalchemy import select
 from bookings import SessionState, booking_card, booking_records, schedule_text
 from common import Now, Session
 from contracts import ApiModel, Card, CardAction, CardDue, CardUndo, Status
-from display import masked, won
+from display import local, masked, won
 from models import BookingRow, ChannelRow, ClassSessionRow, OrderRow, ShipmentRow, TaskRow
 from orders import order_card, order_records
 from shipments import shipment_card, shipment_records
@@ -67,7 +67,10 @@ async def booking_detail(booking_id: str, db: Session, now: Now) -> BookingDetai
         deposit_display=won(booking.deposit_won), deposit_confirmed=booking.status == "confirmed",
         deposit_deadline=card.deadline, deposit_due=card.due,
         revision=booking.revision, action=card.action, undo=card.undo,
-        session=SessionState(id=session.id, is_done=session.status == "completed", revision=session.revision),
+        session=SessionState(
+            id=session.id, is_done=session.status == "completed", revision=session.revision,
+            starts_at=local(session.starts_at).isoformat(timespec="seconds"),
+        ),
     )
 
 
@@ -85,6 +88,7 @@ async def class_detail(session_id: str, db: Session) -> ClassDetail:
     return ClassDetail(
         id=session.id, title=session.title, schedule=schedule_text(session),
         is_done=session.status == "completed", revision=session.revision, booking_ids=list(ids),
+        starts_at=local(session.starts_at).isoformat(timespec="seconds"),
     )
 
 

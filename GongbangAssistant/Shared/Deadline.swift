@@ -42,7 +42,8 @@ enum RelativeDayFormatter {
 
     /// "어제 16:00"
     static func moment(_ date: Date, now: Date, calendar: Calendar = .workshop) -> String {
-        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        let parts = calendar.dateComponents([.hour, .minute, .second], from: date)
+        if parts.hour == 23, parts.minute == 59, parts.second == 59 { return day(date, now: now, calendar: calendar) }
         return "\(day(date, now: now, calendar: calendar)) \(String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0))"
     }
 }
@@ -50,6 +51,7 @@ enum RelativeDayFormatter {
 /// A deadline line: a plain clock before it is due, "기한 지남" in red once it passes.
 struct DueLabel: View {
     let due: CardDue
+    var font: Font = .subheadline
 
     var body: some View {
         TimelineView(.everyMinute) { context in
@@ -69,16 +71,16 @@ struct DueLabel: View {
                         .accessibilityHidden(true)
                     let rest = [moment, due.missed].compactMap { $0 }.joined(separator: " ")
                     Text("\(Text("기한 지남").foregroundStyle(Color.overdueRed).fontWeight(.semibold)) · \(rest)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 } else {
                     Image(systemName: "clock")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                         .accessibilityHidden(true)
                     Text("\(due.prefix.map { "\($0) " } ?? "")\(moment)\(due.suffix)")
                         .foregroundStyle(.primary)
                 }
             }
-            .font(.subheadline)
+            .font(font)
             .accessibilityElement(children: .combine)
         }
     }
@@ -95,16 +97,24 @@ extension Array where Element: HasDue {
     }
 }
 
-/// Menu icons share one weight, color, and column so every row's text starts at the same place.
+/// Menu icons share one weight and color. The list's label style sizes the symbol (body text style, large
+/// symbol scale) and reserves its column, so every row's text starts at the same place.
+/// A label icon inside a list never sets a point size; if it must be smaller, use `.imageScale(.medium)`.
 struct MenuIcon: View {
     let systemName: String
 
     var body: some View {
         Image(systemName: systemName.replacingOccurrences(of: ".fill", with: ""))
-            .font(.system(size: 22, weight: .regular))
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(.primary)
-            .frame(width: 28)
             .accessibilityHidden(true)
+    }
+}
+
+#Preview("메뉴 아이콘") {
+    List {
+        ForEach(["storefront", "link", "clock.arrow.circlepath", "bubble.left.and.bubble.right"], id: \.self) { symbol in
+            Label { Text(symbol) } icon: { MenuIcon(systemName: symbol) }
+        }
     }
 }

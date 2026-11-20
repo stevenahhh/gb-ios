@@ -1,21 +1,24 @@
 import SwiftUI
 
 struct OperationsView: View {
+    @State private var path = NavigationPath()
     @State private var period: OperationPeriod?
     @State private var isPickingPeriod = false
     @State private var loader = Loader<OperationsData>()
     @Environment(AppModel.self) private var app
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var loadKey: String { "\(period?.rangeText ?? "current")|\(app.dataVersion)" }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             LoadableContent(loader: loader, retry: load) { data in
                 list(data)
             }
             .navigationTitle("운영")
             .navigationSubtitle(loader.value.map { "먼저 확인할 일 \($0.attentionCount)건" } ?? "")
             .appDestinations()
+            .navigationDestination(for: RemainingWorkRoute.self) { _ in RemainingWorkView() }
             .sheet(isPresented: $isPickingPeriod) {
                 PeriodPickerSheet(period: period ?? .currentMonth) { period = $0 }
             }
@@ -32,8 +35,12 @@ struct OperationsView: View {
     private func list(_ data: OperationsData) -> some View {
         List {
             CardSection {
-                ForEach(data.attention) { metric in
-                    attentionRow(metric)
+                if dynamicTypeSize.isAccessibilitySize {
+                    ForEach(data.attention) { metric in
+                        attentionRow(metric)
+                    }
+                } else {
+                    attentionStrip(data.attention)
                 }
             } header: {
                 HStack {
@@ -42,6 +49,8 @@ struct OperationsView: View {
                     Text("\(data.attentionCount)건")
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.default, value: data.attentionCount)
                         .foregroundStyle(.primary)
                 }
             }
@@ -54,10 +63,12 @@ struct OperationsView: View {
                         LabeledContent {
                             Text(summary.display)
                                 .monospacedDigit()
+                                .foregroundStyle(Color.secondaryText)
                         } label: {
                             Label {
                                 Text(summary.area.title)
                                 Text(summary.area.summary)
+                                    .foregroundStyle(Color.secondaryText)
                             } icon: {
                                 MenuIcon(systemName: summary.area.systemImage)
                             }
@@ -74,6 +85,7 @@ struct OperationsView: View {
                     Label {
                         Text("기회")
                         Text("저장해 둔 마켓·공모·지원사업")
+                            .foregroundStyle(Color.secondaryText)
                     } icon: {
                         MenuIcon(systemName: "chart.line.uptrend.xyaxis")
                     }
@@ -93,12 +105,22 @@ struct OperationsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(period.month.key == "custom" ? "선택 기간 처리율" : "\(period.month.title) 처리율")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                     Text("\(period.total)건 중 \(period.handled)건 처리")
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                    if period.total > period.handled {
+                        NavigationLink(value: RemainingWorkRoute()) {
+                            Text("남은 \(period.total - period.handled)건 보기 ›")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(minHeight: 44, alignment: .leading)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .navigationLinkIndicatorVisibility(.hidden)
+                        .accessibilityIdentifier("operations.remaining")
+                    }
                 }
-                .accessibilityElement(children: .combine)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 4)
@@ -146,18 +168,81 @@ struct OperationsView: View {
         .accessibilityIdentifier("operations.period")
     }
 
+    /// Three tappable tiles laid out like the today numbers; each opens its filtered list.
+    /// Buttons push the route themselves, because a List row with several links fires only one of them.
+    private func attentionStrip(_ metrics: [Metric]) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+                if index > 0 {
+                    Divider().frame(height: 72)
+                }
+                Button {
+                    path.append(route(for: metric))
+                } label: {
+                    attentionTile(metric)
+                }
+                .buttonStyle(AttentionTileStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(metric.label) \(metric.display)\(metric.detail.map { ", \($0)" } ?? "")")
+                .accessibilityHint("목록을 열어요")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("operations.attention.\(metric.key)")
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+    }
+
+    private func attentionTile(_ metric: Metric) -> some View {
+        VStack(spacing: 4) {
+            Text(metric.display)
+                .font(.title3.bold())
+                .monospacedDigit()
+            // A label such as "답변 기다리는 문의" takes two lines; every tile reserves both, so the 보기 buttons line up.
+            let chevron = Text(Image(systemName: "chevron.forward")).font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+            Text("\(Text(keepingWords: metric.label))\u{00A0}\(chevron)")
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(2, reservesSpace: true)
+                .minimumScaleFactor(0.8)
+            Group {
+                if let due = metric.due {
+                    DueLabel(due: due, font: .caption)
+                } else if let detail = metric.detail {
+                    Text(detail)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(Color.secondaryText)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .frame(height: 32, alignment: .top)
+            Text("보기")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tint)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(.tint.opacity(0.12), in: .capsule)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .contentShape(.rect)
+    }
+
     private func attentionRow(_ metric: Metric) -> some View {
         NavigationLink(value: route(for: metric)) {
             LabeledContent {
                 Text(metric.display)
                     .font(.body.weight(.semibold))
                     .monospacedDigit()
+                    .foregroundStyle(Color.secondaryText)
             } label: {
                 Text(metric.label)
                 if let due = metric.due {
                     DueLabel(due: due)
                 } else if let detail = metric.detail {
                     Text(detail)
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
         }
@@ -172,15 +257,20 @@ struct OperationsView: View {
     }
 
     private func gauge(_ period: OperationsData.Period) -> some View {
-        VStack(spacing: 4) {
-            Gauge(value: Double(period.ratePercent ?? 0), in: 0...100) {
-                Text("처리율")
-            } currentValueLabel: {
-                Text(period.rateDisplay)
-            }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(.accentColor)
+        ZStack {
+            Circle()
+                .stroke(Color.ringTrack, lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: Double(period.ratePercent ?? 0) / 100)
+                .stroke(CalendarTokens.label, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.snappy, value: period.ratePercent)
+            Text(period.rateDisplay)
+                .font(.system(size: 19, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.6)
         }
+        .frame(width: 76, height: 76)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(period.month.title) 처리율")
         .accessibilityValue(period.rateDisplay)
@@ -203,14 +293,14 @@ struct OperationsView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(metric.label)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             Text(metric.display)
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()
             if let detail = metric.detail {
                 Text(detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -228,8 +318,16 @@ struct OpportunitiesView: View {
                 ContentUnavailableView("저장된 기회가 없어요", systemImage: "flag")
             } else {
                 List {
+                    // No detail screen exists yet, so the cards show no chevron and only their own action.
                     CardSection {
-                        ForEach(items) { WorkCard(item: $0) }
+                        ForEach(items) { item in
+                            VStack(alignment: .leading, spacing: 8) {
+                                WorkCardContent(item: item)
+                                if let action = item.action {
+                                    CardActionButton(item: item, action: action)
+                                }
+                            }
+                        }
                     }
                 }
                 .cardList(separators: .hidden)
@@ -243,5 +341,48 @@ struct OpportunitiesView: View {
 
     private func load() async {
         await loader.load { try await RoundupAPI.opportunities() }
+    }
+}
+
+/// The period card's "남은 N건 보기". It goes through the stack's path like the tiles and the area rows it opens,
+/// so back always returns one level.
+private struct RemainingWorkRoute: Hashable {}
+
+/// Where the period's unprocessed work lives: each row opens that area already filtered.
+struct RemainingWorkView: View {
+    private let rows: [(OperationArea, String, String)] = [
+        (.bookings, "deposit_pending", "예약금을 기다리는 예약"),
+        (.orders, "paid", "확인할 주문"),
+        (.deliveries, "scheduled", "보낼 택배"),
+        (.channels, "inquiries", "답변 기다리는 문의"),
+    ]
+
+    var body: some View {
+        List {
+            CardSection {
+                ForEach(rows, id: \.0) { area, filter, title in
+                    NavigationLink(value: AreaRoute(area: area, filter: filter)) {
+                        Label {
+                            Text(title)
+                        } icon: {
+                            MenuIcon(systemName: area.systemImage)
+                        }
+                    }
+                }
+            }
+        }
+        .cardList(separators: .hidden)
+        .navigationTitle("남은 일")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Darkens a tile while it is pressed, so the owner sees it reacts like a button.
+private struct AttentionTileStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear),
+                        in: .rect(cornerRadius: 14))
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

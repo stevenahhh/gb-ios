@@ -119,10 +119,12 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `GET /settings`, `PUT /workshop`, `PATCH /settings/{key}` | Profile and text settings; revision `0` creates the first profile |
 | `GET /inquiries?limit&offset` | Array ordered by ID, default limit 200 |
 | `PATCH /inquiries/{id}/draft`, `POST /inquiries/{id}/decision` | Existing inquiry contract |
-| `POST /inquiries/{id}/reopen` | Reopen an approved or rejected inquiry while keeping its draft |
+| `POST /inquiries/{id}/undo-completion` | Return a completed reply to waiting with `{expectedRevision}`; the text stays |
+| `GET /assistant/activities` | The assistant's work from the last seven days, newest first: reply drafts, post drafts, and missed pickups, each with the facts it used |
 | `POST /draft`, `POST /ask`, `POST /rewrite`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
 
-`/ask` accepts `{question, history?}` and reads workshop facts from PostgreSQL. `history`
+`/ask` accepts `{question, history?}`, reads workshop facts from PostgreSQL, and returns
+`{answer, items}`, where `items` holds up to three cards the answer names. `history`
 is a list of `{role: "owner" | "assistant", text}` (at most 40 items, each text up to 2000
 characters); only the newest 6 turns reach the model. A `context` field from older clients
 is ignored. `/draft` keeps `{customer, subject, question, facts}` and adds the workshop

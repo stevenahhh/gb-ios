@@ -46,18 +46,30 @@ struct RootTabView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(reduceMotion ? .never : .onScrollDown)
         .tabViewBottomAccessory {
-            AssistantAccessory(
-                openText: { assistant = .text },
-                openVoice: { assistant = .voice }
-            )
+            // The toast covers this slot, so the bar's own controls leave while one is up: the system-hosted
+            // accessory ignores accessibilityHidden, and its text would show through the glass.
+            ZStack {
+                if app.toast == nil {
+                    AssistantAccessory(
+                        openText: { assistant = .text },
+                        openVoice: { assistant = .voice }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { app.accessorySlot = $0 }
         }
         .sheet(item: $assistant) { launch in
             AssistantSheet(launch: launch)
         }
-        .safeAreaInset(edge: .top) {
-            InquirySyncStatus()
-        }
+        // Over the assistant bar's own slot, so the notice never hides the row that just changed.
+        // The overlay spans the window, so it takes touches only while a toast is on screen.
+        .overlay { ToastHost().allowsHitTesting(app.toast != nil) }
         // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
+        // Inquiries load on every tab, so their recovery is the app's "back online" moment.
+        .onChange(of: store.inquiryLoadError == nil) { wasOK, isOK in
+            if isOK && !wasOK { app.showToast("다시 연결됐어요", seconds: 2) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             app.dataDidChange()
         }

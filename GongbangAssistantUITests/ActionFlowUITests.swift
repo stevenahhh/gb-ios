@@ -64,7 +64,8 @@ final class ActionFlowUITests: RoundupUITestCase {
     func testRecommendationDraftCanBeApprovedAndUndone() throws {
         let app = try launch()
         let segment = app.segmentedControls.buttons["비서 추천"]
-        XCTAssertTrue(segment.waitForExistence(timeout: 10))
+        // The segments sit below 확인해 주실 일, so scroll to them first.
+        XCTAssertTrue(scrollTo(segment, in: app))
         segment.tap()
         approveThenReopenDraft(app.buttons["draft.recommendation.recommendation-market"], in: app)
     }
@@ -89,6 +90,18 @@ final class ActionFlowUITests: RoundupUITestCase {
     func testTaskCompletionIsReflectedFromTheServer() throws {
         let app = try launch()
         let task = app.buttons["task.task-market"]
+        // After its 17:00 deadline the task joins the overdue group, whose rows past the third sit behind 모두 보기.
+        let all = app.buttons["today.overdue.all"]
+        if scrollTo(all, in: app) {
+            all.tap()
+            // The list loads its own data, so give it the same bound as other server waits.
+            if !task.waitForExistence(timeout: 10) {
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+            }
+        } else {
+            // No overdue overflow: return to the top, where the task's own section starts the search.
+            for _ in 0..<8 { app.swipeDown() }
+        }
         XCTAssertTrue(scrollTo(task, in: app))
         XCTAssertEqual(task.value as? String, "미완료")
         task.tap()
@@ -104,9 +117,13 @@ final class ActionFlowUITests: RoundupUITestCase {
         XCTAssertEqual(check.value as? String, "미완료")
         check.tap()
         waitFor(check, "value == %@", "완료")
-        let undo = app.buttons["calendar.toast.undo"]
+        let undo = app.buttons["toast.undo"]
         XCTAssertTrue(undo.waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["캘린더"].exists)
+        let toast = app.otherElements["toast"]
+        XCTAssertTrue(toast.exists)
+        XCTAssertEqual(toast.buttons.count, 1, "되돌리기 is the toast's only button")
+        XCTAssertFalse(app.buttons["assistant.accessory"].exists, "the assistant bar is hidden under the toast")
         undo.tap()
         waitFor(check, "value == %@", "미완료")
 
@@ -114,6 +131,20 @@ final class ActionFlowUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(orders, in: app))
         orders.tap()
         XCTAssertTrue(element(labelled: "새 주문", in: app).waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    func testInquiryReplyCanBeCompletedAndUndoneFromToday() throws {
+        let app = try launch()
+        let complete = app.buttons["approval.approve.inquiry.inquiry-clay"]
+        XCTAssertTrue(scrollTo(complete, in: app))
+        complete.tap()
+        // The card stays with the next step: copy the reply, open the store, or undo.
+        XCTAssertTrue(app.buttons["draft.copy"].waitForExistence(timeout: 10))
+        let undo = app.buttons["approval.undo.inquiry.inquiry-clay"]
+        XCTAssertTrue(undo.exists)
+        undo.tap()
+        XCTAssertTrue(complete.waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -166,9 +197,28 @@ final class ActionFlowUITests: RoundupUITestCase {
         row.tap()
         let name = app.textFields["workshop.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
+        // The value is right-aligned, so tap its trailing edge to put the cursor after the name.
+        name.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         name.typeText(" 본점")
         app.buttons["workshop.save"].tap()
         XCTAssertTrue(element(labelled: "오롯 공방 본점", in: app).waitForExistence(timeout: 10))
+    }
+
+    /// Needs a server that can reach the model (CLOVA_STUDIO_API_KEY); set TEST_RUNNER_ROUNDUP_UITEST_AI=1 to run it.
+    @MainActor
+    func testAssistantAnswerWaitsThenSettles() throws {
+        guard ProcessInfo.processInfo.environment["ROUNDUP_UITEST_AI"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_ROUNDUP_UITEST_AI=1 to run against a server that can reach the model")
+        }
+        let app = try launch()
+        let accessory = app.buttons["assistant.accessory"]
+        XCTAssertTrue(accessory.waitForExistence(timeout: 5))
+        accessory.tap()
+        let suggestion = app.buttons["오늘 발송할 주문 알려줘"]
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5))
+        suggestion.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["assistant.generating"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["assistant.generated"].waitForExistence(timeout: 40))
+        XCTAssertFalse(app.descendants(matching: .any)["assistant.generating"].exists)
     }
 }

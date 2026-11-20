@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from activities import router as activity_router
 from ai import router as ai_router
 from bookings import router as booking_router
 from channels import router as channel_router
@@ -55,7 +56,7 @@ app.add_middleware(RequestBoundary)
 for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
-    detail_router, draft_router, undo_router, ai_router,
+    detail_router, draft_router, undo_router, ai_router, activity_router,
 ):
     app.include_router(router)
 
