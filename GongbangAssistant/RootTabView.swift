@@ -54,10 +54,16 @@ struct RootTabView: View {
         .sheet(item: $assistant) { launch in
             AssistantSheet(launch: launch)
         }
-        .safeAreaInset(edge: .top) {
-            InquirySyncStatus()
+        .overlay(alignment: .bottom) {
+            // Over the assistant bar's own slot, so the notice never hides the row that just changed.
+            ToastHost()
+                .padding(.bottom, 58)
         }
         // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
+        // Inquiries load on every tab, so their recovery is the app's "back online" moment.
+        .onChange(of: store.inquiryLoadError == nil) { wasOK, isOK in
+            if isOK && !wasOK { app.showToast("다시 연결됐어요", seconds: 2) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             app.dataDidChange()
         }
