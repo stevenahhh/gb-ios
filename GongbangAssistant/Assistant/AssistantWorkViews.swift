@@ -92,7 +92,7 @@ struct ActivityEvidenceView: View {
             CardSection("\(AssistantIdentity.name)가 한 일") {
                 Text(keepingWords: activity.summary)
             }
-            CardSection("근거", footer: "\(AssistantIdentity.name)가 참고한 공방 정보예요.") {
+            CardSection("이유", footer: "\(AssistantIdentity.name)가 참고한 공방 정보예요.") {
                 ForEach(activity.evidence, id: \.self) { Text(keepingWords: $0) }
             }
             CardSection {
@@ -100,7 +100,7 @@ struct ActivityEvidenceView: View {
             }
         }
         .cardList()
-        .navigationTitle("근거")
+        .navigationTitle("이유")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
