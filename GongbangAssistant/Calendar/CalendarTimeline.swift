@@ -26,7 +26,7 @@ enum CalendarEventState: Hashable {
     case done, next, upcoming, missed
 }
 
-/// A row the owner made or owns: it can be checked off and moved to today.
+/// A row the owner made or owns, so the owner can check it off.
 enum OwnerItem: Hashable {
     case task(id: String, revision: Int)
     case event(id: String, revision: Int)
@@ -161,8 +161,6 @@ struct TimelinePlan {
         let state: CalendarEventState
         /// A parcel past its pickup that has not been sent.
         let isOverdue: Bool
-        /// Only tasks missed on an earlier day can move to today; today's are simply checked off.
-        var canMoveToToday = false
         var id: String { entry.id }
     }
 
@@ -174,9 +172,7 @@ struct TimelinePlan {
             let hasPassed = relation == .past || (relation == .today && !entry.isAllDay && entry.start < now)
             switch entry.kind {
             case .task:
-                let state: CalendarEventState = entry.isDone ? .done : hasPassed ? .missed : .upcoming
-                return Row(entry: entry, state: state, isOverdue: false,
-                           canMoveToToday: state == .missed && relation == .past)
+                return Row(entry: entry, state: entry.isDone ? .done : hasPassed ? .missed : .upcoming, isOverdue: false)
             case .delivery where entry.reportsDone:
                 return Row(entry: entry, state: entry.isDone ? .done : .upcoming,
                            isOverdue: !entry.isDone && hasPassed)
@@ -276,7 +272,6 @@ struct DaySection: View {
     let overdueShipments: [AgendaItem]
     let now: Date
     let add: () -> Void
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
 
     private var calendar: Calendar { .workshop }
@@ -317,7 +312,7 @@ struct DaySection: View {
                 emptyTimeline(hasPinned ? "시간이 정해진 일정이 없어요" : "일정이 없어요")
             } else {
                 TimelineList(plan: TimelinePlan(entries: schedule.entries, relation: relation, now: nowMinutes),
-                             now: nowMinutes, move: move, check: check)
+                             now: nowMinutes, check: check)
                     .padding(.top, hasPinned ? 20 : 14)
                 TimelineLegend()
                     .padding(.top, 8)
@@ -470,7 +465,6 @@ struct PinnedSummaryCard: View {
 struct TimelineList: View {
     let plan: TimelinePlan
     let now: Int
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
 
     var body: some View {
@@ -479,7 +473,7 @@ struct TimelineList: View {
                 if plan.nowIndex == index {
                     NowIndicator(minutes: now, isFirst: index == 0, isLast: false)
                 }
-                TimelineRow(row: row, now: now, move: move, check: check,
+                TimelineRow(row: row, now: now, check: check,
                             isFirst: index == 0 && plan.nowIndex != 0,
                             isLast: index == plan.rows.count - 1 && plan.nowIndex != plan.rows.count)
             }
@@ -513,7 +507,6 @@ private struct Rail: View {
 struct TimelineRow: View {
     let row: TimelinePlan.Row
     let now: Int
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
     let isFirst: Bool
     let isLast: Bool
@@ -530,8 +523,7 @@ struct TimelineRow: View {
     private var shown: TimelinePlan.Row {
         guard let requestedDone else { return row }
         let state: CalendarEventState = requestedDone ? .done : row.state == .done ? .upcoming : row.state
-        return TimelinePlan.Row(entry: entry, state: state, isOverdue: row.isOverdue && !requestedDone,
-                                canMoveToToday: row.canMoveToToday && state == .missed)
+        return TimelinePlan.Row(entry: entry, state: state, isOverdue: row.isOverdue && !requestedDone)
     }
 
     private var state: CalendarEventState { shown.state }
@@ -644,29 +636,9 @@ struct TimelineRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, shown.canMoveToToday && entry.ownerItem != nil ? 4 : 16)
+        .padding(.bottom, 16)
         .contentShape(.rect)
-        VStack(alignment: .leading, spacing: 0) {
-            link(text)
-            if shown.canMoveToToday, entry.ownerItem != nil {
-                Button {
-                    move(entry)
-                } label: {
-                    Text("오늘로 옮기기")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(CalendarTokens.label)
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 28)
-                        .background(CalendarTokens.fill, in: .capsule)
-                        .frame(minHeight: 44)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .disabled(app.isRunning(entry.id))
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("timeline.move.\(entry.id)")
-            }
-        }
+        link(text)
     }
 
     @ViewBuilder
@@ -937,7 +909,7 @@ private struct CalendarPreview: View {
     var body: some View {
         NavigationStack {
             CalendarContent(days: days, overdueShipments: [], selectedDay: $day, mode: $mode,
-                            now: CalendarPreviewData.now, add: {}, move: { _ in }, check: { _, _ in true })
+                            now: CalendarPreviewData.now, add: {}, check: { _, _ in true })
                 .navigationTitle("캘린더")
                 .navigationSubtitle("오늘 일정 11건")
         }

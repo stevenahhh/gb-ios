@@ -38,8 +38,7 @@ struct CalendarScreen: View {
                 CalendarContent(
                     days: data.days, overdueShipments: data.overdueShipments,
                     selectedDay: $selectedDay, mode: $mode, now: Self.clockOverride ?? now,
-                    add: { isAddingEvent = true }, move: { moveToToday($0, now: Self.clockOverride ?? now) },
-                    check: check
+                    add: { isAddingEvent = true }, check: check
                 )
                 .refreshable { await load() }
             }
@@ -82,30 +81,6 @@ struct CalendarScreen: View {
         }
     }
 
-    /// Keeps the time of day; if that time has already passed today, the row moves to the end of today.
-    private func moveToToday(_ entry: TimelineEntry, now: Date) {
-        guard let target = entry.ownerItem, let day = loader.value.flatMap({ data in
-            data.days.values.first { $0.items.contains { $0.id == entry.id } }
-        }), let from = entry.isAllDay ? Self.endOfDay(day.date) : Self.moment(day: day.date, minutes: entry.start) else { return }
-        let today = calendar.startOfDay(for: now)
-        var to = calendar.date(byAdding: .minute, value: entry.start, to: today) ?? today
-        // Past its time today: move it as an all-day task (23:59:59 is the all-day marker).
-        if to <= now {
-            to = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: today) ?? today
-        }
-        let destination = to
-        Task {
-            await app.run(id: entry.id) {
-                let revision = try await RoundupAPI.move(target, to: destination)
-                app.showToast("오늘로 옮겼어요") { [app] in
-                    await app.run(id: entry.id) {
-                        _ = try await RoundupAPI.move(target.with(revision: revision), to: from)
-                    }
-                }
-            }
-        }
-    }
-
     /// Checking or unchecking shows an undo toast, because a quick tap on a busy screen is easy to get wrong.
     private func check(_ entry: TimelineEntry, done: Bool) async -> Bool {
         guard let item = entry.ownerItem else { return false }
@@ -121,17 +96,6 @@ struct CalendarScreen: View {
         }
         return true
     }
-
-    private static func endOfDay(_ key: String) -> Date? {
-        moment(day: key, minutes: 0).flatMap { Calendar.workshop.date(bySettingHour: 23, minute: 59, second: 59, of: $0) }
-    }
-
-    private static func moment(day key: String, minutes: Int) -> Date? {
-        let parts = key.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        return Calendar.workshop.date(from: DateComponents(
-            year: parts[0], month: parts[1], day: parts[2], hour: minutes / 60, minute: minutes % 60))
-    }
 }
 
 /// The calendar on one white sheet; it takes `now` so previews and the minute timer share one path.
@@ -142,7 +106,6 @@ struct CalendarContent: View {
     @Binding var mode: CalendarMode
     let now: Date
     let add: () -> Void
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -175,7 +138,7 @@ struct CalendarContent: View {
                     .frame(height: 1)
                     .padding(.top, 12)
                 DaySection(date: selectedDay, day: days[selectedDay.dayKey], overdueShipments: overdueShipments,
-                           now: now, add: add, move: move, check: check)
+                           now: now, add: add, check: check)
                     .padding(.top, 24)
                     .id(selectedDay.dayKey)
                     .transition(.opacity)
