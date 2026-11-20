@@ -1,18 +1,24 @@
+import Combine
 import SwiftUI
 
+struct CalendarData {
+    let days: [String: CalendarDay]
+    let overdueShipments: [AgendaItem]
+}
+
 struct CalendarScreen: View {
-    enum Mode: String, CaseIterable, Identifiable {
-        case week = "주간"
-        case month = "월간"
-        var id: Self { self }
+    private struct MoveToast: Identifiable {
+        let id = UUID()
+        let undo: @MainActor () async -> Void
     }
 
-    @SceneStorage("calendar.mode") private var mode: Mode = .week
-    @State private var selectedDay = Calendar.workshop.startOfDay(for: .now)
-    @State private var loader = Loader<[String: CalendarDay]>()
+    @SceneStorage("calendar.mode") private var mode: CalendarMode = .week
+    @State private var selectedDay = Calendar.workshop.startOfDay(for: Self.clockOverride ?? .now)
+    @State private var loader = Loader<CalendarData>()
     @State private var isAddingEvent = false
+    @State private var toast: MoveToast?
+    @State private var now = Date.now
     @Environment(AppModel.self) private var app
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let calendar = Calendar.workshop
 
@@ -27,12 +33,26 @@ struct CalendarScreen: View {
 
     private var loadKey: String { "\(loadRange.start.dayKey)|\(app.dataVersion)" }
 
+    private var subtitle: String {
+        guard let data = loader.value else { return "" }
+        return "오늘 일정 \(data.days[(Self.clockOverride ?? .now).dayKey]?.items.count ?? 0)건"
+    }
+
     var body: some View {
         NavigationStack {
-            LoadableContent(loader: loader, retry: load) { days in
-                list(days)
+            LoadableContent(loader: loader, retry: load) { data in
+                CalendarContent(
+                    days: data.days, overdueShipments: data.overdueShipments,
+                    selectedDay: $selectedDay, mode: $mode, now: Self.clockOverride ?? now,
+                    add: { isAddingEvent = true }, move: { moveToToday($0, now: Self.clockOverride ?? now) }
+                )
+                .refreshable { await load() }
             }
+            // A minute timer, not a TimelineView around the scroll view, so the collapsing title cannot loop.
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+            .background(CalendarTokens.background)
             .navigationTitle("캘린더")
+            .navigationBarTitleDisplayMode(.large)
             .navigationSubtitle(subtitle)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -42,177 +62,169 @@ struct CalendarScreen: View {
                     .accessibilityIdentifier("calendar.add")
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let toast {
+                    toastView(toast)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.25), value: toast?.id)
             .sheet(isPresented: $isAddingEvent) {
                 EventFormSheet(day: selectedDay)
             }
             .appDestinations()
         }
         .task(id: loadKey) { await load() }
+        // The toast is a transient notice, so it leaves after a few seconds on its own.
+        .task(id: toast?.id) {
+            guard toast != nil else { return }
+            try? await Task.sleep(for: .seconds(6))
+            toast = nil
+        }
     }
+
+    #if DEBUG
+    /// Debug builds can pin the clock (`ROUNDUP_CALENDAR_NOW`, ISO 8601) to check the next row and time line.
+    private static let clockOverride = ProcessInfo.processInfo.environment["ROUNDUP_CALENDAR_NOW"]
+        .flatMap { try? Date($0, strategy: .iso8601) }
+    #else
+    private static let clockOverride: Date? = nil
+    #endif
 
     private func load() async {
         let range = loadRange
         await loader.load {
-            let days = try await RoundupAPI.calendar(start: range.start, end: range.end).days
-            return Dictionary(uniqueKeysWithValues: days.map { ($0.date, $0) })
+            let response = try await RoundupAPI.calendar(start: range.start, end: range.end)
+            return CalendarData(days: Dictionary(uniqueKeysWithValues: response.days.map { ($0.date, $0) }),
+                                overdueShipments: response.overdueShipments ?? [])
         }
     }
 
-    private func list(_ days: [String: CalendarDay]) -> some View {
-        List {
-            Section {
-                Picker("보기", selection: $mode) {
-                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .adaptivePickerStyle()
-                .accessibilityIdentifier("calendar.mode")
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            }
-            .listSectionSeparator(.hidden)
-
-            CardSection {
-                switch mode {
-                case .week:
-                    WeekStrip(selectedDay: $selectedDay, days: days)
-                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                case .month:
-                    MonthCalendarView(selectedDay: $selectedDay)
-                        .frame(maxWidth: 380)
-                        .frame(maxWidth: .infinity)
-                }
-            } header: {
-                if mode == .week {
-                    weekHeader
-                }
-            }
-
-            CardSection {
-                agenda(days[selectedDay.dayKey])
-            } header: {
-                HStack(alignment: .firstTextBaseline) {
-                    SectionHeader(title: dayTitle(days[selectedDay.dayKey]))
-                    if !calendar.isDateInToday(selectedDay) {
-                        Spacer(minLength: 8)
-                        Button("오늘로") {
-                            selectedDay = calendar.startOfDay(for: .now)
-                        }
-                        .font(.subheadline)
-                        .textCase(nil)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("calendar.today")
+    /// Keeps the time of day; if that time has already passed today, the row moves to the end of today.
+    private func moveToToday(_ entry: TimelineEntry, now: Date) {
+        guard let target = entry.moveTarget, let day = loader.value.flatMap({ data in
+            data.days.values.first { $0.items.contains { $0.id == entry.id } }
+        }), let from = Self.moment(day: day.date, minutes: entry.start) else { return }
+        let today = calendar.startOfDay(for: now)
+        var to = calendar.date(byAdding: .minute, value: entry.start, to: today) ?? today
+        if to <= now {
+            to = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: today) ?? today
+        }
+        let destination = to
+        Task {
+            await app.run(id: entry.id) {
+                let revision = try await RoundupAPI.move(target, to: destination)
+                toast = MoveToast { [app] in
+                    toast = nil
+                    await app.run(id: entry.id) {
+                        _ = try await RoundupAPI.move(target.with(revision: revision), to: from)
                     }
                 }
             }
         }
-        .cardList(separators: .hidden)
-        .refreshable { await load() }
     }
 
-    private var weekHeader: some View {
-        let week = calendar.dateInterval(of: .weekOfYear, for: selectedDay)
-        let start = week?.start ?? selectedDay
-        let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
-        return HStack {
-            Button("이전 주", systemImage: "chevron.left") { moveWeek(-1) }
-                .labelStyle(.iconOnly)
-                .frame(minWidth: 44, minHeight: 44)
-            Spacer()
-            Text("\(start.koreanDay(weekday: false)) – \(end.koreanDay(weekday: false))")
-            Spacer()
-            Button("다음 주", systemImage: "chevron.right") { moveWeek(1) }
-                .labelStyle(.iconOnly)
-                .frame(minWidth: 44, minHeight: 44)
-        }
-        .textCase(nil)
+    private static func moment(day key: String, minutes: Int) -> Date? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return Calendar.workshop.date(from: DateComponents(
+            year: parts[0], month: parts[1], day: parts[2], hour: minutes / 60, minute: minutes % 60))
     }
 
-    private func moveWeek(_ weeks: Int) {
-        selectedDay = calendar.date(byAdding: .weekOfYear, value: weeks, to: selectedDay) ?? selectedDay
-    }
-
-    @ViewBuilder
-    private func agenda(_ day: CalendarDay?) -> some View {
-        if let day {
-            ForEach(Array(day.items.enumerated()), id: \.element.id) { index, item in
-                TaskRow(item: item.task, kind: item.kind,
-                        timeline: TimelinePosition(index: index, count: day.items.count))
+    private func toastView(_ toast: MoveToast) -> some View {
+        HStack(spacing: 12) {
+            Text("오늘로 옮겼어요")
+                .foregroundStyle(CalendarTokens.background)
+            Button("되돌리기") {
+                Task { await toast.undo() }
             }
-        } else {
-            ContentUnavailableView {
-                Label("이 날은 일정이 없어요", systemImage: "calendar")
-            } description: {
-                Text(keepingWords: "필요하면 일정을 추가해\u{00A0}보세요.")
-            } actions: {
-                Button("일정 추가하기") {
-                    isAddingEvent = true
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-            }
+            .fontWeight(.semibold)
+            .foregroundStyle(CalendarTokens.background)
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("calendar.toast.undo")
         }
-    }
-
-    private var subtitle: String {
-        guard let days = loader.value else { return "" }
-        return "오늘 일정 \(days[Date.now.dayKey]?.items.count ?? 0)개"
-    }
-
-    private func dayTitle(_ day: CalendarDay?) -> String {
-        let label = selectedDay.koreanDay()
-        guard let count = day?.items.count, count > 0 else { return label }
-        return dynamicTypeSize.isAccessibilitySize ? "\(label)\n일정 \(count)개" : "\(label) · 일정 \(count)개"
+        .font(.subheadline)
+        .padding(.horizontal, 18)
+        .background(CalendarTokens.label, in: .capsule)
+        .padding(.bottom, 12)
+        .accessibilityElement(children: .contain)
     }
 }
 
-struct WeekStrip: View {
-    @Binding var selectedDay: Date
+/// The calendar on one white sheet; it takes `now` so previews and the minute timer share one path.
+struct CalendarContent: View {
     let days: [String: CalendarDay]
-    @ScaledMetric(relativeTo: .body) private var circleSize = 36
+    let overdueShipments: [AgendaItem]
+    @Binding var selectedDay: Date
+    @Binding var mode: CalendarMode
+    let now: Date
+    let add: () -> Void
+    let move: (TimelineEntry) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let calendar = Calendar.workshop
-    private let weekdays = ["월", "화", "수", "목", "금", "토", "일"]
-
-    private var weekDates: [Date] {
-        let start = calendar.dateInterval(of: .weekOfYear, for: selectedDay)?.start ?? selectedDay
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
-    }
+    private var calendar: Calendar { .workshop }
+    private var animation: Animation { reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.25) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(weekDates.enumerated()), id: \.element) { index, date in
-                let isSelected = calendar.isDate(date, inSameDayAs: selectedDay)
-                Button {
-                    selectedDay = date
-                } label: {
-                    VStack(spacing: 6) {
-                        Text(weekdays[index])
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text("\(calendar.component(.day, from: date))")
-                            .font(.body.weight(isSelected ? .bold : .regular))
-                            .monospacedDigit()
-                            .foregroundStyle(isSelected ? Color(.systemBackground) : .primary)
-                            .frame(width: circleSize, height: circleSize)
-                            .background {
-                                if isSelected {
-                                    Circle().fill(.tint)
-                                }
-                            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // Seven fixed columns cannot grow with accessibility sizes, so the date controls stop at xxxLarge.
+                ModeSegment(mode: $mode)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                PeriodNavigator(
+                    title: periodTitle, isShowingToday: calendar.isDate(selectedDay, inSameDayAs: now),
+                    today: { withAnimation(animation) { selectedDay = calendar.startOfDay(for: now) } },
+                    move: move
+                )
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .padding(.top, 14)
+                Group {
+                    switch mode {
+                    case .week: WeekStrip(selectedDay: $selectedDay, days: days, today: now, move: move)
+                    case .month: MonthGrid(selectedDay: $selectedDay, days: days, today: now, move: move)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel(date: date))
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .padding(.top, 8)
+                Rectangle()
+                    .fill(CalendarTokens.separator)
+                    .frame(height: 1)
+                    .padding(.top, 12)
+                DaySection(date: selectedDay, day: days[selectedDay.dayKey], overdueShipments: overdueShipments,
+                           now: now, add: add, move: move)
+                    .padding(.top, 24)
+                    .id(selectedDay.dayKey)
+                    .transition(.opacity)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
         }
-        .padding(.vertical, 6)
+        .contentMargins(.bottom, 32, for: .scrollContent)
+        .background(CalendarTokens.background)
+
+        .animation(animation, value: selectedDay)
+        .animation(animation, value: mode)
     }
 
-    private func accessibilityLabel(date: Date) -> String {
-        let count = days[date.dayKey]?.items.count ?? 0
-        return "\(date.koreanDay()), \(count == 0 ? "일정 없음" : "일정 \(count)개")"
+    private var periodTitle: String {
+        switch mode {
+        case .month:
+            let parts = calendar.dateComponents([.year, .month], from: selectedDay)
+            return "\(parts.year ?? 0)년 \(parts.month ?? 0)월"
+        case .week:
+            let week = CalendarGrid.week(of: selectedDay)
+            guard let first = week.first, let last = week.last else { return "" }
+            let start = calendar.dateComponents([.month, .day], from: first)
+            let end = calendar.dateComponents([.month, .day], from: last)
+            let endText = start.month == end.month ? "\(end.day ?? 0)일" : "\(end.month ?? 0)월 \(end.day ?? 0)일"
+            return "\(start.month ?? 0)월 \(start.day ?? 0)일 – \(endText)"
+        }
+    }
+
+    private func move(_ step: Int) {
+        let component: Calendar.Component = mode == .week ? .weekOfYear : .month
+        withAnimation(animation) {
+            selectedDay = calendar.date(byAdding: component, value: step, to: selectedDay) ?? selectedDay
+        }
     }
 }
