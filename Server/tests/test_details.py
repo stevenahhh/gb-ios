@@ -21,7 +21,11 @@ async def test_booking_detail_and_structured_card(database: AsyncEngine, client:
         "seatNote": "남은 자리 2개", "depositDisplay": "20,000원", "depositConfirmed": True,
         "depositDeadline": None, "revision": 0, "action": None,
         "undo": {"label": "되돌리기", "path": "/bookings/booking-yuna/undo-deposit"},
-        "session": {"id": "session-today-afternoon", "isDone": False, "revision": 0}, "depositDue": None,
+        "session": {
+            "id": "session-today-afternoon", "isDone": False, "revision": 0,
+            "startsAt": "2026-11-18T14:00:00+09:00",
+        },
+        "depositDue": None,
     }
     cards = (await client.get("/bookings", params={"session": "session-today-afternoon"})).json()["items"]
     assert {card["id"] for card in cards} == {"booking-yuna", "booking-junho"}

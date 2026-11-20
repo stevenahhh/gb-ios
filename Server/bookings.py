@@ -70,6 +70,7 @@ class SessionState(ApiModel):
     id: str
     is_done: bool
     revision: int
+    starts_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
