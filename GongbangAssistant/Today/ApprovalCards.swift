@@ -32,11 +32,11 @@ struct ApprovalItem: Identifiable {
         }
     }
 
-    /// The detail screen with its editor already open.
+    /// The detail screen with its editor already open; a reply's editor is always open.
     @ViewBuilder
     var editor: some View {
         switch source {
-        case .inquiry(let inquiry): InquiryDetailView(id: inquiry.id, startsEditing: true)
+        case .inquiry(let inquiry): InquiryDetailView(id: inquiry.id)
         case .draft(let kind, let id): AssistantDraftDetailView(kind: kind, id: id, startsEditing: true)
         }
     }
@@ -126,16 +126,29 @@ struct ApprovalListView: View {
     }
 }
 
-/// Head (face, who wrote it, customer), title, two preview lines, then 승인 · 고치기.
-/// After 승인 the card stays and shows the F6 next step: copy, open the channel, or undo.
+/// Head (face, who wrote it, customer), title, two preview lines, then 답변 완료 or 승인 · 고치기.
+/// Once decided the card stays and shows the F6 next step: copy, open the channel, or undo.
 struct ApprovalCard: View {
     let item: ApprovalItem
     var onDecision: (Bool) -> Void = { _ in }
-    @State private var approved: (text: String, revision: Int)?
+    /// A post or suggestion approved here. Replies read their state from the inquiry store instead.
+    @State private var approvedDraft: (text: String, revision: Int)?
     @State private var isWorking = false
     @State private var isEditing = false
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
+
+    /// What was decided, read when it is used. A completed reply stays editable, so its text and revision
+    /// come from the store, never from the moment it was completed.
+    private var decision: (text: String, revision: Int)? {
+        switch item.source {
+        case .inquiry(let inquiry):
+            guard let current = store.inquiry(id: inquiry.id), current.status == .approved else { return nil }
+            return (current.draft, current.revision)
+        case .draft:
+            return approvedDraft
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -167,13 +180,17 @@ struct ApprovalCard: View {
             .navigationLinkIndicatorVisibility(.hidden)
             .accessibilityIdentifier(item.id)
 
-            if let approved {
-                decided(approved)
+            if let decision {
+                decided(decision)
             } else {
                 HStack(spacing: 10) {
                     Button(action: approve) {
                         Group {
-                            if isWorking { ProgressView() } else { Text("승인").foregroundStyle(Color(.systemBackground)) }
+                            if isWorking {
+                                ProgressView()
+                            } else {
+                                Text(item.isReply ? "답변 완료" : "승인").foregroundStyle(Color(.systemBackground))
+                            }
                         }
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 40)
@@ -197,19 +214,20 @@ struct ApprovalCard: View {
         .navigationDestination(isPresented: $isEditing) { item.editor }
     }
 
-    private func decided(_ approved: (text: String, revision: Int)) -> some View {
+    private func decided(_ decision: (text: String, revision: Int)) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("승인했어요", systemImage: "checkmark")
+                Label(item.isReply ? "답변을 완료했어요" : "승인했어요", systemImage: "checkmark")
                     .font(.subheadline.weight(.medium))
                 Spacer(minLength: 8)
-                Button("되돌리기", systemImage: "arrow.uturn.backward", action: reopen)
+                Button("되돌리기", systemImage: "arrow.uturn.backward") { undo(revision: decision.revision) }
                     .font(.subheadline.weight(.semibold))
                     .buttonStyle(.bordered)
                     .disabled(isWorking)
+                    .accessibilityIdentifier("approval.undo.\(item.id)")
             }
             if let share = item.share {
-                DraftShareActions(share: share, text: approved.text)
+                DraftShareActions(share: share, text: decision.text)
             }
         }
     }
@@ -223,34 +241,34 @@ struct ApprovalCard: View {
                 case .inquiry(let inquiry):
                     let draft = InquiryDraft(draft: inquiry.draft, expectedRevision: inquiry.revision)
                     try await store.decide(id: inquiry.id, decision: InquiryDecision(decision: .approve, draft: draft))
-                    approved = (inquiry.draft, inquiry.revision + 1)
                 case .draft(let kind, let id):
                     let detail = try await RoundupAPI.assistantDraft(kind: kind, id: id)
                     let draft = InquiryDraft(draft: detail.text, expectedRevision: detail.revision)
                     try await RoundupAPI.decideAssistantDraft(kind: kind, id: id,
                                                              decision: InquiryDecision(decision: .approve, draft: draft))
-                    approved = (detail.text, detail.revision + 1)
+                    approvedDraft = (detail.text, detail.revision + 1)
                 }
                 onDecision(true)
+                // The headline and the tab badge count waiting work from the server.
+                app.dataDidChange()
             } catch {
                 app.failureMessage = error.localizedDescription
             }
         }
     }
 
-    private func reopen() {
-        guard let approved else { return }
+    private func undo(revision: Int) {
         isWorking = true
         Task {
             defer { isWorking = false }
             do {
                 switch item.source {
                 case .inquiry(let inquiry):
-                    try await store.reopen(id: inquiry.id, request: InquiryReopen(expectedRevision: approved.revision))
+                    try await store.undoCompletion(id: inquiry.id, expectedRevision: revision)
                 case .draft(let kind, let id):
-                    try await RoundupAPI.reopenAssistantDraft(kind: kind, id: id, revision: approved.revision)
+                    try await RoundupAPI.reopenAssistantDraft(kind: kind, id: id, revision: revision)
+                    approvedDraft = nil
                 }
-                self.approved = nil
                 onDecision(false)
                 app.dataDidChange()
             } catch {
