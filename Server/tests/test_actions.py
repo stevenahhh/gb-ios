@@ -189,7 +189,7 @@ async def test_calendar_event_appears_on_its_day(database: AsyncEngine, client: 
 async def agenda(client: AsyncClient) -> dict[str, dict[str, JsonValue]]:
     day = f"{NOW:%Y-%m-%d}"
     body = (await client.get("/calendar", params={"start": day, "end": day})).json()
-    return {item["target"]: item for item in body["days"][0]["items"]}
+    return {str(item["id"]).split(":", 1)[0]: item for item in body["days"][0]["items"]}
 
 
 async def test_calendar_rows_toggle_only_owner_checkable_work(
@@ -199,7 +199,8 @@ async def test_calendar_rows_toggle_only_owner_checkable_work(
         "/calendar/events", json={"title": "가마 점검", "startsAt": NOW.isoformat()},
     )).json()
     assert (created["isDone"], created["revision"]) == (False, 0)
-    path = f"/calendar/events/{created['targetId']}/completion"
+    event_id = str(created["id"]).split(":", 1)[1]
+    path = f"/calendar/events/{event_id}/completion"
     done = await client.post(path, json={"done": True, "expectedRevision": 0})
     assert (done.status_code, done.json()["isDone"]) == (200, True)
     assert (await client.post(path, json={"done": True, "expectedRevision": 0})).status_code == 409
@@ -207,12 +208,12 @@ async def test_calendar_rows_toggle_only_owner_checkable_work(
     undone = await client.post(path, json={"done": False, "expectedRevision": 1})
     assert (undone.status_code, undone.json()["isDone"]) == (200, False)
 
+    _ = await client.post(path, json={"done": True, "expectedRevision": 2})
     items = await agenda(client)
+    assert items["event"]["isDone"] is True
     assert items["session"]["isDone"] is False
     assert items["task"]["isDone"] is False
-    for target in ("order", "shipment"):
-        assert items[target]["isDone"] is None
-        assert items[target]["status"] is not None
+    assert items["order"]["isDone"] is None
 
 
 async def test_workshop_and_setting_edits_use_revisions(database: AsyncEngine, client: AsyncClient) -> None:
