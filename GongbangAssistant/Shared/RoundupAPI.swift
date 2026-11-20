@@ -153,9 +153,9 @@ enum RoundupAPI {
             "assistant-drafts/\(kind.rawValue)/\(id)/reopen", Revisioned(expectedRevision: revision))
     }
 
-    static func setDone(_ item: TaskItem, done: Bool) async throws {
+    static func setDone(_ item: TaskItem, done: Bool, revision: Int? = nil) async throws {
         struct State: Decodable {}
-        let body = Completion(done: done, expectedRevision: item.revision)
+        let body = Completion(done: done, expectedRevision: revision ?? item.revision)
         switch item.target {
         case .session: let _: State = try await post("class-sessions/\(item.id)/completion", body)
         case .task: let _: State = try await post("tasks/\(item.id)/completion", body)
@@ -218,11 +218,19 @@ enum RoundupAPI {
     }
 
     /// The server builds the workshop context from its own database.
-    static func ask(question: String) async throws -> String {
+    struct AskReply: Decodable {
+        let answer: String
+        let items: [WorkItem]?
+    }
+
+    static func assistantActivities() async throws -> [AssistantActivity] {
+        try await get("assistant/activities")
+    }
+
+    static func ask(question: String) async throws -> (answer: String, items: [WorkItem]) {
         struct Body: Encodable { let question: String }
-        struct Reply: Decodable { let answer: String }
-        let reply: Reply = try await post("ask", Body(question: question))
-        return reply.answer
+        let reply: AskReply = try await post("ask", Body(question: question))
+        return (reply.answer, reply.items ?? [])
     }
 
     static func transcribe(wav: Data) async throws -> String {

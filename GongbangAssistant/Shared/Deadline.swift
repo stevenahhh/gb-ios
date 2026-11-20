@@ -42,7 +42,8 @@ enum RelativeDayFormatter {
 
     /// "어제 16:00"
     static func moment(_ date: Date, now: Date, calendar: Calendar = .workshop) -> String {
-        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        let parts = calendar.dateComponents([.hour, .minute, .second], from: date)
+        if parts.hour == 23, parts.minute == 59, parts.second == 59 { return day(date, now: now, calendar: calendar) }
         return "\(day(date, now: now, calendar: calendar)) \(String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0))"
     }
 }
@@ -69,10 +70,10 @@ struct DueLabel: View {
                         .accessibilityHidden(true)
                     let rest = [moment, due.missed].compactMap { $0 }.joined(separator: " ")
                     Text("\(Text("기한 지남").foregroundStyle(Color.overdueRed).fontWeight(.semibold)) · \(rest)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 } else {
                     Image(systemName: "clock")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                         .accessibilityHidden(true)
                     Text("\(due.prefix.map { "\($0) " } ?? "")\(moment)\(due.suffix)")
                         .foregroundStyle(.primary)

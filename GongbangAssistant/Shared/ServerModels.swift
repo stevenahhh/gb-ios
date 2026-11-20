@@ -19,15 +19,14 @@ enum StatusTone: String, Decodable, Hashable {
 
     var color: Color {
         switch self {
-        case .attention: .orange
-        case .done: .green
-        case .progress, .neutral: .secondary
+        case .attention: .pendingOrange
+        case .done, .progress, .neutral: .secondaryText
         }
     }
 
     var symbol: String {
         switch self {
-        case .attention: "exclamationmark.circle.fill"
+        case .attention: "circle.fill"
         case .done: "checkmark.circle.fill"
         case .progress: "arrow.triangle.2.circlepath"
         case .neutral: "circle"
@@ -123,6 +122,12 @@ struct BookingDetail: Decodable {
         let id: String
         let isDone: Bool
         let revision: Int
+        let startsAt: String?
+
+        var hasStarted: Bool {
+            guard let startsAt, let start = try? Date(startsAt, strategy: .iso8601) else { return true }
+            return start <= .now
+        }
     }
 
     let id: String
@@ -151,6 +156,7 @@ struct ClassSessionDetail: Decodable {
     let isDone: Bool
     let revision: Int
     let bookingIds: [String]
+    let startsAt: String?
 }
 
 struct AssistantDraftDetail: Decodable {
@@ -455,5 +461,32 @@ extension Date {
             .month().day()
         if weekday { style = style.weekday(.wide) }
         return formatted(style)
+    }
+}
+
+/// One thing the assistant did, read from the record it produced (never a send or a call).
+struct AssistantActivity: Decodable, Identifiable, Hashable {
+    enum Kind: String, Decodable, Hashable {
+        case inquiryReply
+        case contentDraft
+        case missedPickup
+    }
+
+    let id: String
+    let at: String
+    let kind: Kind
+    let targetId: String
+    let summary: String
+    let status: String?
+    let evidence: [String]
+
+    var date: Date? { try? Date(at, strategy: .iso8601) }
+
+    var route: AppRoute {
+        switch kind {
+        case .inquiryReply: .inquiry(targetId)
+        case .contentDraft: .draft(.content, targetId)
+        case .missedPickup: .work(.shipment, targetId)
+        }
     }
 }

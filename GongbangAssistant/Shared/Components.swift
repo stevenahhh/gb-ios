@@ -109,7 +109,7 @@ struct MetricStrip: View {
                 ForEach(metrics) { metric in
                     HStack(alignment: .firstTextBaseline) {
                         Text(metric.label)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                         Spacer(minLength: 8)
                         Text(metric.display)
                             .font(.title3.bold())
@@ -130,7 +130,7 @@ struct MetricStrip: View {
                             .monospacedDigit()
                         Text(metric.label)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                     .frame(maxWidth: .infinity)
                     .accessibilityElement(children: .combine)
@@ -152,9 +152,16 @@ struct StatusBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: status.tone.symbol)
-                .imageScale(.small)
-                .foregroundStyle(status.tone.color)
+            if status.tone == .attention {
+                Circle()
+                    .fill(Color.pendingOrange)
+                    .frame(width: 7, height: 7)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: status.tone.symbol)
+                    .imageScale(.small)
+                    .foregroundStyle(status.tone.color)
+            }
             Text(status.text)
                 .foregroundStyle(.primary)
         }
@@ -171,6 +178,8 @@ struct StatusBadge: View {
 struct TaskRow: View {
     let item: TaskItem
     let kind: EventKind
+    /// Inside the overdue group the red title already says so; rows show a gray "어제 16:00 · 포장 대기".
+    var isInOverdueGroup = false
     @Environment(AppModel.self) private var app
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
@@ -180,12 +189,16 @@ struct TaskRow: View {
     private var isRunning: Bool { app.isRunning(item.id) }
 
     var body: some View {
-        HStack(spacing: 8) {
+        // At accessibility sizes the check sits under the text, so titles get the full width and wrap at words.
+        let row = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return row {
             NavigationLink(value: item.route) {
                 HStack(spacing: 12) {
                     info
                     Spacer(minLength: 0)
-                    if item.isDone == nil, let status = item.status {
+                    if item.isDone == nil, !isInOverdueGroup, let status = item.status {
                         StatusBadge(status)
                     }
                 }
@@ -203,7 +216,7 @@ struct TaskRow: View {
                 Button(isDone ? "미완료" : "완료", systemImage: isDone ? "arrow.uturn.backward" : "checkmark") {
                     toggle()
                 }
-                .tint(.green)
+                .tint(.gray)
                 .disabled(isRunning)
             }
         }
@@ -212,7 +225,14 @@ struct TaskRow: View {
     private func toggle() {
         let item = item
         let target = !isDone
-        Task { await app.run(id: item.id) { try await RoundupAPI.setDone(item, done: target) } }
+        Task {
+            guard await app.run(id: item.id, { try await RoundupAPI.setDone(item, done: target) }) else { return }
+            app.showToast(target ? "완료했어요" : "완료를 취소했어요") { [app] in
+                await app.run(id: item.id) {
+                    try await RoundupAPI.setDone(item, done: !target, revision: item.revision + 1)
+                }
+            }
+        }
     }
 
     private var doneButton: some View {
@@ -221,9 +241,7 @@ struct TaskRow: View {
                 if isRunning {
                     ProgressView()
                 } else {
-                    Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                        .foregroundStyle(isDone ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                    DoneMark(isDone: isDone)
                 }
             }
             .frame(minWidth: 44, minHeight: 44)
@@ -241,28 +259,34 @@ struct TaskRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
-            if let time = item.time {
+            // In the overdue group the gray meta line already carries the time, so the row shows its icon.
+            if !isInOverdueGroup, let time = item.time {
                 Text(time)
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .frame(minWidth: timeWidth, alignment: .leading)
             } else {
                 Image(systemName: kind.symbol)
-                    .foregroundStyle(kind.color)
+                    .foregroundStyle(.primary)
                     .frame(width: iconSize, height: iconSize)
-                    .background(kind.color.opacity(0.12), in: .rect(cornerRadius: 8))
+                    .background(CalendarTokens.fill, in: .rect(cornerRadius: 8))
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(keepingWords: item.title)
                     .font(.body.weight(.medium))
                     .strikethrough(isDone)
-                    .foregroundStyle(isDone ? .secondary : .primary)
+                    .foregroundStyle(isDone ? Color.secondaryText : Color.primary)
                 PhraseText(text: item.detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                 // Parcels always show their pickup; timed rows show theirs only once it has passed.
-                if let due = item.due, item.target == .shipment || due.isOverdue(at: .now) {
+                if isInOverdueGroup, let date = item.due?.date {
+                    Text([RelativeDayFormatter.moment(date, now: .now), item.status?.text].compactMap { $0 }
+                        .joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondaryText)
+                } else if let due = item.due, item.target == .shipment || due.isOverdue(at: .now) {
                     DueLabel(due: due)
                 }
             }
@@ -329,6 +353,7 @@ struct CardActionButton: View {
 struct WorkCardContent: View {
     let item: WorkItem
     var selectable = false
+    @Environment(\.hidesCardStatus) private var hidesStatus
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -342,14 +367,14 @@ struct WorkCardContent: View {
                 if !dynamicTypeSize.isAccessibilitySize {
                     Spacer(minLength: 8)
                 }
-                if let status = item.status {
+                if let status = item.status, !hidesStatus {
                     StatusBadge(status)
                 }
             }
             ForEach(item.lines, id: \.self) { line in
                 PhraseText(text: line, selectable: selectable)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             if let due = item.due {
                 DueLabel(due: due)
@@ -358,8 +383,8 @@ struct WorkCardContent: View {
                     Text(keepingWords: deadline)
                         .foregroundStyle(.primary)
                 } icon: {
-                    Image(systemName: "clock.fill")
-                        .foregroundStyle(.orange)
+                    Image(systemName: "clock")
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .font(.subheadline.weight(.semibold))
             }
@@ -472,5 +497,40 @@ struct LoadErrorView: View {
             .controlSize(.large)
             .accessibilityIdentifier("screen.retry")
         }
+    }
+}
+
+/// The completion circle: an empty ring, or the calendar's gray done node. Completion never uses green.
+struct DoneMark: View {
+    let isDone: Bool
+
+    var body: some View {
+        if isDone {
+            Image(systemName: "checkmark")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(CalendarTokens.secondary)
+                .frame(width: 24, height: 24)
+                .background(CalendarTokens.separator, in: .circle)
+        } else {
+            Image(systemName: "circle")
+                .font(.title2)
+                .foregroundStyle(Color.secondaryText)
+        }
+    }
+}
+
+extension [WorkItem] {
+    /// Channels are all unconnected for now; then one sentence replaces a badge on every card.
+    var allChannelsUnconnected: Bool {
+        count > 1 && allSatisfy { $0.status?.text == "아직 연결 안 됨" }
+    }
+}
+
+struct UnconnectedChannelsNote: View {
+    var body: some View {
+        Text("채널은 아직 연결 전이에요. 주문과 문의는 앱에 직접 등록한 내용만 보여요.")
+            .font(.subheadline)
+            .foregroundStyle(Color.secondaryText)
+            .textCase(nil)
     }
 }

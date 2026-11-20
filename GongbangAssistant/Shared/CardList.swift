@@ -16,6 +16,8 @@ enum AppPalette {
 
 extension EnvironmentValues {
     @Entry var cardSeparators: Visibility = .automatic
+    /// Set when every card in a list has the same status, which the list then states once.
+    @Entry var hidesCardStatus = false
 }
 
 extension View {
@@ -55,9 +57,10 @@ struct CardSection<Content: View, Header: View, Footer: View>: View {
                 }
             }
         } header: {
-            header
+            // The system's grouped header gray measures about 3.7:1; headers that set their own color keep it.
+            header.foregroundStyle(Color.secondaryText)
         } footer: {
-            footer
+            footer.foregroundStyle(Color.secondaryText)
         }
         .listSectionSeparator(.hidden)
     }
