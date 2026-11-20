@@ -64,7 +64,8 @@ final class ActionFlowUITests: RoundupUITestCase {
     func testRecommendationDraftCanBeApprovedAndUndone() throws {
         let app = try launch()
         let segment = app.segmentedControls.buttons["비서 추천"]
-        XCTAssertTrue(segment.waitForExistence(timeout: 10))
+        // The segments sit below 확인해 주실 일, so scroll to them first.
+        XCTAssertTrue(scrollTo(segment, in: app))
         segment.tap()
         approveThenReopenDraft(app.buttons["draft.recommendation.recommendation-market"], in: app)
     }
@@ -89,6 +90,18 @@ final class ActionFlowUITests: RoundupUITestCase {
     func testTaskCompletionIsReflectedFromTheServer() throws {
         let app = try launch()
         let task = app.buttons["task.task-market"]
+        // After its 17:00 deadline the task joins the overdue group, whose rows past the third sit behind 모두 보기.
+        let all = app.buttons["today.overdue.all"]
+        if scrollTo(all, in: app) {
+            all.tap()
+            // The list loads its own data, so give it the same bound as other server waits.
+            if !task.waitForExistence(timeout: 10) {
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+            }
+        } else {
+            // No overdue overflow: return to the top, where the task's own section starts the search.
+            for _ in 0..<8 { app.swipeDown() }
+        }
         XCTAssertTrue(scrollTo(task, in: app))
         XCTAssertEqual(task.value as? String, "미완료")
         task.tap()
@@ -166,7 +179,8 @@ final class ActionFlowUITests: RoundupUITestCase {
         row.tap()
         let name = app.textFields["workshop.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
+        // The value is right-aligned, so tap its trailing edge to put the cursor after the name.
+        name.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         name.typeText(" 본점")
         app.buttons["workshop.save"].tap()
         XCTAssertTrue(element(labelled: "오롯 공방 본점", in: app).waitForExistence(timeout: 10))
