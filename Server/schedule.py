@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bookings import ExpectedRevision, seats_taken
 from common import LongText, Now, Session, ShortText, locked, required_text
 from contracts import ApiModel, ApiRequest, EventKind, Moved
-from display import clock, count, day_start, local, masked, next_day_start, people, won
+from display import clock, clock_or_all_day, count, day_start, local, masked, next_day_start, people, won
 from metrics import UNSHIPPED
 from models import BookingRow, CalendarEventRow, ClassSessionRow, CustomerRow, OrderRow, ShipmentRow, TaskRow
 
@@ -205,7 +205,7 @@ async def owner_items(db: AsyncSession, begin: datetime, end: datetime) -> list[
             local(task.due_at).date(),
             AgendaItem(
                 id=f"task:{task.id}",
-                time=clock(task.due_at),
+                time=clock_or_all_day(task.due_at),
                 title=task.title,
                 kind="todo",
                 detail=" · ".join(part for part in (task.vendor, task.detail) if part),
@@ -225,7 +225,7 @@ def event_item(event: CalendarEventRow) -> AgendaItem:
     return AgendaItem.model_validate(
         {
             "id": f"event:{event.id}",
-            "time": clock(event.starts_at),
+            "time": clock_or_all_day(event.starts_at),
             "title": event.title,
             "kind": event.kind,
             "detail": event.detail,

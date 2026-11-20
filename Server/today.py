@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from channels import channel_cards
 from common import Now, Session
 from contracts import ApiModel, Card, CardDue, EventKind, Metric, Status
-from display import clock, count, day_start, due, local, masked, next_day_start, people
+from display import clock, clock_or_all_day, count, day_start, due, local, masked, next_day_start, people
 from metrics import (
     UNSHIPPED,
     Counts,
@@ -191,7 +191,8 @@ async def task_group(db: AsyncSession, today: date, *, material: bool) -> TaskGr
     )
     items = [
         TaskItem(
-            id=row.id, target="task", time=None if material else clock(row.due_at), title=row.title,
+            id=row.id, target="task", title=row.title,
+            time=None if material else clock_or_all_day(row.due_at),
             detail=" · ".join(part for part in (row.vendor, row.detail) if part), status=None,
             is_done=row.status == "done", revision=row.revision,
             due=None if row.status == "done" else due(row.due_at, suffix="까지"),
@@ -289,7 +290,7 @@ async def today_screen(db: Session, now: Now) -> Today:
         channels=ChannelsSegment(
             metrics=[
                 channel_metric(counts.channels), new_orders,
-                metric("pendingInquiries", "미답변 문의", counts.pending_inquiries),
+                metric("pendingInquiries", "답변 기다리는 문의", counts.pending_inquiries),
             ],
             cards=await channel_cards(db, today), todos=await open_channel_tasks(db, today),
         ),

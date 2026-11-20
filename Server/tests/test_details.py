@@ -21,7 +21,11 @@ async def test_booking_detail_and_structured_card(database: AsyncEngine, client:
         "seatNote": "남은 자리 2개", "depositDisplay": "20,000원", "depositConfirmed": True,
         "depositDeadline": None, "revision": 0, "action": None,
         "undo": {"label": "되돌리기", "path": "/bookings/booking-yuna/undo-deposit"},
-        "session": {"id": "session-today-afternoon", "isDone": False, "revision": 0}, "depositDue": None,
+        "session": {
+            "id": "session-today-afternoon", "isDone": False, "revision": 0,
+            "startsAt": "2026-11-18T14:00:00+09:00",
+        },
+        "depositDue": None,
     }
     cards = (await client.get("/bookings", params={"session": "session-today-afternoon"})).json()["items"]
     assert {card["id"] for card in cards} == {"booking-yuna", "booking-junho"}
@@ -154,7 +158,7 @@ async def test_operations_numbers_explain_themselves(database: AsyncEngine, clie
     body = (await client.get("/operations", params={"month": "2026-11"})).json()
     assert {m["key"]: m["detail"] for m in body["period"]["metrics"]} == {
         "bookings": "지난달보다 +8건", "orders": "지난달보다 +6건",
-        "shipments": "발송 대기 2건", "inquiries": "미답변 3건",
+        "shipments": "발송 대기 2건", "inquiries": "답변 기다리는 문의 3건",
     }
     custom = (await client.get("/operations", params={"start": "2026-11-18", "end": "2026-11-19"})).json()
     assert custom["period"]["metrics"][0]["detail"] == "이전 기간보다 +3건"
