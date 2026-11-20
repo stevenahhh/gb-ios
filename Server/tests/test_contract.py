@@ -32,6 +32,7 @@ def http(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         ("GET", "/inquiries"),
         ("PATCH", "/inquiries/inquiry-clay/draft"),
         ("POST", "/inquiries/inquiry-clay/decision"),
+        ("POST", "/inquiries/x/undo-completion"),
         ("GET", "/health/ready"),
         ("GET", "/today"),
         ("GET", "/bookings"),
