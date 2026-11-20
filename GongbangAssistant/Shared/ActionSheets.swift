@@ -39,34 +39,80 @@ private func isFilled(_ text: String) -> Bool {
 }
 
 struct InvoiceSheet: View {
+    static let carriers = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배"]
+    private static let customCarrier = "직접 입력"
+
     let item: WorkItem
-    @State private var carrier = "CJ대한통운"
-    @State private var trackingNumber = ""
+    @AppStorage("invoice.lastCarrier") private var lastCarrier = "CJ대한통운"
+    @State private var choice = ""
+    @State private var customName = ""
+    @State private var digits = ""
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
+    private var carrier: String {
+        choice == Self.customCarrier ? customName.trimmingCharacters(in: .whitespaces) : choice
+    }
+
+    private var isNumberValid: Bool { (10...14).contains(digits.count) }
+
+    /// Shows the number in groups of four while storing digits only, so pasted dashes and spaces vanish.
+    private var grouped: Binding<String> {
+        Binding(
+            get: { stride(from: 0, to: digits.count, by: 4).map { start -> String in
+                let lower = digits.index(digits.startIndex, offsetBy: start)
+                let upper = digits.index(lower, offsetBy: min(4, digits.count - start))
+                return String(digits[lower..<upper])
+            }.joined(separator: " ") },
+            set: { digits = String($0.filter(\.isNumber).prefix(14)) }
+        )
+    }
+
     var body: some View {
         FormSheet(
-            title: "송장 등록", saveLabel: "등록",
-            canSave: isFilled(carrier) && trackingNumber.trimmingCharacters(in: .whitespaces).count >= 4,
+            title: "송장 등록", saveLabel: "등록", canSave: isFilled(carrier) && isNumberValid,
             isSaving: app.isRunning(item.id), save: save
         ) {
-            Section(item.title) {
-                TextField("택배사", text: $carrier)
-                    .accessibilityIdentifier("invoice.carrier")
-                TextField("운송장 번호", text: $trackingNumber)
-                    .keyboardType(.numbersAndPunctuation)
-                    .accessibilityIdentifier("invoice.number")
+            Section {
+                Picker("택배사", selection: $choice) {
+                    ForEach(Self.carriers + [Self.customCarrier], id: \.self) { Text($0).tag($0) }
+                }
+                .accessibilityIdentifier("invoice.carrier")
+                if choice == Self.customCarrier {
+                    TextField("택배사 이름", text: $customName)
+                        .accessibilityIdentifier("invoice.carrier.custom")
+                }
+                LabeledContent("운송장 번호") {
+                    TextField("숫자 10~14자리", text: grouped)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .accessibilityIdentifier("invoice.number")
+                }
+            } header: {
+                Text(item.title)
+            } footer: {
+                if !digits.isEmpty && !isNumberValid {
+                    Text("운송장 번호는 숫자 10~14자리예요.")
+                }
             }
+        }
+        .presentationDetents([.medium])
+        .onAppear {
+            if choice.isEmpty { choice = Self.carriers.contains(lastCarrier) ? lastCarrier : Self.customCarrier }
+            if choice == Self.customCarrier, customName.isEmpty, !Self.carriers.contains(lastCarrier) { customName = lastCarrier }
         }
     }
 
     private func save() {
-        let (item, carrier, number) = (item, carrier, trackingNumber)
+        let (item, carrier, number) = (item, carrier, digits)
         Task {
             if await app.run(id: item.id, {
                 try await RoundupAPI.registerInvoice(item: item, carrier: carrier, trackingNumber: number)
-            }) { dismiss() }
+            }) {
+                lastCarrier = carrier
+                dismiss()
+            }
         }
     }
 }

@@ -36,7 +36,7 @@ struct BookingListRow: View {
     private var time: some View {
         Text(summary.time)
             .font(.subheadline.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.secondaryText)
             .frame(minWidth: timeWidth, alignment: .leading)
     }
 
@@ -48,7 +48,7 @@ struct BookingListRow: View {
     private var customer: some View {
         Text(customerText)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.secondaryText)
     }
 
     @ViewBuilder
@@ -68,6 +68,8 @@ struct ProcessStepRow: View {
     var due: CardDue?
     var isRunning = false
     var isPrimary = true
+    var isActionEnabled = true
+    var actionHint: String?
     let perform: () -> Void
     var undo: (() -> Void)?
 
@@ -77,12 +79,12 @@ struct ProcessStepRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(label)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                     if isDone {
                         Label {
                             Text(keepingWords: doneText).foregroundStyle(.primary)
                         } icon: {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.secondaryText)
                         }
                         .font(.subheadline.weight(.medium))
                     } else if let due {
@@ -91,7 +93,7 @@ struct ProcessStepRow: View {
                         Label {
                             Text(keepingWords: deadline).foregroundStyle(.primary)
                         } icon: {
-                            Image(systemName: "clock.fill").foregroundStyle(.orange)
+                            Image(systemName: "clock").foregroundStyle(Color.secondaryText)
                         }
                         .font(.subheadline.weight(.semibold))
                     }
@@ -117,12 +119,17 @@ struct ProcessStepRow: View {
                     .frame(maxWidth: .infinity, minHeight: 30)
                 }
                 .controlSize(.large)
-                .disabled(isRunning)
+                .disabled(isRunning || !isActionEnabled)
                 .accessibilityIdentifier("step.do.\(label)")
-                if isPrimary {
+                if isPrimary && isActionEnabled {
                     button.buttonStyle(.borderedProminent)
                 } else {
                     button.buttonStyle(.bordered)
+                }
+                if let actionHint, !isActionEnabled {
+                    Text(actionHint)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
         }
@@ -169,6 +176,7 @@ struct BookingDetailView: View {
         LoadableContent(loader: loader, retry: load) { detail in
             List { sections(detail) }
                 .cardList()
+                .contentMargins(.bottom, 96, for: .scrollContent)
                 .refreshable { await load() }
         }
         .navigationTitle("예약 상세")
@@ -209,7 +217,8 @@ struct BookingDetailView: View {
                     { run(detail.id) { try await RoundupAPI.undo(undo, revision: detail.revision) } }
                 }
             )
-            SessionStepRow(session: detail.session, isPrimary: detail.action == nil)
+            SessionStepRow(session: detail.session, isPrimary: detail.action == nil,
+                           depositPending: !detail.depositConfirmed)
         }
     }
 
@@ -221,14 +230,25 @@ struct BookingDetailView: View {
 struct SessionStepRow: View {
     let session: BookingDetail.Session
     var isPrimary = true
+    /// When the deposit is still unpaid, finishing the class asks first.
+    var depositPending = false
+    @State private var isConfirming = false
     @Environment(AppModel.self) private var app
 
     var body: some View {
         ProcessStepRow(
             label: "수업", isDone: session.isDone, doneText: "수업을 완료했어요",
             actionTitle: "수업 완료로 표시", isRunning: app.isRunning(session.id), isPrimary: isPrimary,
-            perform: { setDone(true) }, undo: { setDone(false) }
+            isActionEnabled: session.hasStarted, actionHint: "수업이 시작되면 누를 수 있어요.",
+            perform: { if depositPending { isConfirming = true } else { setDone(true) } },
+            undo: { setDone(false) }
         )
+        .confirmationDialog("예약금 입금이 아직 확인되지 않았어요", isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("그래도 수업 완료로 표시") { setDone(true) }
+            Button("입금 확인 먼저 하기", role: .cancel) {}
+        } message: {
+            Text("위의 입금 확인하기로 예약금을 먼저 확인할 수 있어요.")
+        }
     }
 
     private func setDone(_ done: Bool) {
@@ -282,7 +302,7 @@ struct ClassSessionView: View {
             CardSection("예약 \(content.bookings.count)건") {
                 if content.bookings.isEmpty {
                     Text("이 수업에는 아직 예약이 없어요.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 ForEach(content.bookings) { item in
                     if let summary = item.booking {
@@ -292,7 +312,8 @@ struct ClassSessionView: View {
             }
             CardSection("처리") {
                 SessionStepRow(session: BookingDetail.Session(
-                    id: content.session.id, isDone: content.session.isDone, revision: content.session.revision))
+                    id: content.session.id, isDone: content.session.isDone, revision: content.session.revision,
+                    startsAt: content.session.startsAt))
             }
         }
         .cardList(separators: .hidden)
@@ -316,13 +337,16 @@ struct WorkDetailView: View {
                         WorkCardContent(item: item, selectable: true)
                     }
                 }
+                if kind == .task, item.action != nil, let due = item.due?.date {
+                    TaskScheduleSection(item: item, due: due)
+                }
                 if item.action != nil || item.undo != nil {
                     CardSection("처리") {
                         if let undo = item.undo {
                             HStack {
                                 Text("이전 단계로 돌아갈 수 있어요.")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                                 Spacer(minLength: 8)
                                 UndoButton(label: "상태", isRunning: app.isRunning(item.id)) {
                                     Task { await app.run(id: item.id) { try await RoundupAPI.undo(undo, revision: item.revision) } }
@@ -335,7 +359,9 @@ struct WorkDetailView: View {
                     }
                 }
             }
-            .cardList()
+            .cardList(separators: .hidden)
+            // Keeps the last button clear of the assistant bar.
+            .contentMargins(.bottom, 96, for: .scrollContent)
             .refreshable { await load() }
             .navigationTitle(item.progress == nil ? item.title : kind == .shipment ? "배송 상세" : "주문 상세")
         }
@@ -368,7 +394,7 @@ struct OrderSummarySections: View {
                     if let source = item.source {
                         Text(source)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                     Spacer(minLength: 8)
                     if let status = item.status {
@@ -380,7 +406,7 @@ struct OrderSummarySections: View {
                 if let line = headline {
                     PhraseText(text: line)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 if let due = item.due {
                     DueLabel(due: due)
@@ -388,7 +414,7 @@ struct OrderSummarySections: View {
                     Label {
                         Text(keepingWords: deadline).foregroundStyle(.primary)
                     } icon: {
-                        Image(systemName: "clock.fill").foregroundStyle(.orange)
+                        Image(systemName: "clock").foregroundStyle(Color.secondaryText)
                     }
                     .font(.subheadline.weight(.semibold))
                 }
@@ -420,7 +446,7 @@ struct ProgressSteps: View {
                     }
                     Text(step)
                         .font(.subheadline.weight(index == progress.current ? .semibold : .regular))
-                        .foregroundStyle(index <= progress.current ? .primary : .secondary)
+                        .foregroundStyle(index <= progress.current ? Color.primary : Color.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
@@ -467,5 +493,48 @@ struct ProgressSteps: View {
                               lineWidth: index == progress.current ? 2.5 : 1.5)
                 .frame(width: marker, height: marker)
         }
+    }
+}
+
+/// Lets the owner fix a task's date and time after moving it; 종일 stores the 23:59:59 marker.
+struct TaskScheduleSection: View {
+    let item: WorkItem
+    let due: Date
+    @State private var date: Date
+    @State private var isAllDay: Bool
+    @Environment(AppModel.self) private var app
+
+    init(item: WorkItem, due: Date) {
+        self.item = item
+        self.due = due
+        _date = State(initialValue: due)
+        let parts = Calendar.workshop.dateComponents([.hour, .minute, .second], from: due)
+        _isAllDay = State(initialValue: parts.hour == 23 && parts.minute == 59 && parts.second == 59)
+    }
+
+    private var target: Date {
+        guard isAllDay else { return date }
+        return Calendar.workshop.date(bySettingHour: 23, minute: 59, second: 59, of: date) ?? date
+    }
+
+    var body: some View {
+        CardSection("날짜와 시각") {
+            DatePicker("날짜", selection: $date, displayedComponents: .date)
+            Toggle("종일", isOn: $isAllDay)
+            if !isAllDay {
+                DatePicker("시각", selection: $date, displayedComponents: .hourAndMinute)
+            }
+            Button("저장") {
+                let (item, target) = (item, target)
+                Task {
+                    await app.run(id: item.id) {
+                        _ = try await RoundupAPI.move(.task(id: item.id, revision: item.revision), to: target)
+                    }
+                }
+            }
+            .disabled(target == due || app.isRunning(item.id))
+            .accessibilityIdentifier("task.schedule.save")
+        }
+        .environment(\.timeZone, Calendar.workshop.timeZone)
     }
 }
