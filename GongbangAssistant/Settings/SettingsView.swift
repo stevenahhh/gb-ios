@@ -11,6 +11,7 @@ struct SettingsView: View {
             }
             .navigationTitle("설정")
             .navigationSubtitle(loader.value?.workshop?.name ?? "")
+            .appDestinations()
         }
         .task(id: app.dataVersion) { await load() }
     }
