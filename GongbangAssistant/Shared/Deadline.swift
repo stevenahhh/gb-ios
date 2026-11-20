@@ -3,7 +3,7 @@ import UIKit
 
 extension Color {
     /// The app's only red. It marks "기한 지남", its clock, and the calendar's missed node, nothing else.
-    static let overdueRed = Color(uiColor: UIColor { traits in
+    static let overdueRed = Color(uiColor: UIColor { @Sendable traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 1, green: 0x6B / 255, blue: 0x60 / 255, alpha: 1)
             : UIColor(red: 0xC6 / 255, green: 0x28 / 255, blue: 0x28 / 255, alpha: 1)

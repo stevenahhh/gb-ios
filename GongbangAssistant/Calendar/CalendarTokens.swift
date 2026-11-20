@@ -14,14 +14,15 @@ enum CalendarTokens {
     static let pinned = pair(0xF5F5F7, 0x1C1C1E)
 
     private static func pair(_ light: UInt32, _ dark: UInt32) -> Color {
-        Color(uiColor: UIColor { traits in
+        // Nonisolated: SwiftUI resolves colors off the main thread, and a main-actor closure traps there.
+        Color(uiColor: UIColor { @Sendable traits in
             UIColor(calendarHex: traits.userInterfaceStyle == .dark ? dark : light)
         })
     }
 }
 
 private extension UIColor {
-    convenience init(calendarHex hex: UInt32) {
+    nonisolated convenience init(calendarHex hex: UInt32) {
         self.init(
             red: CGFloat((hex >> 16) & 0xFF) / 255,
             green: CGFloat((hex >> 8) & 0xFF) / 255,
