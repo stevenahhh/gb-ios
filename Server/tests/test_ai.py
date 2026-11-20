@@ -166,7 +166,7 @@ async def test_draft_prompt_has_profile_policies_and_inquiry_facts(
     prompt = fake.calls[0][-1].content
     for marker in (
         "오롯 공방", "061-745-0255", "전라남도 순천시 중앙로 255",
-        "예약은 예약금 입금 확인 후 확정됩니다", "약 3주 뒤 수령", "주차는 건물 뒤편 공영주차장 이용",
+        "예약은 예약금 입금을 확인한 뒤 확정돼요", "약 3주 뒤 수령", "주차는 건물 뒤편 공영주차장 이용",
         "차를 가져가도 되나요?",
     ):
         assert marker in prompt
