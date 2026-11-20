@@ -19,7 +19,7 @@ private enum RewriteStyle: String, CaseIterable, Identifiable {
 
 extension Inquiry {
     var badge: Status {
-        status == .approved ? Status(text: "답변 완료", tone: .done) : Status(text: "답변 대기", tone: .attention)
+        status == .approved ? Status(text: "답변 준비됨", tone: .done) : Status(text: "답변 대기", tone: .attention)
     }
 }
 
@@ -77,7 +77,7 @@ struct InquiryDetailView: View {
                         .font(.headline)
                     Text(inquiry.customer)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .padding(.vertical, 4)
                 Text(inquiry.question)
