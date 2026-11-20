@@ -10,7 +10,7 @@ from sqlalchemy.types import Text
 
 from bookings import ExpectedRevision
 from common import Now, PageQuery, Session, invalid_transition, locked, matches
-from contracts import Card, CardAction, CardUndo, Page, Status
+from contracts import Card, CardAction, CardField, CardProgress, CardUndo, Page, Status
 from display import SEOUL, local, masked, month_day, won
 from metrics import load_counts, metric, money_metric
 from models import ChannelRow, CustomerRow, OrderRow, ShipmentRow
@@ -21,6 +21,8 @@ SAME_DAY_CUTOFF: Final = time(15)
 type OrderFilter = Literal["all", "paid", "processing"]
 type OrderSort = Literal["newest", "oldest"]
 type OrderRecord = tuple[OrderRow, CustomerRow, ChannelRow | None, str | None]
+ORDER_STEPS: Final = ("결제", "주문 확인", "포장", "발송", "배송 완료")
+SHIPMENT_STEP: Final = {"packing": 2, "invoice_pending": 3, "in_transit": 4, "delivered": 5}
 
 
 def order_records() -> Select[OrderRecord]:
@@ -31,6 +33,29 @@ def order_records() -> Select[OrderRecord]:
         .outerjoin(ChannelRow, ChannelRow.id == OrderRow.channel_id)
         .outerjoin(ShipmentRow, ShipmentRow.order_id == OrderRow.id)
     )
+
+
+def order_progress(order_status: str, shipment_status: str | None) -> CardProgress | None:
+    """Place an order on the fixed fulfilment steps; cancelled orders have none."""
+    match order_status:
+        case "paid":
+            current = 1
+        case "processing":
+            current = SHIPMENT_STEP.get(shipment_status or "", 2)
+        case "completed":
+            current = len(ORDER_STEPS)
+        case _:
+            return None
+    return CardProgress(steps=list(ORDER_STEPS), current=current)
+
+
+def order_fields(order: OrderRow, customer: CustomerRow) -> list[CardField]:
+    """List the order facts shown as label-value rows."""
+    return [
+        CardField(label="주문자", value=masked(customer.name)),
+        CardField(label="수량", value=f"{order.quantity}개"),
+        CardField(label="결제금액", value=won(order.amount_won)),
+    ]
 
 
 def order_card(record: OrderRecord) -> Card:
@@ -57,6 +82,8 @@ def order_card(record: OrderRecord) -> Card:
         tag=status.text, revision=order.revision, action=action,
         undo=CardUndo(path=f"/orders/{order.id}/undo-confirm")
         if order.status == "processing" and shipment_status == "packing" else None,
+        source=source, fields=order_fields(order, customer),
+        progress=order_progress(order.status, shipment_status),
     )
 
 
