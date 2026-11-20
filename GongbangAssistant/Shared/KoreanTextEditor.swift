@@ -15,11 +15,14 @@ struct KoreanTextEditor: UIViewRepresentable {
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
         view.delegate = context.coordinator
+        view.isEditable = context.environment.isEnabled
         apply(text, to: view)
         return view
     }
 
+    // `.disabled` reaches UIKit only through the environment, so typing stops while a screen locks the text.
     func updateUIView(_ view: UITextView, context: Context) {
+        view.isEditable = context.environment.isEnabled
         if view.text != text { apply(text, to: view) }
     }
 

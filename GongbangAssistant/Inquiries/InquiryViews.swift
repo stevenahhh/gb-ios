@@ -66,6 +66,12 @@ struct InquiryDetailView: View {
             if phase != .active { saveUnsavedEdit() }
         }
         .onDisappear(perform: saveUnsavedEdit)
+        // This screen reads the inquiry store directly, so a failed load or save gets the shared connection line here.
+        .safeAreaInset(edge: .top) {
+            if store.inquiryLoadError != nil || store.requiresInquiryReload {
+                ConnectionNotice(retry: {}) { store.inquiryLoadError != nil }
+            }
+        }
     }
 
     private func detail(_ inquiry: Inquiry) -> some View {
@@ -85,8 +91,7 @@ struct InquiryDetailView: View {
             }
 
             CardSection {
-                TextEditor(text: $draft)
-                    .scrollContentBackground(.hidden)
+                KoreanTextEditor(text: $draft)
                     .frame(minHeight: 160)
                     .accessibilityLabel("답변 작성")
                     .accessibilityIdentifier("inquiry.draft")
@@ -112,6 +117,10 @@ struct InquiryDetailView: View {
                     HStack(spacing: 8) { replyActions(inquiry) }
                     VStack(spacing: 8) { replyActions(inquiry) }
                 }
+                // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
+                if inquiry.status == .approved && draft == inquiry.draft {
+                    DraftShareActions(share: .inquiry, text: inquiry.draft)
+                }
             } header: {
                 Text("답변 작성")
             } footer: {
@@ -129,7 +138,7 @@ struct InquiryDetailView: View {
     @ViewBuilder
     private func replyActions(_ inquiry: Inquiry) -> some View {
         Menu {
-            Button("새로 쓰기", systemImage: "sparkles") {
+            Button("새로 쓰기") {
                 Task { await generateDraft(for: inquiry) }
             }
             ForEach(RewriteStyle.allCases) { style in
@@ -143,8 +152,9 @@ struct InquiryDetailView: View {
                 if isGenerating {
                     ProgressView()
                 } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
+                    HStack(spacing: 6) {
+                        AssistantFace(size: .card)
+                            .accessibilityHidden(true)
                         Text("비서로 다시 쓰기")
                             .lineLimit(1)
                             .fixedSize()
