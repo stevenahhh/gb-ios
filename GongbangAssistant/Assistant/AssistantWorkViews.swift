@@ -73,7 +73,7 @@ private struct ActivityRow: View {
             NavigationLink {
                 ActivityEvidenceView(activity: activity)
             } label: {
-                Text("근거 보기")
+                Text("이유 보기")
                     .font(.subheadline.weight(.semibold))
                     .frame(minHeight: 44, alignment: .leading)
             }
