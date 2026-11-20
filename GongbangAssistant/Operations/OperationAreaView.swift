@@ -307,9 +307,20 @@ struct OperationAreaView: View {
         }
     }
 
+    /// SNS·스토어 관리 names the section after the chosen filter.
+    private var listTitle: String {
+        guard area == .channels else { return area.listTitle }
+        switch filter {
+        case "channels": return "채널"
+        case "inquiries": return "답변 기다리는 문의"
+        case "content": return "홍보 글 초안"
+        default: return area.listTitle
+        }
+    }
+
     private var listHeader: some View {
         HStack {
-            Text(area.listTitle)
+            Text(listTitle)
             if !area.sortOptions.isEmpty {
                 Spacer()
                 Menu {
