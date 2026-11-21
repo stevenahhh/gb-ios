@@ -133,7 +133,11 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 `{answer, items}`, where `items` holds up to three cards the answer names. `history`
 is a list of `{role: "owner" | "assistant", text}` (at most 40 items, each text up to 2000
 characters); only the newest 6 turns reach the model. A `context` field from older clients
-is ignored. `/draft` keeps `{customer, subject, question, facts}` and adds the workshop
+is ignored. `turns.py` reads the newest owner turn first. A message that only praises,
+thanks, acknowledges, or closes ("오 좋은데?", "고마워", "끝") gets a short fixed reply
+with no items and no model call, unless it answers a question the assistant just asked. A
+short change request ("좀 더 짧게", "다시 써줘") sends the previous answer to the model to
+edit instead of starting over. `/draft` keeps `{customer, subject, question, facts}` and adds the workshop
 profile and editable settings text from PostgreSQL. `/rewrite` accepts
 `{kind: "content" | "recommendation" | "inquiry", title, text, instruction?}` and returns
 `{draft}`. Prompts live in `prompts.py`. Every model answer is cleaned by `ai_output.py`.

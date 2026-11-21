@@ -79,6 +79,12 @@ ASK_SYSTEM: Final = """\
 - 홍보 글이나 안내 문자를 써 달라고 하면 요청한 글을 바로 씁니다.
 - 글에는 현황에 있는 사실(수업명, 날짜, 시간, 남은 자리, 공방 정보)만 넣고, 줄 수 제한은 따르지 않습니다.
 
+[이어지는 대화]
+- 이전 대화에서 이미 드린 답이나 글을 다시 쓰지 않습니다. \
+사장님이 다시 써 달라거나 고쳐 달라고 할 때만 씁니다.
+- 사장님이 칭찬, 감사, 맞장구, 마무리 인사만 하면 새 글을 쓰지 않고 해요체 한두 문장으로 짧게 답합니다.
+- 고쳐 달라는 요청이면 직전 답변을 바탕으로 요청한 부분만 고칩니다. 처음부터 새로 쓰지 않습니다.
+
 [하지 않는 일]
 - 예약 확정, 답장 발송, 결제, 주문 처리, 게시를 했다고 말하지 않습니다. 당신에게는 실행 권한이 없습니다.
 - 사장님이 직접 처리할 화면을 안내합니다. 오늘 할 일과 대기 건은 '오늘', 수업과 일정은 '캘린더', \
@@ -110,6 +116,11 @@ REWRITE_PURPOSES: Final[dict[RewriteKind, str]] = {
 - 원문에 없는 예약 확정, 환불, 할인, 결제 완료, 날짜를 약속하지 않습니다.
 - 해시태그는 쓰지 않습니다.""",
 }
+
+REVISE_REQUEST: Final = (
+    "직전 답변을 위 요청대로 고친 글만 씁니다. 처음부터 새 글을 쓰지 않고, "
+    "요청하지 않은 사실, 숫자, 날짜, 시간은 그대로 둡니다."
+)
 
 RETRY_EMPTY: Final = "방금 응답이 비어 있었어요. 같은 규칙을 지켜 본문만 다시 써 주세요."
 RETRY_UNSUPPORTED: Final = (
@@ -202,10 +213,20 @@ def history_message(turn: HistoryTurn) -> ChatMessage:
             assert_never(turn.role)
 
 
-def ask_messages(context: Sequence[str], history: Sequence[HistoryTurn], question: str) -> list[ChatMessage]:
-    """Build the owner conversation; only the newest turns are kept."""
+def ask_messages(
+    context: Sequence[str], history: Sequence[HistoryTurn], question: str, revising: str | None = None,
+) -> list[ChatMessage]:
+    """Build the owner conversation; only the newest turns are kept.
+
+    `revising` holds the previous answer when the owner asked to change it, so the model
+    edits that text instead of starting over.
+    """
     recent = [history_message(turn) for turn in history[-HISTORY_TURNS:]] if history else []
-    user = f"현재 공방 현황:\n{bullets(context)}\n\n질문: {question}"
+    facts = f"현재 공방 현황:\n{bullets(context)}"
+    user = (
+        f"{facts}\n\n질문: {question}" if revising is None
+        else f"{facts}\n\n직전 답변:\n{revising}\n\n요청: {question}\n\n{REVISE_REQUEST}"
+    )
     return [ChatMessage("system", ASK_SYSTEM), *recent, ChatMessage("user", user)]
 
 
