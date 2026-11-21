@@ -23,6 +23,7 @@
 /* Begin PBXFileReference section */
 		0B1A00000000000000000201 /* GongbangAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GongbangAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B1A00000000000000000202 /* GongbangAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GongbangAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B1A00000000000000000203 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -62,6 +63,7 @@
 			children = (
 				0B1A00000000000000000401 /* GongbangAssistant */,
 				0B1A00000000000000000402 /* GongbangAssistantUITests */,
+				0B1A00000000000000000603 /* Config */,
 				0B1A00000000000000000602 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -73,6 +75,14 @@
 				0B1A00000000000000000202 /* GongbangAssistantUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		0B1A00000000000000000603 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				0B1A00000000000000000203 /* Signing.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -211,6 +221,7 @@
 /* Begin XCBuildConfiguration section */
 		0B1A00000000000000000821 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0B1A00000000000000000203 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -238,6 +249,7 @@
 		};
 		0B1A00000000000000000822 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0B1A00000000000000000203 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -279,7 +291,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stevenahhh.GongbangAssistant;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(GB_BUNDLE_ID_PREFIX).GongbangAssistant";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -313,7 +325,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stevenahhh.GongbangAssistant;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(GB_BUNDLE_ID_PREFIX).GongbangAssistant";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -332,7 +344,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stevenahhh.GongbangAssistantUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(GB_BUNDLE_ID_PREFIX).GongbangAssistantUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -350,7 +362,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stevenahhh.GongbangAssistantUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(GB_BUNDLE_ID_PREFIX).GongbangAssistantUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
