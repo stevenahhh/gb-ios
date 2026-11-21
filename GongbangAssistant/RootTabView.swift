@@ -19,6 +19,7 @@ struct RootTabView: View {
     @SceneStorage("root.tab") private var selection: AppTab = .today
     @State private var assistant: AssistantLaunch?
     @State private var isLiveVoicePresented = false
+    @State private var wasInBackground = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -81,8 +82,17 @@ struct RootTabView: View {
             await store.loadInquiries()
             await app.refreshAttention()
         }
+        // Launch already loads every screen, so only a return from the background reloads.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { app.dataDidChange() }
+            switch phase {
+            case .background:
+                wasInBackground = true
+            case .active where wasInBackground:
+                wasInBackground = false
+                app.dataDidChange()
+            default:
+                break
+            }
         }
         .sensoryFeedback(.success, trigger: app.successCount)
         .alert("처리하지 못했어요", isPresented: failureIsPresented) {
