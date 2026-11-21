@@ -46,6 +46,7 @@ struct AssistantSheet: View {
     @State private var revealed: Set<ConversationStore.Turn.ID> = []
     @State private var isConfirmingDiscard = false
     @FocusState private var isFieldFocused: Bool
+    @State private var composerFrame: CGRect = .zero
     private let store = ConversationStore.shared
 
     private let suggestions = ["오늘 발송할 주문 알려줘", "예약금 안 낸 손님 알려줘", "주말 클래스 홍보 글 써 줘"]
@@ -64,6 +65,9 @@ struct AssistantSheet: View {
                     }
                     .scrollBounceBehavior(.basedOnSize)
                 }
+            }
+            .containerBackground(for: .navigation) {
+                AssistantBackdrop(composerFrame: composerFrame)
             }
             .navigationTitle("비서")
             .navigationBarTitleDisplayMode(.inline)
@@ -104,14 +108,13 @@ struct AssistantSheet: View {
                 AssistantComposer(message: $message, isAnswering: store.isAnswering, isFocused: $isFieldFocused) {
                     send(message)
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { composerFrame = $0 }
             }
         }
         .interactiveDismissDisabled(!trimmed(message).isEmpty)
         // Half height leaves no room for the suggestions at accessibility sizes, so those open full height.
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
-        // The sheet is a page like every tab, so its messages never sit on glass over the screen behind.
-        .presentationBackground(AppPalette.listBackground)
         .onAppear {
             store.resume()
         }

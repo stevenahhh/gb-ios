@@ -2,6 +2,9 @@ import SwiftUI
 
 /// The assistant sheet's input row: the question field, dictation, and send, with the reminder under them.
 struct AssistantComposer: View {
+    /// The room above the field where messages fade out; the sheet's backdrop is half the page color at its top.
+    static let fadeRoom: CGFloat = 28
+
     @Binding var message: String
     /// An answer is on its way: the owner can keep typing, and sending waits for it.
     let isAnswering: Bool
@@ -86,9 +89,7 @@ struct AssistantComposer: View {
                 .lineLimit(1)
         }
         .padding([.horizontal, .bottom])
-        // The room above the field is where messages fade out.
-        .padding(.top, 28)
-        .background { ComposerScrim() }
+        .padding(.top, Self.fadeRoom)
     }
 
     private func toggleRecording() async {
@@ -110,30 +111,31 @@ struct AssistantComposer: View {
     }
 }
 
-/// The composer's backdrop: clear at its top edge, then the page color behind a blur, so messages fade out under the
-/// field instead of meeting a bar's hard edge.
-private struct ComposerScrim: View {
+/// The assistant sheet keeps the system's translucent background, like Siri. Over it this layer adds the page color
+/// (black in dark mode): none at the grabber, half just above the question field, and all of it from the field down,
+/// so messages fade out under the field. Reduce Transparency gets the plain page color.
+struct AssistantBackdrop: View {
+    /// The composer in global coordinates; zero until it is laid out.
+    let composerFrame: CGRect
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    /// How far below the composer's top edge the fade ends. From there down, and under the keyboard, it is the page.
-    private static let fade: CGFloat = 44
 
     var body: some View {
-        ZStack {
-            if !reduceTransparency {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .mask { fading(from: .clear, to: .black) }
+        GeometryReader { proxy in
+            if reduceTransparency {
+                AppPalette.listBackground
+            } else {
+                let sheet = proxy.frame(in: .global)
+                let height = max(sheet.height, 1)
+                let half = composerFrame == .zero ? 1 : min(max((composerFrame.minY - sheet.minY) / height, 0), 1)
+                let full = composerFrame == .zero
+                    ? 1 : min(max((composerFrame.minY + AssistantComposer.fadeRoom - sheet.minY) / height, half), 1)
+                LinearGradient(stops: [
+                    .init(color: AppPalette.listBackground.opacity(0), location: 0),
+                    .init(color: AppPalette.listBackground.opacity(0.5), location: half),
+                    .init(color: AppPalette.listBackground, location: full),
+                ], startPoint: .top, endPoint: .bottom)
             }
-            fading(from: AppPalette.listBackground.opacity(0), to: AppPalette.listBackground)
         }
-        .ignoresSafeArea(edges: .bottom)
-    }
-
-    private func fading(from top: Color, to bottom: Color) -> some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom)
-                .frame(height: Self.fade)
-            bottom
-        }
+        .ignoresSafeArea()
     }
 }
