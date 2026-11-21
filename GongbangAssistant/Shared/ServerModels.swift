@@ -66,6 +66,20 @@ enum ActionCode: String, Codable, Hashable {
         }
     }
 
+    /// The step taken back for the toast, as in "‘머그컵’ 포장 완료를 취소했어요".
+    var undoneText: String {
+        switch self {
+        case .confirmDeposit: "입금 확인을 취소했어요"
+        case .confirmOrder: "주문 확인을 취소했어요"
+        case .pack: "포장 완료를 취소했어요"
+        case .registerInvoice: "송장 등록을 취소했어요"
+        case .markDelivered: "배송 완료를 취소했어요"
+        case .reviewContent: "검토를 취소했어요"
+        case .completeTask: "완료를 취소했어요"
+        case .acknowledgeRecommendation: "확인을 취소했어요"
+        }
+    }
+
     /// The batch button's verb, followed by the count: "포장 완료 3건".
     var batchLabel: String {
         switch self {
@@ -166,6 +180,14 @@ struct WorkItem: Codable, Identifiable, Hashable, HasDue {
 
     /// The row the card's action changes: the card itself, or the parcel an order card points at.
     var actionTarget: CardTarget { action?.target ?? CardTarget(kind: kind, id: id, revision: revision) }
+
+    /// One step back from where the card stands, with the revision that write checks. The server names a card's
+    /// own undo; an order past packing has none, so it steps back the parcel its next step writes.
+    var stepBack: (undo: UndoAction, revision: Int)? {
+        if let undo { return (undo, revision) }
+        guard let parcel = action?.target, parcel.kind == .shipment else { return nil }
+        return (UndoAction(label: "되돌리기", path: "shipments/\(parcel.id)/undo"), parcel.revision)
+    }
 
     /// A fulfilment step this card can take together with others.
     var batchCode: ActionCode? { action.map(\.code).flatMap { ActionCode.fulfilment.contains($0) ? $0 : nil } }
