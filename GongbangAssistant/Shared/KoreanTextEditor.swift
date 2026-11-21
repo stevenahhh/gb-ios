@@ -10,7 +10,7 @@ struct KoreanTextEditor: UIViewRepresentable {
     var isFresh: Binding<Bool> = .constant(false)
 
     func makeUIView(context: Context) -> UITextView {
-        let view = UITextView()
+        let view = WrappingTextView()
         view.textContainer.lineBreakMode = .byWordWrapping
         view.font = .preferredFont(forTextStyle: .body)
         view.adjustsFontForContentSizeCategory = true
@@ -18,6 +18,7 @@ struct KoreanTextEditor: UIViewRepresentable {
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
         view.delegate = context.coordinator
+        view.wrapDidChange = { [coordinator = context.coordinator] in coordinator.wrapDidChange() }
         view.isEditable = context.environment.isEnabled
         apply(text, to: view)
         return view
@@ -58,14 +59,11 @@ struct KoreanTextEditor: UIViewRepresentable {
         private let text: Binding<String>
         private let isFresh: Binding<Bool>
         private weak var view: UITextView?
-        private var link: CADisplayLink?
-        private var started = CFTimeInterval.zero
-        private var sweep = 0.0
-        /// Characters before this index have reached their resting color.
-        private var settled = 0
-        private var lead = SIMD4<Double>()
-        private var trail = SIMD4<Double>()
-        private var rest = SIMD4<Double>()
+        /// True from the request to reveal until the text is at rest again.
+        private var isRevealing = false
+        private var isUniform = false
+        /// Draws the reveal over the hidden text. Nil while a reveal waits for the view's first layout.
+        private var overlay: UIViewController?
 
         init(text: Binding<String>, isFresh: Binding<Bool>) {
             self.text = text
@@ -81,33 +79,45 @@ struct KoreanTextEditor: UIViewRepresentable {
             text.wrappedValue = view.text
         }
 
-        /// Hides the text, then lets a front cross it one character at a time. Only colors change, so the
-        /// layout, the caret, and the string the binding holds stay as they are.
+        /// The overlay shows only the lines that were in view when it started, so scrolling ends the reveal.
+        func scrollViewDidScroll(_ view: UIScrollView) {
+            if overlay != nil {
+                finishReveal()
+            }
+        }
+
+        /// Hides the text and plays the writing reveal over it. Only colors change in the text view itself, so
+        /// the layout, the caret, and the string the binding holds stay as they are.
         func reveal(in view: UITextView, isUniform: Bool) {
-            let storage = view.textStorage
-            guard link == nil, storage.length > 0 else { return }
+            guard !isRevealing, view.textStorage.length > 0 else { return }
+            isRevealing = true
             self.view = view
-            sweep = isUniform ? 0 : WritingStyle.sweep(characters: storage.length)
-            settled = 0
-            started = CACurrentMediaTime()
-            lead = Self.components(UIColor(Color.writingLead), in: view)
-            trail = Self.components(UIColor(Color.writingTrail), in: view)
-            rest = Self.components(.label, in: view)
-            storage.addAttribute(.foregroundColor, value: UIColor.clear, range: NSRange(location: 0, length: storage.length))
-            let link = CADisplayLink(target: self, selector: #selector(step))
-            link.add(to: .main, forMode: .common)
-            self.link = link
+            self.isUniform = isUniform
+            showOverlay()
         }
 
-        /// Stops the frame callback only. The display link holds this coordinator until it is invalidated.
+        /// The view's width, and so its line wrapping, changed. A reveal that waited for the first layout
+        /// starts; one already playing no longer matches the lines, so it ends with the text at rest.
+        func wrapDidChange() {
+            guard isRevealing else { return }
+            if overlay == nil {
+                showOverlay()
+            } else {
+                finishReveal()
+            }
+        }
+
+        /// Stops a reveal without touching the text: the caller is replacing it or tearing the view down.
         func cancelReveal() {
-            link?.invalidate()
-            link = nil
+            overlay?.view.removeFromSuperview()
+            overlay = nil
+            view?.clipsToBounds = true
+            isRevealing = false
         }
 
-        /// Ends the reveal with the text at rest, whether the front finished or the owner started typing.
+        /// Ends the reveal with the text at rest, whether it played out or the owner started typing.
         private func finishReveal() {
-            guard link != nil else { return }
+            guard isRevealing else { return }
             cancelReveal()
             if let storage = view?.textStorage {
                 storage.addAttribute(.foregroundColor, value: UIColor.label, range: NSRange(location: 0, length: storage.length))
@@ -115,49 +125,205 @@ struct KoreanTextEditor: UIViewRepresentable {
             isFresh.wrappedValue = false
         }
 
-        @objc private func step(_ link: CADisplayLink) {
-            guard let storage = view?.textStorage else { return cancelReveal() }
-            let string = storage.string as NSString
-            let elapsed = link.targetTimestamp - started
-            let perCharacter = sweep / Double(max(string.length, 1))
-            storage.beginEditing()
-            var index = settled
-            while index < string.length {
-                let age = elapsed - Double(index) * perCharacter
-                if age <= 0 { break }
-                let range = string.rangeOfComposedCharacterSequence(at: index)
-                storage.addAttribute(.foregroundColor, value: color(at: age / WritingStyle.settle), range: range)
-                if age >= WritingStyle.settle, index == settled { settled = NSMaxRange(range) }
-                index = NSMaxRange(range)
-            }
-            storage.endEditing()
-            if settled >= string.length { finishReveal() }
+        /// Starts once the view is on screen with a width; until then `wrapDidChange` calls back here.
+        private func showOverlay() {
+            guard let view, view.window != nil, view.bounds.width > 0 else { return }
+            guard let snapshot = WritingSnapshot(of: view) else { return finishReveal() }
+            let storage = view.textStorage
+            storage.addAttribute(.foregroundColor, value: UIColor.clear, range: NSRange(location: 0, length: storage.length))
+            // The blur reaches past the glyphs, so the overlay is wider than the text view and the text view stops
+            // clipping while it plays. The overlay clips instead: above and below it adds room only where no text
+            // is scrolled out of view, because that text is in the picture too.
+            let reach = WritingStyle.blur * 2
+            let frame = view.bounds.inset(by: UIEdgeInsets(
+                top: view.bounds.minY <= snapshot.bounds.minY ? -reach : 0, left: -reach,
+                bottom: view.bounds.maxY >= snapshot.bounds.maxY ? -reach : 0, right: -reach))
+            let host = UIHostingController(rootView: WritingOverlay(
+                snapshot: snapshot, origin: frame.origin, sweep: isUniform ? 0 : WritingStyle.sweep(characters: storage.length),
+                isUniform: isUniform, finish: { [weak self] in self?.finishReveal() }))
+            host.safeAreaRegions = []
+            host.view.backgroundColor = .clear
+            host.view.isUserInteractionEnabled = false
+            host.view.accessibilityElementsHidden = true
+            host.view.frame = frame
+            host.view.clipsToBounds = true
+            view.clipsToBounds = false
+            view.addSubview(host.view)
+            overlay = host
         }
+    }
+}
 
-        /// The same steps as `WritingStyle.band`, read by how long ago the front passed the character.
-        private func color(at share: Double) -> UIColor {
-            let value: SIMD4<Double>
-            switch share {
-            case ..<WritingStyle.leadIn:
-                value = SIMD4(lead.x, lead.y, lead.z, share / WritingStyle.leadIn)
-            case ..<WritingStyle.leadUntil:
-                value = lead
-            case ..<WritingStyle.trailFrom:
-                value = lead + (trail - lead) * ((share - WritingStyle.leadUntil) / (WritingStyle.trailFrom - WritingStyle.leadUntil))
-            case ..<WritingStyle.trailUntil:
-                value = trail
-            case ..<1:
-                value = trail + (rest - trail) * ((share - WritingStyle.trailUntil) / (1 - WritingStyle.trailUntil))
-            default:
-                return .label
-            }
-            return UIColor(red: value.x, green: value.y, blue: value.z, alpha: value.w)
+/// A text view that says when its width, and so its line wrapping, changes while it is on screen.
+private final class WrappingTextView: UITextView {
+    var wrapDidChange: (() -> Void)?
+    private var wrappedWidth = CGFloat.zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard window != nil, bounds.width != wrappedWidth else { return }
+        wrappedWidth = bounds.width
+        wrapDidChange?()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        setNeedsLayout()
+    }
+}
+
+/// The editor's text as it is laid out: drawn once at rest, then cut into lines and characters.
+/// `GraphicsContext` cannot blur a `UITextView`'s own glyphs, so the reveal draws these pieces instead.
+private struct WritingSnapshot {
+    /// One line or one character of the picture, and where it sits in the text view.
+    struct Piece {
+        let image: Image
+        let rect: CGRect
+    }
+
+    struct Line {
+        let whole: Piece
+        /// The line's characters from the left.
+        let characters: [Piece]
+        /// How much of the text comes before this line when all lines are laid end to end.
+        let lead: CGFloat
+    }
+
+    /// The area the lines cover in the text view. The editor has no text container inset, so it starts at zero.
+    let bounds: CGRect
+    let lines: [Line]
+    /// The length of all lines laid end to end.
+    let length: CGFloat
+
+    init?(of view: UITextView) {
+        guard let manager = view.textLayoutManager else { return nil }
+        manager.ensureLayout(for: manager.documentRange)
+        var fragments: [NSTextLayoutFragment] = []
+        manager.enumerateTextLayoutFragments(from: manager.documentRange.location, options: .ensuresLayout) {
+            fragments.append($0)
+            return true
         }
+        let bounds = CGRect(x: 0, y: 0, width: view.bounds.width, height: manager.usageBoundsForTextContainer.maxY)
+        var picture = UIImage()
+        // The label color in the text resolves against the current traits, which are not the view's by default here.
+        view.traitCollection.performAsCurrent {
+            let format = UIGraphicsImageRendererFormat(for: view.traitCollection)
+            picture = UIGraphicsImageRenderer(bounds: bounds, format: format).image { renderer in
+                for fragment in fragments {
+                    fragment.draw(at: fragment.layoutFragmentFrame.origin, in: renderer.cgContext)
+                }
+            }
+        }
+        guard let pixels = picture.cgImage else { return nil }
+        let scale = picture.scale
+        /// Cuts whole pixels out of the picture, so neighboring pieces meet without a seam.
+        func piece(_ area: CGRect) -> Piece? {
+            pixels.cropping(to: area).map {
+                Piece(image: Image(decorative: $0, scale: scale), rect: area.applying(CGAffineTransform(scaleX: 1 / scale, y: 1 / scale)))
+            }
+        }
+        var lines: [Line] = []
+        var lead = CGFloat.zero
+        for fragment in fragments {
+            let frame = fragment.layoutFragmentFrame
+            for line in fragment.textLineFragments where line.characterRange.length > 0 {
+                let rect = line.typographicBounds.offsetBy(dx: frame.minX, dy: frame.minY)
+                let string = line.attributedString.string as NSString
+                // Where each character starts, in pixels, ending with the line's trailing edge.
+                var edges: [CGFloat] = []
+                var index = line.characterRange.location
+                while index < NSMaxRange(line.characterRange) {
+                    edges.append(((rect.minX + line.locationForCharacter(at: index).x) * scale).rounded())
+                    index = NSMaxRange(string.rangeOfComposedCharacterSequence(at: index))
+                }
+                edges.append((rect.maxX * scale).rounded())
+                let top = (rect.minY * scale).rounded(), height = (rect.maxY * scale).rounded() - top
+                guard let whole = piece(CGRect(x: edges[0], y: top, width: edges[edges.count - 1] - edges[0], height: height)) else { continue }
+                let characters = zip(edges, edges.dropFirst()).compactMap { leading, trailing in
+                    piece(CGRect(x: leading, y: top, width: trailing - leading, height: height))
+                }
+                lines.append(Line(whole: whole, characters: characters, lead: lead))
+                lead += whole.rect.width
+            }
+        }
+        self.bounds = bounds
+        self.lines = lines
+        self.length = max(lead, 1)
+    }
+}
 
-        private static func components(_ color: UIColor, in view: UITextView) -> SIMD4<Double> {
-            var (red, green, blue, alpha) = (CGFloat.zero, CGFloat.zero, CGFloat.zero, CGFloat.zero)
-            color.resolvedColor(with: view.traitCollection).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-            return SIMD4(red, green, blue, alpha)
+/// Plays the writing reveal over an editor whose own text is hidden, then reports that it finished.
+private struct WritingOverlay: View {
+    let snapshot: WritingSnapshot
+    /// Where this view's corner sits in the text view, which is where the snapshot's pieces are measured from.
+    let origin: CGPoint
+    let sweep: Double
+    let isUniform: Bool
+    let finish: () -> Void
+    @State private var progress = 0.0
+
+    var body: some View {
+        WritingCanvas(snapshot: snapshot, origin: origin, progress: progress, sweep: sweep, isUniform: isUniform)
+            .task {
+                withAnimation(.linear(duration: sweep + WritingStyle.settle)) {
+                    progress = 1
+                } completion: {
+                    finish()
+                }
+            }
+    }
+}
+
+/// One frame of the editor's reveal: the same front, fade, blur, rise, and tint as `WritingRenderer`, drawn
+/// from the snapshot one character at a time.
+private struct WritingCanvas: View, Animatable {
+    let snapshot: WritingSnapshot
+    let origin: CGPoint
+    var progress: Double
+    let sweep: Double
+    /// Reduce Motion: the whole text fades in where it stands.
+    let isUniform: Bool
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        Canvas { context, _ in
+            context.translateBy(x: -origin.x, y: -origin.y)
+            guard !isUniform else {
+                context.opacity = UnitCurve.easeOut.value(at: progress)
+                for line in snapshot.lines {
+                    context.draw(line.whole.image, in: line.whole.rect)
+                }
+                return
+            }
+            var arriving: [(glyph: WritingSnapshot.Piece, phase: Double)] = []
+            for line in snapshot.lines {
+                let rect = line.whole.rect
+                // Characters at rest are drawn together, as the line's picture clipped to where they end.
+                var rested = rect.minX
+                for character in line.characters {
+                    let share = (line.lead + character.rect.midX - rect.minX) / snapshot.length
+                    let phase = WritingStyle.phase(progress: progress, share: share, sweep: sweep)
+                    guard phase > 0 else { break }
+                    if phase < 1 {
+                        arriving.append((character, phase))
+                    } else {
+                        rested = character.rect.maxX
+                    }
+                }
+                if rested > rect.minX {
+                    var resting = context
+                    resting.clip(to: Path(CGRect(x: rect.minX, y: rect.minY, width: rested - rect.minX, height: rect.height)))
+                    resting.draw(line.whole.image, in: rect)
+                }
+            }
+            WritingStyle.draw(arriving, lead: Color.writingLead.resolve(in: context.environment),
+                              trail: Color.writingTrail.resolve(in: context.environment), in: context) { piece, glyph in
+                glyph.draw(piece.image, in: piece.rect)
+            }
         }
     }
 }
