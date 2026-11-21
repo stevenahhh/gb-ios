@@ -24,6 +24,8 @@ extension Text {
 struct PhraseText: View {
     let text: String
     var selectable = false
+    /// Where a line narrower than the widest one sits: leading, or centered under a centered title.
+    var alignment: HorizontalAlignment = .leading
     @ScaledMetric(relativeTo: .subheadline) private var gap = 4
 
     private var pieces: [String] {
@@ -37,7 +39,7 @@ struct PhraseText: View {
     }
 
     var body: some View {
-        PhraseFlowLayout(spacing: gap, lineSpacing: 2) {
+        PhraseFlowLayout(spacing: gap, lineSpacing: 2, alignment: alignment) {
             ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
                 pieceText(piece)
             }
@@ -60,41 +62,53 @@ struct PhraseText: View {
 struct PhraseFlowLayout: Layout {
     var spacing: CGFloat
     var lineSpacing: CGFloat
+    var alignment: HorizontalAlignment = .leading
+
+    private struct Line {
+        var sizes: [CGSize] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    /// A piece that does not fit after the ones before it starts the next line.
+    private func lines(fitting maxWidth: CGFloat, subviews: Subviews) -> [Line] {
+        var lines = [Line()]
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let last = lines.count - 1
+            let extended = lines[last].width + spacing + size.width
+            if lines[last].sizes.isEmpty {
+                lines[last].width = size.width
+            } else if extended > maxWidth {
+                lines.append(Line(width: size.width))
+            } else {
+                lines[last].width = extended
+            }
+            let current = lines.count - 1
+            lines[current].height = max(lines[current].height, size.height)
+            lines[current].sizes.append(size)
+        }
+        return lines
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var widest: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > maxWidth {
-                y += lineHeight + lineSpacing
-                x = 0
-                lineHeight = 0
-            }
-            widest = max(widest, x + size.width)
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-        return CGSize(width: min(widest, maxWidth), height: y + lineHeight)
+        let lines = lines(fitting: maxWidth, subviews: subviews)
+        let height = lines.map(\.height).reduce(0, +) + lineSpacing * CGFloat(lines.count - 1)
+        return CGSize(width: min(lines.map(\.width).max() ?? 0, maxWidth), height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
+        var index = subviews.startIndex
         var y = bounds.minY
-        var lineHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                y += lineHeight + lineSpacing
-                x = bounds.minX
-                lineHeight = 0
+        for line in lines(fitting: bounds.width, subviews: subviews) {
+            var x = bounds.minX + (alignment == .center ? (bounds.width - line.width) / 2 : 0)
+            for size in line.sizes {
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+                index += 1
             }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
+            y += line.height + lineSpacing
         }
     }
 }
@@ -394,12 +408,28 @@ extension AppModel {
             }
         }
     }
+
+    /// Takes a card one step back in place. The toast names the step and offers to take it again, except when
+    /// that needs what the step back removed, such as a cleared tracking number.
+    func stepBack(_ item: WorkItem) async {
+        guard let back = item.stepBack else { return }
+        var changed: WorkItem?
+        let saved = await run(id: item.id) { changed = try await RoundupAPI.undo(back.undo, revision: back.revision) }
+        guard saved, let changed, let code = changed.action?.code else { return }
+        let message = "‘\(item.title)’ \(code.undoneText)"
+        guard code != .registerInvoice else { return showToast(message) }
+        showToast(message) { [self] in
+            await run(id: item.id) { _ = try await RoundupAPI.perform(code, on: changed) }
+        }
+    }
 }
 
 struct CardActionButton: View {
     let item: WorkItem
     let action: CardAction
     var isPrimary = false
+    /// Off while the card's step back runs, so the spinner shows on the control that was pressed.
+    var showsProgress = true
     @State private var isEnteringInvoice = false
     @Environment(AppModel.self) private var app
 
@@ -408,7 +438,7 @@ struct CardActionButton: View {
         let button = Button {
             app.takeStep(item) { isEnteringInvoice = true }
         } label: {
-            BusyLabel(title: action.label, isBusy: isRunning, isProminent: isPrimary)
+            BusyLabel(title: action.label, isBusy: isRunning && showsProgress, isProminent: isPrimary)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 30)
         }
@@ -427,6 +457,112 @@ struct CardActionButton: View {
     }
 }
 
+/// Takes a card one step back: a circle with the undo arrow beside the next step, or with `showsTitle` a
+/// full-width button that names itself.
+struct StepBackButton: View {
+    let item: WorkItem
+    /// True while this button's own write runs.
+    @Binding var isSteppingBack: Bool
+    var showsTitle = false
+    @State private var isConfirming = false
+    @Environment(AppModel.self) private var app
+
+    /// Going back from 배송 중 clears the carrier and tracking number, which only typing them again restores.
+    private var clearsInvoice: Bool { item.action?.code == .markDelivered }
+
+    var body: some View {
+        Button {
+            if clearsInvoice {
+                isConfirming = true
+            } else {
+                stepBack()
+            }
+        } label: {
+            if showsTitle {
+                BusyLabel(title: "되돌리기", isBusy: isSteppingBack)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 30)
+            } else {
+                ZStack {
+                    Image(systemName: "arrow.uturn.backward")
+                        .opacity(isSteppingBack ? 0 : 1)
+                    if isSteppingBack {
+                        ProgressView()
+                            .controlSize(.regular)
+                    }
+                }
+                .font(.body.weight(.semibold))
+                .frame(minWidth: 30, minHeight: 30)
+            }
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(showsTitle ? .automatic : .circle)
+        .controlSize(.large)
+        .disabled(app.isRunning(item.id))
+        .accessibilityLabel("되돌리기")
+        .accessibilityValue(isSteppingBack ? "처리 중" : "")
+        .accessibilityHint("이전 단계로 돌아가요.")
+        .accessibilityIdentifier("stepback.\(item.id)")
+        .confirmationDialog("송장을 지우고 되돌릴까요?", isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("송장 지우고 되돌리기", role: .destructive, action: stepBack)
+            Button("그대로 두기", role: .cancel) {}
+        } message: {
+            Text("등록한 택배사와 송장번호가 지워져요.")
+        }
+    }
+
+    private func stepBack() {
+        let item = item
+        Task {
+            isSteppingBack = true
+            await app.stepBack(item)
+            isSteppingBack = false
+        }
+    }
+}
+
+/// A card's step controls on one row: the circle takes the last step back and the wide button takes the next
+/// one. A card with no step left keeps the circle beside a line that says what it does.
+struct CardActions: View {
+    let item: WorkItem
+    var isPrimary = false
+    @State private var isSteppingBack = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        // At accessibility sizes the step back moves under the next step and spells out its name.
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 8) {
+                nextStep
+                if item.stepBack != nil {
+                    StepBackButton(item: item, isSteppingBack: $isSteppingBack, showsTitle: true)
+                }
+            }
+        } else {
+            HStack(spacing: 8) {
+                if item.stepBack != nil {
+                    StepBackButton(item: item, isSteppingBack: $isSteppingBack)
+                    if item.action == nil {
+                        // If the line wraps it breaks after 단계로, never inside "돌아갈 수 있어요".
+                        Text(keepingWords: "이전 단계로 돌아갈\u{00A0}수\u{00A0}있어요.")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                nextStep
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nextStep: some View {
+        if let action = item.action {
+            CardActionButton(item: item, action: action, isPrimary: isPrimary, showsProgress: !isSteppingBack)
+        }
+    }
+}
+
 /// Where a parcel stands on its fixed steps, as a native bar and "2/5단계"; finished parcels show none.
 struct StepProgressLine: View {
     let progress: CardProgress
@@ -435,12 +571,16 @@ struct StepProgressLine: View {
     var body: some View {
         if progress.current < progress.steps.count {
             HStack(spacing: 8) {
+                // The count never wraps; on a narrow row the bar gives up width instead.
                 ProgressView(value: Double(progress.current), total: Double(progress.steps.count))
                     .tint(.primary)
-                    .frame(width: barWidth)
+                    .frame(maxWidth: barWidth)
                 Text("\(progress.current)/\(progress.steps.count)단계")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(Color.secondaryText)
+                    .fixedSize()
+                    .contentTransition(.numericText(value: Double(progress.current)))
+                    .animation(.default, value: progress.current)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("진행 단계")
@@ -461,7 +601,9 @@ struct BusyLabel: View {
             text
                 .opacity(isBusy ? 0 : 1)
             if isBusy {
+                // A large button would bring a spinner taller than its title, and the button would grow under it.
                 ProgressView()
+                    .controlSize(.regular)
                     .transition(.opacity)
             }
         }
@@ -492,7 +634,7 @@ struct WorkCardContent: View {
         VStack(alignment: .leading, spacing: 6) {
             let header = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-                : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+                : AnyLayout(HStackLayout(alignment: .center))
             header {
                 Text(keepingWords: item.title)
                     .font(.headline)
@@ -557,7 +699,7 @@ struct WorkCard: View {
         if let draft = item.draft {
             AssistantDraftRow(title: item.title, reference: draft)
         } else if let route = item.route {
-            if let action = item.action {
+            if item.action != nil {
                 VStack(alignment: .leading, spacing: 8) {
                     NavigationLink(value: route) {
                         HStack(spacing: 8) {
@@ -572,7 +714,7 @@ struct WorkCard: View {
                     .buttonStyle(.plain)
                     .navigationLinkIndicatorVisibility(.hidden)
                     .accessibilityIdentifier("card.\(item.id)")
-                    CardActionButton(item: item, action: action, isPrimary: isPrimary)
+                    CardActions(item: item, isPrimary: isPrimary)
                 }
             } else {
                 NavigationLink(value: route) {

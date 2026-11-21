@@ -138,8 +138,10 @@ enum RoundupAPI {
         return changed.items
     }
 
-    static func undo(_ undo: UndoAction, revision: Int) async throws {
-        let _: Acknowledged = try await post(undo.path, Revisioned(expectedRevision: revision))
+    /// Takes one step back and returns the changed row, which carries the step that can be taken again.
+    @discardableResult
+    static func undo(_ undo: UndoAction, revision: Int) async throws -> WorkItem {
+        try await post(undo.path, Revisioned(expectedRevision: revision))
     }
 
     /// Moves rows a batch changed back one step each; every row is an order or every row is a parcel.
