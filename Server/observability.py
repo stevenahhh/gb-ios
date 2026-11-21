@@ -19,6 +19,7 @@ MAX_JSON_BYTES: Final = 64 * 1024
 MAX_AUDIO_BYTES: Final = 2 * 1024 * 1024
 LOG_FIELDS: Final = (
     "request_id", "method", "route", "status", "duration_ms", "error_type", "upstream_status",
+    "intent", "intent_source", "confidence",
 )
 
 

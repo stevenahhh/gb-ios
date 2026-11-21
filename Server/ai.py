@@ -1,5 +1,6 @@
 """HyperCLOVA X endpoints: inquiry reply drafts, owner questions, and rewrites."""
 
+import asyncio
 import logging
 from collections.abc import Callable, Sequence
 from functools import partial
@@ -12,6 +13,7 @@ from ai_output import empty_problems, normalize, reply_problems
 from assistant import build_context, named_cards, shop_facts
 from common import Now
 from contracts import Card
+from intents import Reading, classify, context_turns, log_intent
 from prompts import (
     ASK_SAMPLING,
     DRAFT_SAMPLING,
@@ -19,14 +21,23 @@ from prompts import (
     REWRITE_SAMPLING,
     HistoryTurn,
     Inquiry,
+    Intent,
     RewriteKind,
     ask_messages,
     draft_messages,
+    intent_guide,
     retry_message,
     rewrite_messages,
 )
 from providers import UPSTREAM_FAILED, ChatMessage, Sampling, chat
-from turns import reaction, reaction_reply, revision_target
+from turns import (
+    CLARIFY_REPLY,
+    previous_answer,
+    reaction,
+    reaction_reply,
+    revision_target,
+    unresolved_reference,
+)
 
 LOGGER: Final = logging.getLogger("roundup.ai")
 ATTEMPTS: Final = 2
@@ -60,10 +71,11 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """Assistant answer and the cards it names, so the owner can act on them."""
+    """Assistant answer, the cards it names so the owner can act on them, and the intent it answered."""
 
     answer: str
     items: list[Card] = Field(default_factory=list)
+    intent: Intent | None = None
 
 
 class RewriteRequest(BaseModel):
@@ -109,15 +121,31 @@ async def draft(body: DraftRequest) -> DraftResponse:
 
 @router.post("/ask")
 async def ask(body: AskRequest, now: Now) -> AskResponse:
-    """Answer from facts read from PostgreSQL; a bare reaction gets a short reply without the model."""
-    kind = reaction(body.question, body.history)
+    """Name the turn's intent, then answer it from facts read from PostgreSQL.
+
+    Rules settle reactions, change requests, and a redo with nothing to redo without the model.
+    Any other turn is classified by one short call that runs while the facts load.
+    """
+    question, history = body.question, body.history
+    kind = reaction(question, history)
     if kind is not None:
-        return AskResponse(answer=reaction_reply(kind, body.history))
-    context, cards = await build_context(now)
-    revising = revision_target(body.question, body.history)
-    messages = ask_messages(context, body.history, body.question, revising)
+        log_intent(Reading("react", "rules"))
+        return AskResponse(answer=reaction_reply(kind, history), intent="react")
+    if unresolved_reference(question, history):
+        log_intent(Reading("clarify", "rules"))
+        return AskResponse(answer=CLARIFY_REPLY, intent="clarify")
+    revising = revision_target(question, history)
+    if revising is None:
+        (context, cards), reading = await asyncio.gather(build_context(now), classify(question, history))
+        revising = previous_answer(history) if reading.intent == "edit" else None
+    else:
+        context, cards = await build_context(now)
+        reading = Reading("edit", "rules")
+    log_intent(reading)
+    turns = context_turns(reading.intent, history)
+    messages = ask_messages(context, turns, question, intent_guide(reading.intent, reading.reading), revising)
     answer = await generate(messages, ASK_SAMPLING, empty_problems)
-    return AskResponse(answer=answer, items=named_cards(answer, cards))
+    return AskResponse(answer=answer, items=named_cards(answer, cards), intent=reading.intent)
 
 
 @router.post("/rewrite")

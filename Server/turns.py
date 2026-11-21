@@ -59,6 +59,12 @@ REVISION_WORDS: Final = (
 )
 REVISION: Final = re.compile(REVISION_WORDS)
 NEW_QUESTION: Final = re.compile(r"몇|언제|어디|누구|얼마|무슨|뭐|무엇|어떻게|왜|알려|일정|현황")
+REFERENCE: Final = re.compile(r"그거|그걸|그것|그\s*글|아까|방금|저번|이전")
+AGAIN: Final = re.compile(rf"다시|또|{REVISION_WORDS}")
+CLARIFY_REPLY: Final = (
+    "어떤 걸 다시 해 드릴까요? 이 대화에는 아직 제가 쓴 글이 없어요.\n"
+    "· 홍보 글 새로 쓰기\n· 문의 답장 초안 쓰기\n· 오늘 할 일 다시 보기"
+)
 
 REPLIES: Final[dict[Reaction, tuple[str, str]]] = {
     "praise": (
@@ -113,11 +119,41 @@ def reaction_reply(kind: Reaction, history: Sequence[HistoryTurn]) -> str:
     return after_writing if request is not None and WRITING.search(request) else plain
 
 
+def previous_answer(history: Sequence[HistoryTurn]) -> str | None:
+    """Return the newest assistant answer, skipping a trailing offer such as "더 짧게 줄여 드릴까요?"."""
+    answers = [turn.text for turn in history if turn.role == "assistant"]
+    latest = [text for text in answers if OFFER.search(text) is None] or answers
+    return latest[-1] if latest else None
+
+
 def revision_target(question: str, history: Sequence[HistoryTurn]) -> str | None:
     """Return the previous answer when the owner asks to change it rather than ask something new."""
-    previous = last_text(history, "assistant")
+    previous = previous_answer(history)
     if previous is None or len(question) > MAX_REVISION_CHARS:
         return None
     if REVISION.search(question) is None or NEW_QUESTION.search(question) is not None:
         return None
     return previous
+
+
+def unresolved_reference(question: str, history: Sequence[HistoryTurn]) -> bool:
+    """Tell when a short request to redo "그거" points at an answer this conversation does not have."""
+    if last_text(history, "assistant") is not None or len(question) > MAX_REVISION_CHARS:
+        return False
+    return (
+        REFERENCE.search(question) is not None and AGAIN.search(question) is not None
+        and NEW_QUESTION.search(question) is None
+    )
+
+
+def without_drafts(history: Sequence[HistoryTurn]) -> list[HistoryTurn]:
+    """Drop the pieces the assistant wrote on request, so a new topic is not answered from a stale draft."""
+    kept: list[HistoryTurn] = []
+    request = ""
+    for turn in history:
+        if turn.role == "owner":
+            request = turn.text
+        elif WRITING.search(request) or REVISION.search(request):
+            continue
+        kept.append(turn)
+    return kept

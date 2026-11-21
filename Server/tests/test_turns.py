@@ -3,7 +3,15 @@
 import pytest
 
 from prompts import HistoryTurn
-from turns import Reaction, reaction, reaction_reply, revision_target
+from turns import (
+    Reaction,
+    previous_answer,
+    reaction,
+    reaction_reply,
+    revision_target,
+    unresolved_reference,
+    without_drafts,
+)
 
 DRAFTED = (
     HistoryTurn(role="owner", text="주말 클래스 홍보 글 써줘"),
@@ -44,3 +52,27 @@ def test_reply_after_writing_points_at_the_next_step() -> None:
 def test_revision_target(question: str, *, revises: bool) -> None:
     assert (revision_target(question, DRAFTED) is not None) is revises
     assert revision_target(question, ()) is None
+
+
+def test_previous_answer_skips_a_trailing_offer() -> None:
+    assert previous_answer(OFFERED) == DRAFTED[1].text
+    assert previous_answer(()) is None
+
+
+@pytest.mark.parametrize(
+    ("question", "dangling"),
+    [
+        ("그거 다시", True), ("아까 그 글 짧게", True), ("방금 들어온 주문 확인해줘", False),
+        ("그거 다시 언제였지?", False), ("주말 홍보 글 짧게 써줘", False),
+    ],
+)
+def test_unresolved_reference(question: str, *, dangling: bool) -> None:
+    assert unresolved_reference(question, ()) is dangling
+    assert unresolved_reference(question, DRAFTED) is False
+
+
+def test_without_drafts_keeps_questions_and_plain_answers() -> None:
+    answered = (
+        HistoryTurn(role="owner", text="오늘 예약 몇 건?"), HistoryTurn(role="assistant", text="2건이에요."),
+    )
+    assert without_drafts([*answered, *OFFERED]) == [*answered, DRAFTED[0]]
