@@ -79,7 +79,9 @@ Ranked jobs:
 - Primary action: send a question.
 - Priorities: 1) the focused text field with the send button, 2) three suggested questions, 3) the reminder that the assistant can be wrong.
 - Left out on purpose: stacked sheets.
-- Layout: sheet with medium and large detents and a visible grabber; the composer sits in the bottom safe area; scroll owner is the message list. Anti-patterns: a decorative mic that does nothing different.
+- Layout: sheet with medium and large detents and a visible grabber, on the page color; scroll owner is the transcript scroll view. The composer sits in the bottom safe area on a backdrop that fades from clear into the page color over 44 pt behind a masked material blur (solid page color under Reduce Transparency). Toolbar: 닫기 leading; 지난 대화 (`clock.arrow.circlepath`) and, on a conversation, 새 대화 (`square.and.pencil`) trailing. Anti-patterns: a decorative mic that does nothing different.
+- Chats are saved on the device (`ConversationStore`, the last 100, one JSON file each) and reopen when used within 30 minutes. 지난 대화 lists them by day with swipe to delete; an opened chat pushes with the system back button and continuing it sends its history. Live voice turns are saved into the same chat.
+- A sent question moves to the top and its answer is written below it; one question is sent at a time; a failed question shows 다시 시도. Cards in answers are drawn boxes with the `.card` radius on `AppPalette.card`, and one tap opens one detail.
 
 ### 실시간 음성 (live voice)
 - Primary action: talk; the assistant answers aloud with subtitles.
