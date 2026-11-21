@@ -79,8 +79,10 @@ struct AssistantComposer: View {
                 .foregroundStyle(Color.secondaryText)
                 .lineLimit(1)
         }
-        .padding()
-        .background(.bar)
+        .padding([.horizontal, .bottom])
+        // The room above the field is where messages fade out.
+        .padding(.top, 28)
+        .background { ComposerScrim() }
     }
 
     private func toggleRecording() async {
@@ -98,6 +100,34 @@ struct AssistantComposer: View {
             }
         } catch {
             voiceError = error.localizedDescription
+        }
+    }
+}
+
+/// The composer's backdrop: clear at its top edge, then the page color behind a blur, so messages fade out under the
+/// field instead of meeting a bar's hard edge.
+private struct ComposerScrim: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// How far below the composer's top edge the fade ends. From there down, and under the keyboard, it is the page.
+    private static let fade: CGFloat = 44
+
+    var body: some View {
+        ZStack {
+            if !reduceTransparency {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .mask { fading(from: .clear, to: .black) }
+            }
+            fading(from: AppPalette.listBackground.opacity(0), to: AppPalette.listBackground)
+        }
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    private func fading(from top: Color, to bottom: Color) -> some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom)
+                .frame(height: Self.fade)
+            bottom
         }
     }
 }

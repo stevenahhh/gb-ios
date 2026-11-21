@@ -111,6 +111,8 @@ struct AssistantSheet: View {
         // Half height leaves no room for the suggestions at accessibility sizes, so those open full height.
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
+        // The sheet is a page like every tab, so its messages never sit on glass over the screen behind.
+        .presentationBackground(AppPalette.listBackground)
         .onAppear {
             store.resume()
         }
