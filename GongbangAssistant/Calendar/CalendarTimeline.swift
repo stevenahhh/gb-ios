@@ -866,7 +866,7 @@ struct DayOrdersView: View {
 
     private func row(_ order: AgendaItem) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(keepingWords: order.title).font(.body.weight(.medium))
+            Text(verbatim: order.title).font(.body.weight(.medium))
             Text("\(order.time) 접수 · \(order.detail)")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)

@@ -170,7 +170,7 @@ struct ReconnectingView: View {
                     .controlSize(.large)
             }
         } description: {
-            Text(keepingWords: "서버에 연결하지 못했어요. 연결되면 자동으로 불러와요.")
+            Text(verbatim: "서버에 연결하지 못했어요. 연결되면 자동으로 불러와요.")
                 .foregroundStyle(Color.secondaryText)
         } actions: {
             Button("지금 다시 시도") { Task { await retry() } }

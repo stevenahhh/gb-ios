@@ -67,7 +67,7 @@ private struct ActivityRow: View {
                     .foregroundStyle(Color.secondaryText)
                 // The badge sits under the sentence, so the sentence keeps the row's width.
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(keepingWords: activity.summary)
+                    Text(verbatim: activity.summary)
                         .font(.body)
                     if let status = activity.status {
                         StatusBadge(Status(text: status, tone: .attention))
@@ -95,10 +95,10 @@ struct ActivityEvidenceView: View {
     var body: some View {
         List {
             CardSection("\(AssistantIdentity.name)가 한 일") {
-                Text(keepingWords: activity.summary)
+                Text(verbatim: activity.summary)
             }
             CardSection("이유", footer: "\(AssistantIdentity.name)가 참고한 공방 정보예요.") {
-                ForEach(activity.evidence, id: \.self) { Text(keepingWords: $0) }
+                ForEach(activity.evidence, id: \.self) { Text(verbatim: $0) }
             }
             CardSection {
                 NavigationLink("자세히 보기", value: activity.route)

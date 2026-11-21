@@ -52,7 +52,7 @@ struct InquiryDetailView: View {
                 ContentUnavailableView {
                     Label("문의를 찾을 수 없어요", systemImage: "bubble.left")
                 } description: {
-                    Text(keepingWords: "목록으로 돌아가 다시 골라 주세요.")
+                    Text(verbatim: "목록으로 돌아가 다시 골라 주세요.")
                         .foregroundStyle(Color.secondaryText)
                 }
             }
@@ -81,7 +81,7 @@ struct InquiryDetailView: View {
             CardSection("손님 문의") {
                 VStack(alignment: .leading, spacing: 4) {
                     StatusBadge(inquiry.badge)
-                    Text(keepingWords: inquiry.subject)
+                    Text(verbatim: inquiry.subject)
                         .font(.headline)
                     Text(inquiry.customer)
                         .font(.subheadline)
@@ -109,7 +109,7 @@ struct InquiryDetailView: View {
                 }
                 if let errorMessage {
                     Label {
-                        Text(keepingWords: errorMessage)
+                        Text(verbatim: errorMessage)
                             .foregroundStyle(.primary)
                     } icon: {
                         Image(systemName: "exclamationmark.circle.fill")

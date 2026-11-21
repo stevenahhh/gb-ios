@@ -204,7 +204,7 @@ struct OperationsView: View {
                 .monospacedDigit()
             // A label such as "답변 기다리는 문의" takes two lines; every tile reserves both, so the 보기 buttons line up.
             let chevron = Text(Image(systemName: "chevron.forward")).font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
-            Text("\(Text(keepingWords: metric.label))\u{00A0}\(chevron)")
+            Text("\(Text(verbatim: metric.label))\u{00A0}\(chevron)")
                 .font(.subheadline.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .lineLimit(2, reservesSpace: true)

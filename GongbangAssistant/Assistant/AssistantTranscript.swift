@@ -157,7 +157,7 @@ private struct UnansweredNotice: View {
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: 8) {
-                Text(keepingWords: text)
+                Text(verbatim: text)
                 if let retry {
                     Button("다시 시도", action: retry)
                         .buttonStyle(.bordered)

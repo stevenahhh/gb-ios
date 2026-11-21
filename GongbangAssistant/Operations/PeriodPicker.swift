@@ -63,7 +63,7 @@ struct PeriodPickerSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(keepingWords: summary)
+                    Text(verbatim: summary)
                         .font(.headline)
                         .monospacedDigit()
                         .accessibilityIdentifier("period.summary")

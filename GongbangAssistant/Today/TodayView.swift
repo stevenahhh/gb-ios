@@ -57,7 +57,7 @@ struct TodayView: View {
         ContentUnavailableView {
             Label("오늘 등록된 일이 없어요", systemImage: "checkmark.circle")
         } description: {
-            Text(keepingWords: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
+            Text(verbatim: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
                 .foregroundStyle(Color.secondaryText)
         }
         .accessibilityIdentifier("today.empty")
@@ -165,7 +165,7 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         PhraseText(text: today.delivery.transitSummary)
                             .font(.headline)
-                        Text(keepingWords: today.delivery.transitDetail)
+                        Text(verbatim: today.delivery.transitDetail)
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                     }

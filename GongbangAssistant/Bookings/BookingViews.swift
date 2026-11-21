@@ -41,7 +41,7 @@ struct BookingListRow: View {
     }
 
     private var title: some View {
-        Text(keepingWords: item.title)
+        Text(verbatim: item.title)
             .font(.subheadline.weight(.semibold))
     }
 
@@ -82,7 +82,7 @@ struct ProcessStepRow: View {
                         .foregroundStyle(Color.secondaryText)
                     if isDone {
                         Label {
-                            Text(keepingWords: doneText).foregroundStyle(.primary)
+                            Text(verbatim: doneText).foregroundStyle(.primary)
                         } icon: {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.secondaryText)
                         }
@@ -91,7 +91,7 @@ struct ProcessStepRow: View {
                         DueLabel(due: due)
                     } else if let deadline {
                         Label {
-                            Text(keepingWords: deadline).foregroundStyle(.primary)
+                            Text(verbatim: deadline).foregroundStyle(.primary)
                         } icon: {
                             Image(systemName: "clock").foregroundStyle(Color.secondaryText)
                         }
@@ -151,7 +151,7 @@ struct DetailValueRow: View {
 
     var body: some View {
         LabeledContent(label) {
-            Text(keepingWords: value)
+            Text(verbatim: value)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
         }
@@ -184,7 +184,7 @@ struct BookingDetailView: View {
     private func sections(_ detail: BookingDetail) -> some View {
         CardSection("예약 정보") {
             HStack(alignment: .firstTextBaseline) {
-                Text(keepingWords: detail.title).font(.headline)
+                Text(verbatim: detail.title).font(.headline)
                 Spacer(minLength: 8)
                 StatusBadge(detail.status)
             }
@@ -364,7 +364,7 @@ struct OrderSummarySections: View {
         CardSection {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
-                    Text(keepingWords: item.title)
+                    Text(verbatim: item.title)
                         .font(.title3.bold())
                         .multilineTextAlignment(.center)
                     if let line = item.lines.first {
@@ -376,7 +376,7 @@ struct OrderSummarySections: View {
                         DueLabel(due: due)
                     } else if let deadline = item.deadline {
                         Label {
-                            Text(keepingWords: deadline).foregroundStyle(.primary)
+                            Text(verbatim: deadline).foregroundStyle(.primary)
                         } icon: {
                             Image(systemName: "clock").foregroundStyle(Color.secondaryText)
                         }

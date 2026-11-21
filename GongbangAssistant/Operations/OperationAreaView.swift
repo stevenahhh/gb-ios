@@ -498,7 +498,7 @@ struct OperationAreaView: View {
         ContentUnavailableView {
             Label(area.noDataTitle, systemImage: area.systemImage)
         } description: {
-            Text(keepingWords: area.noDataMessage)
+            Text(verbatim: area.noDataMessage)
                 .foregroundStyle(Color.secondaryText)
         } actions: {
             if area == .bookings {
@@ -522,14 +522,14 @@ struct OperationAreaView: View {
             ContentUnavailableView {
                 Label("‘\(query)’ 검색 결과가 없어요", systemImage: "magnifyingglass")
             } description: {
-                Text(keepingWords: "다른 검색어로 다시 찾아보세요.")
+                Text(verbatim: "다른 검색어로 다시 찾아보세요.")
                     .foregroundStyle(Color.secondaryText)
             }
         } else {
             ContentUnavailableView {
                 Label(area.emptyTitle, systemImage: "tray")
             } description: {
-                Text(keepingWords: "지금 고른 상태에는 항목이 없어요.")
+                Text(verbatim: "지금 고른 상태에는 항목이 없어요.")
                     .foregroundStyle(Color.secondaryText)
             } actions: {
                 if filter != area.filters[0].key {
