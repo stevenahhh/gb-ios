@@ -23,6 +23,52 @@ final class InquiryPersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testOnlyConnectionFailuresAreMarkedForAutomaticRetry() async {
+        let server = MemoryInquiryRepository()
+        let store = InquiryStore(repository: server)
+        server.loadFails = true
+        await store.loadInquiries()
+        XCTAssertTrue(store.inquiryLoadIsTransient)
+
+        server.loadIsCancelled = true
+        await store.loadInquiries()
+        XCTAssertNotNil(store.inquiryLoadError)
+        XCTAssertTrue(store.inquiryLoadIsTransient, "a cancelled retry must not stop automatic retries")
+
+        server.loadIsCancelled = false
+        server.loadFails = false
+        server.loadIsRejected = true
+        await store.loadInquiries()
+        XCTAssertNotNil(store.inquiryLoadError)
+        XCTAssertFalse(store.inquiryLoadIsTransient)
+
+        server.loadIsRejected = false
+        await store.loadInquiries()
+        XCTAssertNil(store.inquiryLoadError)
+        XCTAssertFalse(store.inquiryLoadIsTransient)
+    }
+
+    @MainActor
+    func testCachedInquiriesShowWhileOfflineUntilTheServerAnswers() async {
+        let server = MemoryInquiryRepository()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        server.cachedRecords = (Array(server.records.prefix(1)), savedAt)
+        server.loadFails = true
+        let store = InquiryStore(repository: server)
+
+        await store.loadInquiries()
+        XCTAssertEqual(store.inquiries.map(\.id), ["inquiry-clay"])
+        XCTAssertEqual(store.lastLoadedAt, savedAt)
+        XCTAssertFalse(store.hasLoadedInquiries)
+        XCTAssertNotNil(store.inquiryLoadError)
+
+        server.loadFails = false
+        await store.loadInquiries()
+        XCTAssertEqual(store.inquiries.count, 3)
+        XCTAssertTrue(store.hasLoadedInquiries)
+    }
+
+    @MainActor
     func testSavedDraftSurvivesNewStoreAndDecisionUsesCurrentUnsavedTextAtomically() async throws {
         let server = MemoryInquiryRepository()
         let store = InquiryStore(repository: server)
