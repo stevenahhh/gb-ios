@@ -7,8 +7,9 @@ enum CalendarTokens {
     static let background = pair(0xFFFFFF, 0x000000)
     static let label = pair(0x1C1C1E, 0xFFFFFF)
     static let secondary = pair(0x636366, 0xAEAEB2)
-    /// Dots and arrows only; never text.
-    static let tertiary = pair(0xAEAEB2, 0x636366)
+    /// Dots and arrows only; never text. 3:1 or better on the page and on the pinned box in both modes, so the
+    /// schedule dots under a date can be read.
+    static let tertiary = pair(0x8A8A8E, 0x6C6C70)
     static let separator = pair(0xE5E5EA, 0x38383A)
     static let fill = pair(0xF2F2F7, 0x1C1C1E)
     static let pinned = pair(0xF5F5F7, 0x1C1C1E)

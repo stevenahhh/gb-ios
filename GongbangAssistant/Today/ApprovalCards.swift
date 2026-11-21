@@ -83,14 +83,15 @@ struct ApprovalSection: View {
                 }
             } header: {
                 HStack(alignment: .firstTextBaseline) {
+                    // `Color.primary` is the label color; `.primary` alone would be the header's gray.
                     Text("확인해 주실 일 \(items.count)건")
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.primary)
                     Spacer(minLength: 8)
                     // Only inquiries failed: a small note instead of another box.
                     if store.inquiryLoadError != nil, let last = store.lastLoadedAt {
                         Text("마지막 확인 \(last.formatted(date: .omitted, time: .shortened))")
-                            .font(.footnote)
+                            .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                     }
                 }
@@ -154,17 +155,16 @@ struct ApprovalCard: View {
         VStack(alignment: .leading, spacing: 10) {
             NavigationLink(value: item.route) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        AssistantFace(size: .card)
-                            .accessibilityHidden(true)
-                        Text(item.isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.assistantAccent)
-                        Spacer(minLength: 8)
-                        if let meta = item.meta {
-                            Text(meta)
-                                .font(.footnote)
-                                .foregroundStyle(Color.secondaryText)
+                    // The customer moves under the label when the two no longer fit on one line.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            AssistantDraftLabel(isReply: item.isReply)
+                            Spacer(minLength: 8)
+                            meta
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            AssistantDraftLabel(isReply: item.isReply)
+                            meta
                         }
                     }
                     Text(keepingWords: item.title)
@@ -206,6 +206,15 @@ struct ApprovalCard: View {
         }
         .padding(.vertical, 6)
         .navigationDestination(isPresented: $isEditing) { item.editor }
+    }
+
+    @ViewBuilder
+    private var meta: some View {
+        if let meta = item.meta {
+            Text(meta)
+                .font(.subheadline)
+                .foregroundStyle(Color.secondaryText)
+        }
     }
 
     private func decided(_ decision: (text: String, revision: Int)) -> some View {

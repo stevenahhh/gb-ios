@@ -57,17 +57,19 @@ struct PeriodNavigator: View {
                 .foregroundStyle(CalendarTokens.label)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
+            // While today is showing the word turns gray and regular instead of fading: at 40% it measured 2.4:1.
             Button(action: today) {
                 Text("오늘")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(CalendarTokens.label)
+                    .font(.subheadline.weight(isShowingToday ? .regular : .semibold))
+                    .foregroundStyle(isShowingToday ? CalendarTokens.secondary : CalendarTokens.label)
                     .padding(.horizontal, 12)
-                    .frame(height: 30)
+                    .frame(height: 32)
                     .background(CalendarTokens.fill, in: .capsule)
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressDimStyle())
             .disabled(isShowingToday)
-            .opacity(isShowingToday ? 0.4 : 1)
             .accessibilityIdentifier("calendar.today")
             arrow("chevron.left", label: "이전") { move(-1) }
             arrow("chevron.right", label: "다음") { move(1) }
@@ -111,7 +113,7 @@ struct DayCell: View {
             VStack(spacing: 6) {
                 if let weekday {
                     Text(weekday)
-                        .font(.caption.weight(isSelected ? .bold : .regular))
+                        .font(.subheadline.weight(isSelected ? .bold : .regular))
                         .foregroundStyle(isSelected ? CalendarTokens.label : CalendarTokens.secondary)
                 }
                 Text("\(Calendar.workshop.component(.day, from: date))")
@@ -208,7 +210,7 @@ struct MonthGrid: View {
             HStack(spacing: 0) {
                 ForEach(CalendarGrid.weekdays, id: \.self) { weekday in
                     Text(weekday)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(CalendarTokens.secondary)
                         .frame(maxWidth: .infinity)
                 }

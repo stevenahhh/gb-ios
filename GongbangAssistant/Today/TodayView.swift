@@ -58,6 +58,7 @@ struct TodayView: View {
             Label("오늘 등록된 일이 없어요", systemImage: "checkmark.circle")
         } description: {
             Text(keepingWords: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
+                .foregroundStyle(Color.secondaryText)
         }
         .accessibilityIdentifier("today.empty")
         .refreshable { await load() }

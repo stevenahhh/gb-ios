@@ -97,7 +97,7 @@ private struct ToastBar: View {
                         .padding(4)
                         .contentShape(.rect)
                 }
-                .buttonStyle(ToastUndoStyle())
+                .buttonStyle(PressDimStyle())
                 .accessibilityIdentifier("toast.undo")
             }
         }
@@ -119,8 +119,9 @@ private struct ToastBar: View {
     }
 }
 
-/// The undo pill dims while it is pressed.
-private struct ToastUndoStyle: ButtonStyle {
+/// Dims its label while pressed and does nothing else. Unlike `.plain` it does not fade a disabled label (that
+/// fade measured about half), so a disabled pill or row can say so with its own gray and stay readable.
+struct PressDimStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.6 : 1)
