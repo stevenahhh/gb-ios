@@ -79,7 +79,7 @@ enum ActionCode: String, Codable, Hashable {
 }
 
 /// The row an action writes when it is not the card's own, such as an order's parcel.
-struct CardTarget: Decodable, Hashable {
+struct CardTarget: Codable, Hashable {
     let kind: CardKind
     let id: String
     let revision: Int
