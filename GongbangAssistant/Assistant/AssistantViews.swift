@@ -153,7 +153,7 @@ struct AssistantSheet: View {
                             Text(turn.text)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 10)
-                                .background(.tint.opacity(0.15), in: .rect(cornerRadius: 16))
+                                .background(.tint.opacity(0.15), in: .inner)
                         }
                         .listRowSeparator(.hidden)
                     case .assistant:
@@ -169,7 +169,7 @@ struct AssistantSheet: View {
                             ForEach(turn.items) { item in
                                 WorkCard(item: item, isPrimary: false)
                                     .padding(12)
-                                    .background(.fill.quaternary, in: .rect(cornerRadius: 14))
+                                    .background(.fill.quaternary, in: .inner)
                             }
                             .opacity(turn.isFresh ? 0 : 1)
                         }

@@ -337,7 +337,7 @@ struct TaskRow: View {
                 Image(systemName: kind.symbol)
                     .foregroundStyle(.primary)
                     .frame(width: iconSize, height: iconSize)
-                    .background(CalendarTokens.fill, in: .rect(cornerRadius: 8))
+                    .background(CalendarTokens.fill, in: .rect(cornerRadius: 8, style: .continuous))
                     .accessibilityHidden(true)
             }
             if visibleTimeline != nil {
