@@ -38,7 +38,6 @@ struct AssistantAccessory: View {
 }
 
 struct AssistantSheet: View {
-    let launch: AssistantLaunch
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var message = ""

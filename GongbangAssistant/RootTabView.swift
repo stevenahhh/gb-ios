@@ -8,16 +8,9 @@ enum AppTab: String, Hashable {
     case settings
 }
 
-enum AssistantLaunch: String, Identifiable {
-    case text
-    case voice
-
-    var id: Self { self }
-}
-
 struct RootTabView: View {
     @SceneStorage("root.tab") private var selection: AppTab = .today
-    @State private var assistant: AssistantLaunch?
+    @State private var isAssistantPresented = false
     @State private var isLiveVoicePresented = false
     @State private var wasInBackground = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -53,19 +46,31 @@ struct RootTabView: View {
             ZStack {
                 if app.toast == nil {
                     AssistantAccessory(
-                        openText: { assistant = .text },
-                        openVoice: { isLiveVoicePresented = true }
+                        openText: { isAssistantPresented = true },
+                        openVoice: {
+                            // The live view reads the history once as it starts, so the chat is chosen before it opens.
+                            ConversationStore.shared.resume()
+                            isLiveVoicePresented = true
+                        }
                     )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { app.accessorySlot = $0 }
         }
-        .sheet(item: $assistant) { launch in
-            AssistantSheet(launch: launch)
+        .sheet(isPresented: $isAssistantPresented) {
+            AssistantSheet()
         }
+        // Spoken turns join the same saved chat the sheet shows, so the owner can read them back later.
         .fullScreenCover(isPresented: $isLiveVoicePresented) {
-            AssistantLiveView(history: { [] }, onTurn: { _ in })
+            AssistantLiveView(
+                history: { ConversationStore.shared.currentAPIHistory },
+                onTurn: { turn in
+                    ConversationStore.shared.recordLiveTurn(
+                        role: turn.role == .owner ? .owner : .assistant, text: turn.text, items: turn.items
+                    )
+                }
+            )
         }
         // Over the assistant bar's own slot, so the notice never hides the row that just changed.
         // The overlay spans the window, so it takes touches only while a toast is on screen.
