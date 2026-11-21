@@ -65,12 +65,15 @@ private struct ActivityRow: View {
                 Text(activity.date?.clockTime ?? "")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(Color.secondaryText)
-                Text(keepingWords: activity.summary)
-                    .font(.body)
-                Spacer(minLength: 8)
-                if let status = activity.status {
-                    StatusBadge(Status(text: status, tone: .attention))
+                // The badge sits under the sentence, so the sentence keeps the row's width.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(keepingWords: activity.summary)
+                        .font(.body)
+                    if let status = activity.status {
+                        StatusBadge(Status(text: status, tone: .attention))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             NavigationLink {
                 ActivityEvidenceView(activity: activity)
@@ -164,7 +167,7 @@ private struct DelegationRow: View {
             .accessibilityIdentifier("delegation.\(job.key)")
             if job.needsChannel && level != AssistantDelegationView.Level.never.rawValue {
                 Text("채널을 연결하면 적용돼요")
-                    .font(.footnote)
+                    .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
             }
         }

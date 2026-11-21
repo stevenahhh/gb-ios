@@ -12,7 +12,7 @@ extension ReplyStatus {
 }
 
 /// The card head: the assistant's face and who wrote this, in clay because it is the assistant's own mark.
-private struct AssistantDraftLabel: View {
+struct AssistantDraftLabel: View {
     let isReply: Bool
 
     var body: some View {
@@ -20,7 +20,7 @@ private struct AssistantDraftLabel: View {
             AssistantFace(size: .card)
                 .accessibilityHidden(true)
             Text(isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.assistantAccent)
         }
     }
@@ -120,7 +120,7 @@ struct DraftShareActions: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("채널이 아직 연결되지 않아 직접 보내야 해요.")
-                .font(.footnote)
+                .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
             Button {
                 UIPasteboard.general.string = text
@@ -324,7 +324,7 @@ struct AssistantDraftCard: View {
 
     private func hint(_ text: String) -> some View {
         PhraseText(text: text)
-            .font(.footnote)
+            .font(.subheadline)
             .foregroundStyle(Color.secondaryText)
     }
 
