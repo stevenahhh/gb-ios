@@ -288,7 +288,12 @@ enum RoundupAPI {
 
     private static func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
         let items = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
-        return try decode(try await sendRaw(try request(path, query: items)))
+        let request = try request(path, query: items)
+        if ResponseCache.probe != nil { return try decode(try ResponseCache.read(request)) }
+        let data = try await sendRaw(request, idempotent: true)
+        let value: T = try decode(data)
+        ResponseCache.store(data, for: request)
+        return value
     }
 
     private static func post<T: Decodable, Body: Encodable>(_ path: String, _ body: Body) async throws -> T {
@@ -311,19 +316,44 @@ enum RoundupAPI {
         }
     }
 
-    private static func sendRaw(_ request: URLRequest) async throws -> Data {
+    /// A dropped keep-alive connection or a stalled request usually succeeds on a second try right away.
+    private static let quickRetryCodes: Set<URLError.Code> = [.networkConnectionLost, .timedOut]
+
+    /// `idempotent` requests (GETs) get one quick retry; writes never repeat, since a lost response can follow a
+    /// committed change.
+    private static func sendRaw(_ request: URLRequest, idempotent: Bool = false) async throws -> Data {
+        guard ResponseCache.probe == nil else { throw ResponseCache.Miss() }
         var request = request
-        request.timeoutInterval = 25
+        request.timeoutInterval = idempotent ? 12 : 25
         request.setValue(try RoundupConfiguration.apiKey(), forHTTPHeaderField: "X-Roundup-Key")
+        let started = Date.now
+        let route = request.url?.path() ?? ""
+        var attempt = 1
         let data: Data
         let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch let error as URLError where error.code == .cancelled {
-            throw CancellationError()
-        } catch {
-            throw RoundupAPIError(message: "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.")
+        while true {
+            do {
+                (data, response) = try await session.data(for: request)
+                break
+            } catch let error as URLError where error.code == .cancelled {
+                throw CancellationError()
+            } catch let error as URLError where idempotent && attempt == 1 && quickRetryCodes.contains(error.code) {
+                attempt += 1
+                ServerConnection.log("request.retry \(route) code=\(error.code.rawValue)")
+                try await Task.sleep(for: .milliseconds(Int.random(in: 300...600)))
+            } catch {
+                ServerConnection.log("request.unreachable \(route) code=\((error as? URLError)?.code.rawValue ?? 0)")
+                ServerConnection.shared.requestFailedToReachServer()
+                throw ConnectionError()
+            }
         }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        ServerConnection.log("request \(request.httpMethod ?? "GET") \(route) status=\(status) ms=\(Int(Date.now.timeIntervalSince(started) * 1000))")
+        if [502, 503, 504].contains(status) {
+            ServerConnection.shared.requestFailedToReachServer()
+            throw ConnectionError()
+        }
+        ServerConnection.shared.requestReachedServer()
         guard let http = response as? HTTPURLResponse else {
             throw RoundupAPIError(message: "서버가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.")
         }
@@ -388,6 +418,9 @@ struct WorkshopDraft: Encodable {
 
 struct APIInquiryRepository: InquiryRepository {
     func load() async throws -> [Inquiry] { try await RoundupAPI.inquiries() }
+    func cached() async -> (inquiries: [Inquiry], savedAt: Date)? {
+        await ResponseCache.cachedValue { try await RoundupAPI.inquiries() }.map { ($0.value, $0.savedAt) }
+    }
     func save(id: String, draft: InquiryDraft) async throws -> Inquiry {
         try await RoundupAPI.saveInquiry(id: id, draft: draft)
     }

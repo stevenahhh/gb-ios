@@ -28,7 +28,16 @@ public protocol InquiryRepository {
     func save(id: String, draft: InquiryDraft) async throws -> Inquiry
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry
     func undoCompletion(id: String, expectedRevision: Int) async throws -> Inquiry
+    /// The last list the server returned on this device, shown until a fresh load arrives.
+    func cached() async -> (inquiries: [Inquiry], savedAt: Date)?
 }
+
+extension InquiryRepository {
+    public func cached() async -> (inquiries: [Inquiry], savedAt: Date)? { nil }
+}
+
+/// A failure that retrying later can fix, such as a lost connection. Other failures are not retried by themselves.
+public protocol TransientFailure: Error {}
 
 public enum InquiryPersistenceError: Error, LocalizedError {
     case busy
