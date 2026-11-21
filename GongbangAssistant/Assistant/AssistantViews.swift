@@ -41,7 +41,7 @@ struct AssistantSheet: View {
     let launch: AssistantLaunch
     @Environment(\.dismiss) private var dismiss
     @State private var message = ""
-    /// When this sheet opened: an answer that arrives later is written out once, a saved one rests.
+    /// When this sheet opened; the transcript treats later turns as live.
     @State private var openedAt = Date.now
     @State private var revealed: Set<ConversationStore.Turn.ID> = []
     @State private var isConfirmingDiscard = false
@@ -58,7 +58,9 @@ struct AssistantSheet: View {
         NavigationStack {
             Group {
                 if let conversation = store.current {
-                    transcript(conversation)
+                    AssistantTranscript(conversation: conversation, isAnswering: store.isAnswering,
+                                        liveSince: openedAt, revealed: $revealed, retry: store.retry)
+                        .id(conversation.id)
                 } else {
                     ScrollView {
                         welcome
@@ -142,81 +144,6 @@ struct AssistantSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
     }
-
-    private func isFresh(_ turn: ConversationStore.Turn, in conversation: ConversationStore.Conversation) -> Binding<Bool> {
-        Binding(
-            get: { turn.id == conversation.turns.last?.id && turn.date > openedAt && !revealed.contains(turn.id) },
-            set: { if !$0 { revealed.insert(turn.id) } }
-        )
-    }
-
-    private func transcript(_ conversation: ConversationStore.Conversation) -> some View {
-        ScrollViewReader { proxy in
-            List {
-                ForEach(conversation.turns) { turn in
-                    let isFresh = isFresh(turn, in: conversation)
-                    switch turn.role {
-                    case .owner:
-                        HStack {
-                            Spacer(minLength: 40)
-                            Text(turn.text)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(.tint.opacity(0.15), in: .inner)
-                        }
-                        .listRowSeparator(.hidden)
-                    case .assistant:
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label {
-                                GeneratedText(Self.rendered(turn.text), isFresh: isFresh)
-                                    .textSelection(.enabled)
-                            } icon: {
-                                AssistantFace(size: .card)
-                            }
-                            .labelStyle(TopAlignedIconLabelStyle())
-                            // The items the answer names, each with its one next action. They stay hidden until the text has settled.
-                            ForEach(turn.items) { item in
-                                WorkCard(item: item, isPrimary: false)
-                                    .padding(12)
-                                    .background(.fill.quaternary, in: .inner)
-                            }
-                            .opacity(isFresh.wrappedValue ? 0 : 1)
-                        }
-                        .animation(.default, value: isFresh.wrappedValue)
-                        .listRowSeparator(.hidden)
-                    case .failure:
-                        Label(turn.text, systemImage: "exclamationmark.circle.fill")
-                            .foregroundStyle(.orange)
-                            .listRowSeparator(.hidden)
-                    }
-                }
-                if store.isAnswering {
-                    GeneratingIndicator(label: "비서가 현황을 보고 있어요")
-                        .font(.subheadline)
-                        .listRowSeparator(.hidden)
-                        .id(Self.waitingRow)
-                }
-            }
-            .listStyle(.plain)
-            // A List has no bottom anchor, so the waiting row and then the answer's first line are scrolled into view.
-            .onChange(of: store.isAnswering) {
-                withAnimation {
-                    if store.isAnswering {
-                        proxy.scrollTo(Self.waitingRow, anchor: .bottom)
-                    } else if let last = conversation.turns.last {
-                        proxy.scrollTo(last.id, anchor: .top)
-                    }
-                }
-            }
-            .onChange(of: conversation.turns.last?.id) {
-                if let last = conversation.turns.last, last.role == .assistant {
-                    AccessibilityNotification.Announcement(last.text).post()
-                }
-            }
-        }
-    }
-
-    private static let waitingRow = "assistant.waiting"
 
     /// At accessibility sizes the field takes its own full-width row, so its text is not squeezed.
     private var composerLayout: AnyLayout {
@@ -315,16 +242,5 @@ struct AssistantSheet: View {
         guard !value.isEmpty else { return }
         message = ""
         store.ask(value)
-    }
-}
-
-/// Keeps the assistant's face beside the first line of a long answer instead of its vertical middle.
-private struct TopAlignedIconLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            configuration.icon
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
-            configuration.title
-        }
     }
 }
