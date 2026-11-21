@@ -67,7 +67,7 @@ private struct HistoryRow: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(Color.secondaryText)
             VStack(alignment: .leading, spacing: 2) {
-                Text(keepingWords: conversation.title.isEmpty ? "새 대화" : conversation.title)
+                Text(verbatim: conversation.title.isEmpty ? "새 대화" : conversation.title)
                     .font(.body.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(2)

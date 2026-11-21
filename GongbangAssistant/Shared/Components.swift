@@ -1,26 +1,5 @@
 import SwiftUI
 
-extension String {
-    var keepingWords: String {
-        var result = ""
-        var previous: Character?
-        for character in self {
-            if let previous, !previous.isWhitespace, !character.isWhitespace {
-                result.append("\u{2060}")
-            }
-            result.append(character)
-            previous = character
-        }
-        return result
-    }
-}
-
-extension Text {
-    init(keepingWords string: String) {
-        self = Text(verbatim: string.keepingWords).accessibilityLabel(string)
-    }
-}
-
 struct PhraseText: View {
     let text: String
     var selectable = false
@@ -358,7 +337,7 @@ struct TaskRow: View {
                 node
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(keepingWords: item.title)
+                Text(verbatim: item.title)
                     .font(.body.weight(.medium))
                     .strikethrough(isDone)
                     .foregroundStyle(isDone ? Color.secondaryText : Color.primary)
@@ -544,7 +523,7 @@ struct CardActions: View {
                     StepBackButton(item: item, isSteppingBack: $isSteppingBack)
                     if item.action == nil {
                         // If the line wraps it breaks after 단계로, never inside "돌아갈 수 있어요".
-                        Text(keepingWords: "이전 단계로 돌아갈\u{00A0}수\u{00A0}있어요.")
+                        Text(verbatim: "이전 단계로 돌아갈\u{00A0}수\u{00A0}있어요.")
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -595,6 +574,7 @@ struct BusyLabel: View {
     let isBusy: Bool
     /// On a prominent button the title takes the background color.
     var isProminent = false
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         ZStack {
@@ -615,7 +595,8 @@ struct BusyLabel: View {
 
     @ViewBuilder
     private var text: some View {
-        if isProminent {
+        // A disabled prominent button has a pale fill, so its title keeps the system's disabled color there.
+        if isProminent && isEnabled {
             Text(title)
                 .foregroundStyle(Color(.systemBackground))
         } else {
@@ -636,7 +617,7 @@ struct WorkCardContent: View {
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
                 : AnyLayout(HStackLayout(alignment: .center))
             header {
-                Text(keepingWords: item.title)
+                Text(verbatim: item.title)
                     .font(.headline)
                 if !dynamicTypeSize.isAccessibilitySize {
                     Spacer(minLength: 8)
@@ -654,7 +635,7 @@ struct WorkCardContent: View {
                 DueLabel(due: due)
             } else if let deadline = item.deadline {
                 Label {
-                    Text(keepingWords: deadline)
+                    Text(verbatim: deadline)
                         .foregroundStyle(.primary)
                 } icon: {
                     Image(systemName: "clock")
@@ -743,7 +724,7 @@ struct SectionHeader: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
         layout {
-            Text(keepingWords: title)
+            Text(verbatim: title)
                 .accessibilityAddTraits(.isHeader)
             if !dynamicTypeSize.isAccessibilitySize {
                 Spacer()
@@ -785,7 +766,7 @@ struct LoadErrorView: View {
         ContentUnavailableView {
             Label("불러오지 못했어요", systemImage: "wifi.exclamationmark")
         } description: {
-            Text(keepingWords: message)
+            Text(verbatim: message)
         } actions: {
             Button(action: retry) {
                 Text("다시 시도")

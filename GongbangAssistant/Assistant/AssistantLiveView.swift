@@ -97,7 +97,7 @@ struct AssistantLiveView: View {
             Text(statusText)
                 .font(.headline)
                 .contentTransition(.opacity)
-            Text(keepingWords: hintText)
+            Text(verbatim: hintText)
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
         }
@@ -133,7 +133,7 @@ struct AssistantLiveView: View {
     }
 
     private func ownerLine(_ text: String) -> some View {
-        Text(keepingWords: text)
+        Text(verbatim: text)
             .font(.title3)
             .foregroundStyle(Color.secondaryText)
             .lineLimit(5)
@@ -145,9 +145,9 @@ struct AssistantLiveView: View {
     private func assistantLine(_ caption: LiveConversation.Caption) -> some View {
         let sentence = caption.sentence as NSString
         let spokenLength = min(max(caption.spoken, 0), sentence.length)
-        var spoken = AttributedString(sentence.substring(to: spokenLength).keepingWords)
+        var spoken = AttributedString(sentence.substring(to: spokenLength))
         spoken.foregroundColor = .primary
-        var rest = AttributedString(sentence.substring(from: spokenLength).keepingWords)
+        var rest = AttributedString(sentence.substring(from: spokenLength))
         // Full-strength gray: a thinner one drops under 3:1 on the light backdrop.
         rest.foregroundColor = Color.secondaryText
         return Text(spoken + rest)
@@ -161,7 +161,7 @@ struct AssistantLiveView: View {
     private func failureView(_ failure: LiveConversation.Failure) -> some View {
         VStack(spacing: 14) {
             Label {
-                Text(keepingWords: failure.message)
+                Text(verbatim: failure.message)
             } icon: {
                 Image(systemName: "exclamationmark.circle.fill")
                     .foregroundStyle(.orange)
@@ -370,7 +370,7 @@ private struct LiveTranscript: View {
                     }
                     if showsVoiceHint {
                         Label {
-                            Text(keepingWords: "설정 > 손쉬운 사용 > 읽기 및 말하기 > 음성 > 한국어에서 유나(프리미엄)를 받으면 목소리가 더 자연스러워져요")
+                            Text(verbatim: "설정 > 손쉬운 사용 > 읽기 및 말하기 > 음성 > 한국어에서 유나(프리미엄)를 받으면 목소리가 더 자연스러워져요")
                         } icon: {
                             Image(systemName: "info.circle")
                         }

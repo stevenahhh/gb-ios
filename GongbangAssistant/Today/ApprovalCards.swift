@@ -167,9 +167,9 @@ struct ApprovalCard: View {
                             meta
                         }
                     }
-                    Text(keepingWords: item.title)
+                    Text(verbatim: item.title)
                         .font(.headline)
-                    Text(keepingWords: item.preview)
+                    Text(verbatim: item.preview)
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                         .lineLimit(2)

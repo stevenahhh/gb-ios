@@ -79,9 +79,9 @@ struct AssistantDraftRow: View {
         NavigationLink(value: route) {
             VStack(alignment: .leading, spacing: 6) {
                 DraftHeader(badge: badge, isReply: isReply)
-                Text(keepingWords: title)
+                Text(verbatim: title)
                     .font(.headline)
-                Text(keepingWords: text.isEmpty ? "내용을 비운 초안이에요." : text)
+                Text(verbatim: text.isEmpty ? "내용을 비운 초안이에요." : text)
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
                     .lineLimit(2)
@@ -401,7 +401,7 @@ struct AssistantDraftDetailView: View {
             List {
                 CardSection("내용") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(keepingWords: draft.title).font(.headline)
+                        Text(verbatim: draft.title).font(.headline)
                         ForEach(draft.lines, id: \.self) { line in
                             PhraseText(text: line)
                                 .font(.subheadline)
