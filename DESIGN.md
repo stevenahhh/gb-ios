@@ -24,16 +24,18 @@ Ranked jobs:
 - Korean text breaks only between words. Titles go through `Text(keepingWords:)`, which joins the characters inside each word with U+2060 and keeps the original string as the accessibility label. Detail lines go through `PhraseText`, a flow layout of plain Text pieces: a line with ` · ` separators wraps only at the separators, any other line wraps only between words.
 - IDs such as order numbers can be selected on cards that are not navigation links. Each PhraseText piece is its own selectable plain Text, so copying `#1042` copies exactly that text.
 - Every button performs a persisted server action or opens a real screen. Features without a backend are removed or state plainly that they are not connected. Empty and error actions use the large control size (44pt).
-- Undo is one toast for the whole app (`ToastHost`), laid over the assistant accessory so the row that changed stays visible. A completion toast names its row on one line ("‘제목’ 완료했어요" or "‘제목’ 완료를 취소했어요"). It leaves after 7 seconds, or stays until closed while VoiceOver runs.
+- Undo is one toast for the whole app (`ToastHost`), laid over the assistant accessory so the row that changed stays visible. Every state change taken from a list shows it, and one 되돌리기 undoes a whole batch. A completion toast names its row on one line ("‘제목’ 완료했어요" or "‘제목’ 완료를 취소했어요"). It leaves after 7 seconds, or stays until closed while VoiceOver runs.
 - The assistant sheet keeps a typed draft: swipe-to-dismiss is disabled while a draft exists, and 닫기 asks 버리기 / 계속 쓰기 first.
 - Counts agree across screens because the server computes them from the same rows; the app never derives or stores display numbers.
 - Every server-backed screen has loaded, loading (a progress indicator that shows after 0.35 s, so a quick load shows none), empty, and error-with-retry states. A failed refresh keeps the last loaded data and says so.
+- Reconnecting needs no tap. While a screen that cannot reach the server is visible, `ServerConnection` retries after about 1, 2, 4, 8, 16, then 30 seconds (±20% jitter), and at once when the network path returns. The row under the title shows a spinner with 다시 연결하는 중 (인터넷 연결을 기다리는 중 without a path); a screen with no data shows `ReconnectingView` with a secondary 지금 다시 시도. Recovery shows 다시 연결됐어요 once. Only transport failures and 502/503/504 retry; 401/404/409/422 never do, and writes are never repeated by themselves. GETs get one quick retry on a dropped connection.
+- Cold launch shows the last response from today for 오늘, 운영, 캨린더, 문의, and 설정 at once (`ResponseCache`), then replaces it with fresh data. A cache from an earlier day is ignored, because the server words dates as 오늘/내일.
 
 ## Screens
 
 ### Root (tab bar)
 - Primary action: switch between 오늘, 캘린더, 운영, 설정.
-- Priorities: 1) the four tabs, 2) the assistant accessory with a separate mic button on every tab, 3) the 운영 badge showing the items that need action.
+- Priorities: 1) the four tabs, 2) the assistant accessory on every tab, whose field opens the assistant sheet and whose mic opens the full-screen live voice conversation, 3) the 운영 badge showing the items that need action.
 - Left out on purpose: a fifth tab, actions inside the tab bar.
 - Layout: tab bar with sidebarAdaptable (bottom on iPhone, top on iPad); each tab owns its NavigationStack; scroll owner is each tab's List; the tab bar minimizes on scroll unless Reduce Motion is on. Anti-patterns: hidden or disabled tabs, accessory shown only on some tabs.
 
@@ -60,6 +62,9 @@ Ranked jobs:
 - Priorities: 1) three numbers, 2) the status filter (short labels, counts live in the numbers), 3) the filtered cards with deadlines emphasized.
 - Left out on purpose: counts inside filter labels, single-item menus.
 - 먼저 확인해주세요 counts equal their filtered lists: 예약금 대기, 문의, and 발송 예정. SNS·스토어 filters are 전체, 채널, 문의, 콘텐츠.
+- Fulfilment happens in one place: an order card carries its parcel's next step as its one button (주문 확인하기 → 포장 완료하기 → 송장 등록하기 → 배송 완료 확인), shows its status as 포장 대기 / 송장 대기 / 배송 중, and advances in place. Unfinished fulfilment cards show an "N/5단계" ProgressView under the badge; a leading swipe takes the next step.
+- 선택 in 주문 관리 and 배송 관리 turns rows into checkable rows with a bottom bar: the earliest step among the chosen rows is the one prominent button ("주문 확인 3건"), later steps sit in a compact row, and chosen rows stay chosen so the next step follows at once. Batch endpoints apply a whole batch in one transaction or none of it.
+- The invoice sheet serves one parcel or many: it remembers the last carrier, focuses the number field on open, offers the system paste button and, where supported, a VisionKit barcode scanner; a paste or scan moves to the next empty parcel. Numbers are 10-14 digits and unique across the sheet.
 - Inquiry replies have one action, 답변 완료, and no rejection. The reply stays editable and saves when the screen is left. A completed reply's badge reads 답변 준비됨, because completing sends nothing; 답변 복사하기 and 네이버 스마트스토어 열기 appear while the editor matches the saved reply.
 - States: with no data the screen shows its own empty state, with 예약 등록하기 where booking creation exists; a filter or search with no match shows ContentUnavailableView and offers 전체 보기 only when another filter is selected.
 - Layout: List insetGrouped under an inline title; scroll owner is the List; the search field stays visible in the navigation bar drawer; search and filter both narrow the list, and an empty result shows ContentUnavailableView (search or filter). Anti-patterns: filters that do not filter, more than one prominent button.
@@ -75,3 +80,10 @@ Ranked jobs:
 - Priorities: 1) the focused text field with the send button, 2) three suggested questions, 3) the reminder that the assistant can be wrong.
 - Left out on purpose: stacked sheets.
 - Layout: sheet with medium and large detents and a visible grabber; the composer sits in the bottom safe area; scroll owner is the message list. Anti-patterns: a decorative mic that does nothing different.
+
+### 실시간 음성 (live voice)
+- Primary action: talk; the assistant answers aloud with subtitles.
+- Priorities: 1) the orb, which follows the mic level while listening and the voice while speaking, and stops the answer when tapped, 2) the status line (듣고 있어요 / 생각하고 있어요 / 말하고 있어요 / 일시정지), 3) live captions, 4) 대화 내용 (full transcript with work cards), 마이크, 끝내기.
+- Speech: on-device SFSpeechRecognizer (ko-KR) shows partial captions and ends an utterance after 1.2 s of silence; the final text comes from NAVER CSR (`/stt`), with the on-device words as fallback. Answers are spoken sentence by sentence with the best installed Korean voice (premium, then enhanced, then default); with only the default voice the transcript suggests downloading 유나(프리미엄). Server TTS (`POST /tts`, CLOVA Voice Premium) exists but stays off (`LiveSpeechConfig.usesServerSpeech`) until the paid plan is on.
+- Turns are saved to the assistant's conversation history, so the chat sheet shows them later.
+- Layout: full-screen cover, dark-leaning; going to the background pauses; closing stops the audio engine. Reduce Motion keeps the orb still with an opacity pulse. Anti-patterns: a dead end on a denied mic or a network error (both offer 다시 시도).

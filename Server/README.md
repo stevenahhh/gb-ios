@@ -108,6 +108,9 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `GET /shipments?status&q&sort&limit&offset` | `status`: `all`, `scheduled`, `in_transit`, `delivered`; `sort`: `soonest`, `latest` |
 | `POST /shipments/{id}/pack`, `/invoice`, `/deliver` | Fulfilment steps; invoice takes `{carrier, trackingNumber}` |
 | `POST /shipments/{id}/undo` | Reverse one fulfilment step; delivered undo also reopens the completed order |
+| `POST /orders/confirm`, `/orders/undo-confirm`, `/shipments/pack`, `/shipments/deliver`, `/shipments/undo` | Batch steps with `{items: [{id, expectedRevision}]}` (1-50 rows); one transaction, so one refused row changes nothing (409); missing row 404; repeated row or bad input 422; returns `{items: [Card]}` in request order |
+| `POST /shipments/invoice` | Batch invoices with `{carrier, items: [{id, expectedRevision, trackingNumber}]}`, same rules |
+| Card actions | A `CardAction` may carry `target: {kind, id, revision}`; a processing order card uses it to carry its parcel's next step (`shipment-<order>`) |
 | `GET /cards/{kind}/{id}` | One current card; kind is `order`, `shipment`, or `task` |
 | `GET /channels?section&q&limit&offset` | `section`: `all`, `channels`, `inquiries`, `content` |
 | `GET /content-drafts/{id}`, `POST /content-drafts/{id}/review` | Open a draft; approve `{body}` |
