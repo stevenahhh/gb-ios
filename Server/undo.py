@@ -2,14 +2,18 @@
 
 from fastapi import APIRouter
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bookings import DEPOSIT_WINDOW, ExpectedRevision
 from bookings import card_for as booking_card
 from common import Now, Session, invalid_transition, locked
-from contracts import Card
+from contracts import Card, CardList
 from models import BookingRow, ClassSessionRow, OrderRow, ShipmentRow, TaskRow
+from orders import Batch, lock_order
 from orders import card_for as order_card
+from orders import cards_for as order_cards
 from shipments import card_for as shipment_card
+from shipments import cards_for as shipment_cards
 from tasks import task_card
 
 router = APIRouter()
@@ -30,28 +34,40 @@ async def undo_deposit(booking_id: str, body: ExpectedRevision, db: Session, now
     return await booking_card(db, booking.id, now)
 
 
-@router.post("/orders/{order_id}/undo-confirm")
-async def undo_confirm(order_id: str, body: ExpectedRevision, db: Session) -> Card:
+async def unconfirm(db: AsyncSession, order_id: str, expected_revision: int) -> None:
     """Undo acceptance only while fulfilment is still packing."""
     # Fulfilment writers acquire shipment before order; keep that lock order here.
     shipment = await db.scalar(
         select(ShipmentRow).where(ShipmentRow.order_id == order_id).with_for_update(),
     )
-    order = await locked(db, OrderRow, order_id, body.expected_revision)
+    order = await locked(db, OrderRow, order_id, expected_revision)
     if order.status != "processing" or shipment is None or shipment.status != "packing":
         raise invalid_transition()
     order.status = "paid"
     order.confirmed_at = None
     order.revision += 1
     await db.delete(shipment)
+
+
+@router.post("/orders/undo-confirm")
+async def undo_confirms(body: Batch, db: Session) -> CardList:
+    """Return several confirmed orders to paid, all or none."""
+    for item in lock_order(body.items):
+        await unconfirm(db, item.id, item.expected_revision)
     await db.flush()
-    return await order_card(db, order.id)
+    return await order_cards(db, [item.id for item in body.items])
 
 
-@router.post("/shipments/{shipment_id}/undo")
-async def undo_shipment(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
-    """Move fulfilment back exactly one step and clear that step's facts."""
-    shipment = await locked(db, ShipmentRow, shipment_id, body.expected_revision)
+@router.post("/orders/{order_id}/undo-confirm")
+async def undo_confirm(order_id: str, body: ExpectedRevision, db: Session) -> Card:
+    """Undo acceptance only while fulfilment is still packing."""
+    await unconfirm(db, order_id, body.expected_revision)
+    await db.flush()
+    return await order_card(db, order_id)
+
+
+async def step_back(db: AsyncSession, shipment: ShipmentRow) -> None:
+    """Move a locked parcel back exactly one step and clear that step's facts."""
     match shipment.status:
         case "delivered":
             order = await db.get_one(OrderRow, shipment.order_id, with_for_update=True)
@@ -72,8 +88,23 @@ async def undo_shipment(shipment_id: str, body: ExpectedRevision, db: Session, n
         case _:
             raise invalid_transition()
     shipment.revision += 1
+
+
+@router.post("/shipments/undo")
+async def undo_shipments(body: Batch, db: Session, now: Now) -> CardList:
+    """Move several parcels back one step each, all or none."""
+    for item in lock_order(body.items):
+        await step_back(db, await locked(db, ShipmentRow, item.id, item.expected_revision))
     await db.flush()
-    return await shipment_card(db, shipment.id, now)
+    return await shipment_cards(db, [item.id for item in body.items], now)
+
+
+@router.post("/shipments/{shipment_id}/undo")
+async def undo_shipment(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
+    """Move fulfilment back exactly one step and clear that step's facts."""
+    await step_back(db, await locked(db, ShipmentRow, shipment_id, body.expected_revision))
+    await db.flush()
+    return await shipment_card(db, shipment_id, now)
 
 
 @router.post("/tasks/{task_id}/undo")

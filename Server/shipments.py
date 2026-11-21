@@ -21,11 +21,11 @@ from common import (
     matches,
     required_text,
 )
-from contracts import Card, CardAction, CardDue, CardField, CardUndo, Page, Status
+from contracts import ApiRequest, Card, CardDue, CardField, CardList, CardUndo, Page
 from display import due, local, masked, relative_day, relative_moment
 from metrics import UNSHIPPED, delivery_metrics, load_counts
 from models import CustomerRow, OrderRow, ShipmentRow
-from orders import order_fields, order_progress
+from orders import MAX_BATCH, PARCEL_STATES, Batch, BatchItem, lock_order, order_fields, order_progress
 
 router = APIRouter()
 ESTIMATED_TRANSIT: Final = timedelta(days=2)
@@ -33,13 +33,27 @@ TAG_SCHEDULED: Final = "발송 예정"
 type ShipmentFilter = Literal["all", "scheduled", "in_transit", "delivered"]
 type ShipmentSort = Literal["soonest", "latest"]
 type ShipmentRecord = tuple[ShipmentRow, OrderRow, CustomerRow]
+type TrackingNumber = Annotated[str, Field(min_length=4, max_length=40)]
 
 
 class InvoiceRegistration(ExpectedRevision):
     """Carrier details entered after packing."""
 
     carrier: ShortText
-    tracking_number: Annotated[str, Field(min_length=4, max_length=40)]
+    tracking_number: TrackingNumber
+
+
+class InvoiceItem(BatchItem):
+    """One packed parcel and its own tracking number."""
+
+    tracking_number: TrackingNumber
+
+
+class InvoiceBatch(ApiRequest):
+    """Parcels handed to one carrier in the same pickup."""
+
+    carrier: ShortText
+    items: Annotated[list[InvoiceItem], Field(min_length=1, max_length=MAX_BATCH)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,24 +94,21 @@ def shipment_card(record: ShipmentRecord, today: date) -> Card:
     summary = f"#{order.order_number} · {masked(customer.name)} · {order.quantity}개"
     pickup = f"{relative_moment(shipment.ship_by_at, today)} 택배 수거"
     tracking = f"{shipment.carrier} {shipment.tracking_number}"
+    status, action = PARCEL_STATES[shipment.status]
     match shipment.status:
         case "packing":
             lines = [summary, shipment.handling_note or "포장 후 송장을 등록해 주세요"]
-            status, tag, deadline = Status(text="포장 대기", tone="attention"), TAG_SCHEDULED, pickup
-            action = CardAction(code="pack", label="포장 완료하기")
+            tag, deadline = TAG_SCHEDULED, pickup
         case "invoice_pending":
             lines = [summary, "포장 완료 · 송장 등록 필요"]
-            status, tag, deadline = Status(text="송장 대기", tone="attention"), TAG_SCHEDULED, pickup
-            action = CardAction(code="registerInvoice", label="송장 등록하기")
+            tag, deadline = TAG_SCHEDULED, pickup
         case "in_transit":
             lines = [summary, tracking, arrival_text(shipment.expected_arrival_on, today)]
-            status, tag, deadline = Status(text="배송 중", tone="progress"), "배송 중", None
-            action = CardAction(code="markDelivered", label="배송 완료 확인")
+            tag, deadline = "배송 중", None
         case _:
             arrived = local(shipment.delivered_at).date() if shipment.delivered_at else today
             lines = [summary, f"{relative_day(arrived, today)} 도착"]
-            status, tag, deadline = Status(text="배송 완료", tone="done"), "완료", None
-            action = None
+            tag, deadline = "완료", None
     return Card(
         id=shipment.id, kind="shipment", title=order.product_name, status=status, lines=lines,
         deadline=deadline, tag=tag, revision=shipment.revision, action=action,
@@ -174,39 +185,36 @@ async def card_for(db: AsyncSession, shipment_id: str, now: datetime) -> Card:
     return shipment_card(record, now.date())
 
 
-@router.post("/shipments/{shipment_id}/pack")
-async def pack(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
-    """Record that the parcel is packed."""
-    shipment = await locked(db, ShipmentRow, shipment_id, body.expected_revision)
+async def cards_for(db: AsyncSession, shipment_ids: list[str], now: datetime) -> CardList:
+    """Reload the parcels a batch changed, in request order."""
+    records = await db.execute(shipment_records().where(ShipmentRow.id.in_(shipment_ids)))
+    cards = {card.id: card for card in (shipment_card(record, now.date()) for record in records.tuples())}
+    return CardList(items=[cards[shipment_id] for shipment_id in shipment_ids])
+
+
+def pack_parcel(shipment: ShipmentRow, now: datetime) -> None:
+    """Record that a locked parcel is packed."""
     if shipment.status != "packing":
         raise invalid_transition()
     shipment.status = "invoice_pending"
     shipment.packed_at = now
     shipment.revision += 1
-    await db.flush()
-    return await card_for(db, shipment.id, now)
 
 
-@router.post("/shipments/{shipment_id}/invoice")
-async def register_invoice(shipment_id: str, body: InvoiceRegistration, db: Session, now: Now) -> Card:
-    """Attach carrier details and move the parcel into transit."""
-    shipment = await locked(db, ShipmentRow, shipment_id, body.expected_revision)
+def send_parcel(shipment: ShipmentRow, carrier: str, tracking_number: str, now: datetime) -> None:
+    """Attach carrier details to a locked parcel and move it into transit."""
     if shipment.status != "invoice_pending":
         raise invalid_transition()
-    shipment.carrier = required_text(body.carrier)
-    shipment.tracking_number = required_text(body.tracking_number)
+    shipment.carrier = required_text(carrier)
+    shipment.tracking_number = required_text(tracking_number)
     shipment.status = "in_transit"
     shipment.shipped_at = now
     shipment.expected_arrival_on = now.date() + ESTIMATED_TRANSIT
     shipment.revision += 1
-    await db.flush()
-    return await card_for(db, shipment.id, now)
 
 
-@router.post("/shipments/{shipment_id}/deliver")
-async def mark_delivered(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
-    """Record delivery and complete the order in the same transaction."""
-    shipment = await locked(db, ShipmentRow, shipment_id, body.expected_revision)
+async def deliver_parcel(db: AsyncSession, shipment: ShipmentRow, now: datetime) -> None:
+    """Record delivery of a locked parcel and complete its order."""
     if shipment.status != "in_transit":
         raise invalid_transition()
     order = await db.get_one(OrderRow, shipment.order_id, with_for_update=True)
@@ -215,5 +223,56 @@ async def mark_delivered(shipment_id: str, body: ExpectedRevision, db: Session, 
     shipment.revision += 1
     order.status = "completed"
     order.revision += 1
+
+
+@router.post("/shipments/pack")
+async def pack_many(body: Batch, db: Session, now: Now) -> CardList:
+    """Pack several parcels at once; one parcel that cannot move refuses the whole batch."""
+    for item in lock_order(body.items):
+        pack_parcel(await locked(db, ShipmentRow, item.id, item.expected_revision), now)
     await db.flush()
-    return await card_for(db, shipment.id, now)
+    return await cards_for(db, [item.id for item in body.items], now)
+
+
+@router.post("/shipments/invoice")
+async def register_many(body: InvoiceBatch, db: Session, now: Now) -> CardList:
+    """Register one carrier's tracking numbers for several packed parcels at once."""
+    for item in lock_order(body.items):
+        shipment = await locked(db, ShipmentRow, item.id, item.expected_revision)
+        send_parcel(shipment, body.carrier, item.tracking_number, now)
+    await db.flush()
+    return await cards_for(db, [item.id for item in body.items], now)
+
+
+@router.post("/shipments/deliver")
+async def deliver_many(body: Batch, db: Session, now: Now) -> CardList:
+    """Mark several parcels delivered and complete their orders together."""
+    for item in lock_order(body.items):
+        await deliver_parcel(db, await locked(db, ShipmentRow, item.id, item.expected_revision), now)
+    await db.flush()
+    return await cards_for(db, [item.id for item in body.items], now)
+
+
+@router.post("/shipments/{shipment_id}/pack")
+async def pack(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
+    """Record that the parcel is packed."""
+    pack_parcel(await locked(db, ShipmentRow, shipment_id, body.expected_revision), now)
+    await db.flush()
+    return await card_for(db, shipment_id, now)
+
+
+@router.post("/shipments/{shipment_id}/invoice")
+async def register_invoice(shipment_id: str, body: InvoiceRegistration, db: Session, now: Now) -> Card:
+    """Attach carrier details and move the parcel into transit."""
+    shipment = await locked(db, ShipmentRow, shipment_id, body.expected_revision)
+    send_parcel(shipment, body.carrier, body.tracking_number, now)
+    await db.flush()
+    return await card_for(db, shipment_id, now)
+
+
+@router.post("/shipments/{shipment_id}/deliver")
+async def mark_delivered(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
+    """Record delivery and complete the order in the same transaction."""
+    await deliver_parcel(db, await locked(db, ShipmentRow, shipment_id, body.expected_revision), now)
+    await db.flush()
+    return await card_for(db, shipment_id, now)

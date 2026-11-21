@@ -33,10 +33,43 @@ final class ActionFlowUITests: RoundupUITestCase {
 
         goBack(app)
         openArea("orders", in: app)
-        let confirm = app.buttons["action.order-1042"]
-        XCTAssertTrue(scrollTo(confirm, in: app))
+        // The order keeps one button that walks its parcel forward, so packing needs no other screen.
+        let next = app.buttons["action.order-1042"]
+        XCTAssertTrue(scrollTo(next, in: app))
+        next.tap()
+        waitFor(next, "label == %@", "포장 완료하기")
+        next.tap()
+        // The toast leaves after 7 seconds, so 되돌리기 is tapped as soon as it shows.
+        let undo = app.buttons["toast.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        undo.tap()
+        waitFor(next, "label == %@", "포장 완료하기")
+        next.tap()
+        waitFor(next, "label == %@", "송장 등록하기")
+    }
+
+    @MainActor
+    func testBatchModeConfirmsChosenOrdersAndUndoesThemTogether() throws {
+        let app = try launch()
+        openArea("orders", in: app)
+        let select = app.buttons["area.select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 10))
+        select.tap()
+        app.buttons["batch.selectAll"].tap()
+        let confirm = app.buttons["batch.confirmOrder"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "주문 확인 3건")
         confirm.tap()
-        XCTAssertTrue(confirm.waitForNonExistence(timeout: 10))
+        // The toast leaves after 7 seconds, so 되돌리기 is tapped as soon as it shows, before slower checks.
+        let undo = app.buttons["toast.undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        undo.tap()
+        waitFor(confirm, "label == %@", "주문 확인 3건")
+
+        confirm.tap()
+        // The chosen rows stay chosen, so the bar offers their next step at once.
+        waitFor(app.buttons["batch.pack"], "label == %@", "포장 완료 4건")
+        XCTAssertFalse(confirm.exists)
     }
 
     @MainActor

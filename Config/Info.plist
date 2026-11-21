@@ -6,6 +6,8 @@
 	<string>$(ROUNDUP_API_URL)</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>비서와 말로 대화할 때 말씀을 바로 글자로 바꾸는 데 써요.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>송장 바코드를 찍어 운송장 번호를 넣을 때만 카메라를 써요.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

@@ -106,12 +106,16 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testInvoiceRegistrationMovesParcelIntoTransit() throws {
         let app = try launch()
         openArea("deliveries", in: app)
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText("1041")
         let action = app.buttons["action.shipment-order-1041"]
         XCTAssertTrue(scrollTo(action, in: app))
         action.tap()
-        let number = app.textFields["invoice.number"]
+        let number = app.textFields["invoice.number.shipment-order-1041"]
         XCTAssertTrue(number.waitForExistence(timeout: 5))
-        number.tap()
+        // The field has focus when the sheet opens, so typing needs no tap first.
         number.typeText("682100042841")
         app.buttons["form.save"].tap()
         XCTAssertTrue(number.waitForNonExistence(timeout: 10))

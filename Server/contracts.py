@@ -60,11 +60,20 @@ class Status(ApiModel):
     tone: Tone
 
 
+class CardTarget(ApiModel):
+    """The row an action writes when it is not the card's own, such as an order's parcel."""
+
+    kind: CardKind
+    id: str
+    revision: int
+
+
 class CardAction(ApiModel):
     """The state change currently valid for a card."""
 
     code: ActionCode
     label: str
+    target: CardTarget | None = None
 
 
 class CardUndo(ApiModel):
@@ -137,6 +146,12 @@ class Page(ApiModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class CardList(ApiModel):
+    """The cards one batch write changed, in the order they were requested."""
+
+    items: list[Card]
 
 
 class Moved(ApiModel):

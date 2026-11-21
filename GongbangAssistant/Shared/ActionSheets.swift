@@ -1,4 +1,6 @@
 import SwiftUI
+import Vision
+import VisionKit
 
 /// Shared chrome for short forms that save one thing to the server.
 struct FormSheet<Fields: View>: View {
@@ -36,15 +38,38 @@ private func isFilled(_ text: String) -> Bool {
     !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 }
 
+/// A tracking number kept as digits only, so pasted or scanned dashes and spaces vanish.
+struct TrackingNumber: Equatable {
+    static let lengths = 10...14
+    private(set) var digits = ""
+
+    init(_ text: String = "") { digits = String(text.filter(\.isWholeNumber).prefix(Self.lengths.upperBound)) }
+
+    var isEmpty: Bool { digits.isEmpty }
+    var isValid: Bool { Self.lengths.contains(digits.count) }
+
+    /// Groups of four, the way labels print them.
+    var grouped: String {
+        stride(from: 0, to: digits.count, by: 4).map { start in
+            let lower = digits.index(digits.startIndex, offsetBy: start)
+            return String(digits[lower..<digits.index(lower, offsetBy: min(4, digits.count - start))])
+        }.joined(separator: " ")
+    }
+}
+
+/// Registers tracking numbers for one parcel or a whole packing session: one carrier, one field per parcel,
+/// each filled by typing, pasting the copied number, or scanning the label's barcode.
 struct InvoiceSheet: View {
     static let carriers = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배"]
     private static let customCarrier = "직접 입력"
 
-    let item: WorkItem
+    let items: [WorkItem]
     @AppStorage("invoice.lastCarrier") private var lastCarrier = "CJ대한통운"
     @State private var choice = ""
     @State private var customName = ""
-    @State private var digits = ""
+    @State private var numbers: [String: TrackingNumber] = [:]
+    @State private var scanning: WorkItem?
+    @FocusState private var focused: String?
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
@@ -52,24 +77,24 @@ struct InvoiceSheet: View {
         choice == Self.customCarrier ? customName.trimmingCharacters(in: .whitespaces) : choice
     }
 
-    private var isNumberValid: Bool { (10...14).contains(digits.count) }
+    private var runID: String { items.count == 1 ? items[0].id : "invoice.batch" }
+    private var canScan: Bool { DataScannerViewController.isSupported && DataScannerViewController.isAvailable }
 
-    /// Shows the number in groups of four while storing digits only, so pasted dashes and spaces vanish.
-    private var grouped: Binding<String> {
-        Binding(
-            get: { stride(from: 0, to: digits.count, by: 4).map { start -> String in
-                let lower = digits.index(digits.startIndex, offsetBy: start)
-                let upper = digits.index(lower, offsetBy: min(4, digits.count - start))
-                return String(digits[lower..<upper])
-            }.joined(separator: " ") },
-            set: { digits = String($0.filter(\.isNumber).prefix(14)) }
-        )
+    private func number(_ item: WorkItem) -> TrackingNumber { numbers[item.id] ?? TrackingNumber() }
+
+    private func isDuplicate(_ item: WorkItem) -> Bool {
+        let own = number(item)
+        return !own.isEmpty && items.contains { $0.id != item.id && number($0) == own }
+    }
+
+    private var canSave: Bool {
+        isFilled(carrier) && items.allSatisfy { number($0).isValid && !isDuplicate($0) }
     }
 
     var body: some View {
         FormSheet(
-            title: "송장 등록", saveLabel: "등록", canSave: isFilled(carrier) && isNumberValid,
-            isSaving: app.isRunning(item.id), save: save
+            title: items.count == 1 ? "송장 등록" : "송장 \(items.count)건 등록", saveLabel: "등록", canSave: canSave,
+            isSaving: app.isRunning(runID), save: save
         ) {
             Section {
                 Picker("택배사", selection: $choice) {
@@ -80,36 +105,175 @@ struct InvoiceSheet: View {
                     TextField("택배사 이름", text: $customName)
                         .accessibilityIdentifier("invoice.carrier.custom")
                 }
-                LabeledContent("운송장 번호") {
-                    TextField("숫자 10~14자리", text: grouped)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.trailing)
-                        .monospacedDigit()
-                        .accessibilityIdentifier("invoice.number")
-                }
-            } header: {
-                Text(item.title)
             } footer: {
-                if !digits.isEmpty && !isNumberValid {
-                    Text("운송장 번호는 숫자 10~14자리예요.")
+                Text("마지막에 쓴 택배사를 기억해요.")
+            }
+            ForEach(items) { item in
+                Section {
+                    numberRow(item)
+                } header: {
+                    Text(item.title)
+                } footer: {
+                    footer(item)
                 }
             }
         }
-        .presentationDetents([.medium])
+        // The keyboard is up at once, so the first parcel needs no tap before typing.
+        .defaultFocus($focused, items.first?.id, priority: .userInitiated)
+        .presentationDetents(items.count == 1 ? [.medium, .large] : [.large])
+        .fullScreenCover(item: $scanning) { item in
+            BarcodeScanSheet(title: item.title) { fill(item, with: $0) }
+        }
         .onAppear {
             if choice.isEmpty { choice = Self.carriers.contains(lastCarrier) ? lastCarrier : Self.customCarrier }
             if choice == Self.customCarrier, customName.isEmpty, !Self.carriers.contains(lastCarrier) { customName = lastCarrier }
+            focused = items.first?.id
+        }
+    }
+
+    private func numberRow(_ item: WorkItem) -> some View {
+        HStack(spacing: 8) {
+            TextField("운송장 번호 10~14자리", text: Binding(
+                get: { number(item).grouped },
+                set: { numbers[item.id] = TrackingNumber($0) }
+            ))
+            .keyboardType(.numberPad)
+            .textContentType(.shipmentTrackingNumber)
+            .monospacedDigit()
+            .focused($focused, equals: item.id)
+            .accessibilityLabel("\(item.title) 운송장 번호")
+            .accessibilityIdentifier("invoice.number.\(item.actionTarget.id)")
+            if number(item).isEmpty {
+                // The system paste control reads the clipboard only when tapped, so no permission prompt appears.
+                PasteButton(payloadType: String.self) { strings in
+                    if let text = strings.first { fill(item, with: TrackingNumber(text)) }
+                }
+                .labelStyle(.iconOnly)
+                .buttonBorderShape(.circle)
+                .accessibilityIdentifier("invoice.paste.\(item.actionTarget.id)")
+            }
+            if canScan {
+                Button {
+                    scanning = item
+                } label: {
+                    Image(systemName: "barcode.viewfinder")
+                        .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("\(item.title) 바코드 찍기")
+                .accessibilityIdentifier("invoice.scan.\(item.actionTarget.id)")
+            }
+        }
+    }
+
+    /// A pasted or scanned number is complete, so the next parcel still waiting takes focus.
+    private func fill(_ item: WorkItem, with number: TrackingNumber) {
+        numbers[item.id] = number
+        guard number.isValid else { return }
+        focused = items.first { !self.number($0).isValid }?.id
+    }
+
+    @ViewBuilder
+    private func footer(_ item: WorkItem) -> some View {
+        let entered = number(item)
+        if isDuplicate(item) {
+            Text("다른 소포와 같은 번호예요.")
+        } else if !entered.isEmpty && !entered.isValid {
+            Text("운송장 번호는 숫자 10~14자리예요.")
+        } else if let line = item.lines.first {
+            Text(line)
         }
     }
 
     private func save() {
-        let (item, carrier, number) = (item, carrier, digits)
+        let (items, carrier) = (items, carrier)
+        let entries = items.map { (item: $0, trackingNumber: number($0).digits) }
         Task {
-            if await app.run(id: item.id, {
-                try await RoundupAPI.registerInvoice(item: item, carrier: carrier, trackingNumber: number)
-            }) {
-                lastCarrier = carrier
+            var changed: [WorkItem] = []
+            let saved = await app.run(id: runID) {
+                if let only = entries.first, entries.count == 1 {
+                    changed = [try await RoundupAPI.registerInvoice(
+                        item: only.item, carrier: carrier, trackingNumber: only.trackingNumber)]
+                } else {
+                    changed = try await RoundupAPI.registerInvoices(entries, carrier: carrier)
+                }
+            }
+            guard saved else { return }
+            lastCarrier = carrier
+            dismiss()
+            app.showStepToast(.registerInvoice, title: items[0].title, changed: changed)
+        }
+    }
+}
+
+/// Reads one waybill barcode with the live camera and hands back its digits, then closes itself.
+private struct BarcodeScanSheet: View {
+    let title: String
+    let found: (TrackingNumber) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            BarcodeScanner { number in
+                found(number)
                 dismiss()
+            }
+            .ignoresSafeArea()
+            .safeAreaInset(edge: .bottom) {
+                Text("송장의 바코드를 화면 가운데에 맞춰 주세요.")
+                    .font(.subheadline)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(.regularMaterial, in: .card)
+                    .padding(16)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("닫기") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// VisionKit's live scanner limited to the linear codes Korean waybills print.
+private struct BarcodeScanner: UIViewControllerRepresentable {
+    let found: (TrackingNumber) -> Void
+
+    func makeUIViewController(context: Context) -> DataScannerViewController {
+        let scanner = DataScannerViewController(
+            recognizedDataTypes: [.barcode(symbologies: [.code128, .code39, .code93, .itf14, .ean13, .i2of5])],
+            qualityLevel: .accurate, recognizesMultipleItems: false, isHighFrameRateTrackingEnabled: false,
+            isHighlightingEnabled: true)
+        scanner.delegate = context.coordinator
+        try? scanner.startScanning()
+        return scanner
+    }
+
+    func updateUIViewController(_ scanner: DataScannerViewController, context: Context) {
+        context.coordinator.found = found
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(found: found) }
+
+    final class Coordinator: NSObject, DataScannerViewControllerDelegate {
+        var found: (TrackingNumber) -> Void
+        private var isDone = false
+
+        init(found: @escaping (TrackingNumber) -> Void) { self.found = found }
+
+        func dataScanner(_ scanner: DataScannerViewController, didAdd added: [RecognizedItem], allItems: [RecognizedItem]) {
+            for case .barcode(let code) in added {
+                let number = TrackingNumber(code.payloadStringValue ?? "")
+                guard number.isValid, !isDone else { continue }
+                isDone = true
+                scanner.stopScanning()
+                found(number)
+                return
             }
         }
     }
