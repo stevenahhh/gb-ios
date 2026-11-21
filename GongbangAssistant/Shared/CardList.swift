@@ -23,10 +23,11 @@ extension EnvironmentValues {
 
 extension View {
     // The inset-grouped style rounds every card with the system radius, the same in light and dark mode.
-    func cardList(separators: Visibility = .automatic) -> some View {
+    /// `onPage: false` leaves the container's own background showing, as in the assistant sheet's glass.
+    func cardList(separators: Visibility = .automatic, onPage: Bool = true) -> some View {
         listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(AppPalette.listBackground)
+            .background(onPage ? AppPalette.listBackground : .clear)
             .listSectionSpacing(20)
             .environment(\.cardSeparators, separators)
     }

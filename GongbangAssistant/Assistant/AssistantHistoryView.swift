@@ -15,7 +15,6 @@ struct AssistantHistoryView: View {
                         .foregroundStyle(Color.secondaryText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(AppPalette.listBackground)
             } else {
                 List {
                     ForEach(Self.days(store.conversations), id: \.title) { day in
@@ -37,7 +36,7 @@ struct AssistantHistoryView: View {
                         }
                     }
                 }
-                .cardList()
+                .cardList(onPage: false)
             }
         }
         .navigationTitle("지난 대화")
