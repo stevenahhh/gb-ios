@@ -18,6 +18,7 @@ enum AssistantLaunch: String, Identifiable {
 struct RootTabView: View {
     @SceneStorage("root.tab") private var selection: AppTab = .today
     @State private var assistant: AssistantLaunch?
+    @State private var isLiveVoicePresented = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -52,7 +53,7 @@ struct RootTabView: View {
                 if app.toast == nil {
                     AssistantAccessory(
                         openText: { assistant = .text },
-                        openVoice: { assistant = .voice }
+                        openVoice: { isLiveVoicePresented = true }
                     )
                 }
             }
@@ -61,6 +62,9 @@ struct RootTabView: View {
         }
         .sheet(item: $assistant) { launch in
             AssistantSheet(launch: launch)
+        }
+        .fullScreenCover(isPresented: $isLiveVoicePresented) {
+            AssistantLiveView(history: { [] }, onTurn: { _ in })
         }
         // Over the assistant bar's own slot, so the notice never hides the row that just changed.
         // The overlay spans the window, so it takes touches only while a toast is on screen.

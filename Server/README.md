@@ -56,7 +56,9 @@ See [.env.example](.env.example). Keep real values out of version control.
 | `ROUNDUP_API_KEY` | yes | Shared `X-Roundup-Key` value, compared in constant time |
 | `ROUNDUP_LOG_LEVEL` | no | Application log level, default `INFO` |
 | `CLOVA_STUDIO_API_KEY` | for `/draft`, `/ask`, `/rewrite` | HyperCLOVA X |
-| `NCP_CSR_CLIENT_ID`, `NCP_CSR_CLIENT_SECRET` | for `/stt` | Speech recognition |
+| `NCP_CSR_CLIENT_ID`, `NCP_CSR_CLIENT_SECRET` | for `/stt` | Speech recognition; also used by `/tts` when the TTS pair is unset |
+| `NCP_TTS_CLIENT_ID`, `NCP_TTS_CLIENT_SECRET` | no | CLOVA Voice Premium for `/tts` when it runs on its own NAVER API app |
+| `TTS_SPEAKER` | no | CLOVA Voice Premium speaker, default `vyuna` |
 | `NCP_MAPS_CLIENT_ID`, `NCP_MAPS_CLIENT_SECRET` | for `/geocode`, `/staticmap` | Naver Maps |
 
 `allow` and `prefer` SSL modes are rejected, so there is no transport fallback.
@@ -122,6 +124,7 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `POST /inquiries/{id}/undo-completion` | Return a completed reply to waiting with `{expectedRevision}`; the text stays |
 | `GET /assistant/activities` | The assistant's work from the last seven days, newest first: reply drafts, post drafts, and missed pickups, each with the facts it used |
 | `POST /draft`, `POST /ask`, `POST /rewrite`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
+| `POST /tts` | `{text}` (1-2000 characters) read aloud by CLOVA Voice Premium as `audio/mpeg`; markdown is stripped first |
 
 `/ask` accepts `{question, history?}`, reads workshop facts from PostgreSQL, and returns
 `{answer, items}`, where `items` holds up to three cards the answer names. `history`

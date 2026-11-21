@@ -271,6 +271,16 @@ enum RoundupAPI {
         return try JSONDecoder().decode(Reply.self, from: try await sendRaw(request)).text
     }
 
+    /// The server reads `text` aloud with CLOVA Voice and returns MP3 audio.
+    static func speech(text: String) async throws -> Data {
+        struct Body: Encodable { let text: String }
+        var request = try request("tts")
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(Body(text: text))
+        return try await sendRaw(request)
+    }
+
     static func geocode(_ query: String) async throws -> GeocodeResult {
         try await get("geocode", query: ["query": query])
     }
