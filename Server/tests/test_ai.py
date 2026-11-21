@@ -156,6 +156,68 @@ async def test_ask_forwards_the_last_six_history_turns_in_order(
     assert fake.calls[0][-1].content.endswith("질문: 그럼 내일은?")
 
 
+PROMO_REQUEST = "주말 클래스 홍보 글 써줘"
+PROMO_DRAFT = "이번 주말, 흙으로 머그컵을 빚어 보세요. 토요일 14:00 반에 2자리 남았어요. #도자기공방"
+PROMO_HISTORY: list[JsonValue] = [
+    {"role": "owner", "text": PROMO_REQUEST}, {"role": "assistant", "text": PROMO_DRAFT},
+]
+
+
+@pytest.mark.parametrize(
+    ("question", "opening"),
+    [("오 좋은데?", "마음에 드신다니"), ("고마워!", "천만에요"), ("수고했어", "수고 많으셨어요")],
+)
+async def test_reaction_after_a_promo_draft_gets_a_short_reply_without_the_model(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, question: str, opening: str,
+) -> None:
+    fake = fake_chat(monkeypatch)
+    response = await client.post("/ask", json={"question": question, "history": PROMO_HISTORY})
+    body = response.json()
+    assert response.status_code == 200
+    assert body["items"] == []
+    assert body["answer"].startswith(opening)
+    assert PROMO_DRAFT not in body["answer"]
+    assert len(body["answer"]) < 80
+    assert fake.calls == []
+
+
+@pytest.mark.postgres
+async def test_yes_to_an_assistant_offer_goes_to_the_model(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "짧게 고친 글")
+    history: list[JsonValue] = [*PROMO_HISTORY, {"role": "assistant", "text": "더 짧게 줄여 드릴까요?"}]
+    response = await client.post("/ask", json={"question": "응", "history": history})
+    assert response.json()["answer"] == "짧게 고친 글"
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.postgres
+async def test_refinement_rewrites_the_previous_answer(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "주말엔 머그컵 클래스! 토요일 14:00, 2자리 남았어요.")
+    response = await client.post("/ask", json={"question": "좀 더 짧게", "history": PROMO_HISTORY})
+    assert response.json()["answer"] == "주말엔 머그컵 클래스! 토요일 14:00, 2자리 남았어요."
+    [messages] = fake.calls
+    prompt = messages[-1].content
+    assert f"직전 답변:\n{PROMO_DRAFT}" in prompt
+    assert "요청: 좀 더 짧게" in prompt
+    assert "예약금 대기 2건" in prompt
+
+
+@pytest.mark.postgres
+async def test_new_question_after_a_draft_is_asked_as_usual(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "답변")
+    response = await client.post("/ask", json={"question": "오늘 예약 몇 건이야?", "history": PROMO_HISTORY})
+    assert response.json() == {"answer": "답변", "items": []}
+    prompt = fake.calls[0][-1].content
+    assert prompt.endswith("질문: 오늘 예약 몇 건이야?")
+    assert "직전 답변" not in prompt
+
+
 @pytest.mark.postgres
 async def test_draft_prompt_has_profile_policies_and_inquiry_facts(
     database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,

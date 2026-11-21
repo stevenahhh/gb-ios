@@ -26,6 +26,7 @@ from prompts import (
     rewrite_messages,
 )
 from providers import UPSTREAM_FAILED, ChatMessage, Sampling, chat
+from turns import reaction, reaction_reply, revision_target
 
 LOGGER: Final = logging.getLogger("roundup.ai")
 ATTEMPTS: Final = 2
@@ -108,9 +109,13 @@ async def draft(body: DraftRequest) -> DraftResponse:
 
 @router.post("/ask")
 async def ask(body: AskRequest, now: Now) -> AskResponse:
-    """Answer from facts read from PostgreSQL for this request."""
+    """Answer from facts read from PostgreSQL; a bare reaction gets a short reply without the model."""
+    kind = reaction(body.question, body.history)
+    if kind is not None:
+        return AskResponse(answer=reaction_reply(kind, body.history))
     context, cards = await build_context(now)
-    messages = ask_messages(context, body.history, body.question)
+    revising = revision_target(body.question, body.history)
+    messages = ask_messages(context, body.history, body.question, revising)
     answer = await generate(messages, ASK_SAMPLING, empty_problems)
     return AskResponse(answer=answer, items=named_cards(answer, cards))
 
