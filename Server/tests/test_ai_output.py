@@ -2,7 +2,8 @@
 
 import pytest
 
-from ai_output import normalize, reply_problems
+from ai_output import ACT_PATH, normalize, reply_problems, without_completion_claims
+from prompts import ACT_LEAD
 
 POLICY = "예약은 예약금 입금 확인 후 확정됩니다. 수업 2일 전까지 전액 환불이 가능합니다."
 
@@ -60,6 +61,34 @@ def test_amounts_and_dates_must_come_from_basis_or_question() -> None:
     assert len(reply_problems("예약금은 30,000원이에요.", basis, "")) == 1
     assert reply_problems("11월 21일 수업이에요.", basis, "11월 21일 자리 있나요?") == []
     assert len(reply_problems("11월 22일에 도착해요.", basis, "")) == 1
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            "머그컵 2종 세트 포장 완료 처리했어요. '운영' 화면에서 확인해 보세요.",
+            f"{ACT_LEAD} '운영' 화면에서 확인해 보세요.",
+        ),
+        ("포장이 완료되었으니, 해당 내용을 반영하려면 운영 화면을 확인하세요.", f"{ACT_LEAD} {ACT_PATH}"),
+        ("예약 확정을 반영했어요!\n· 캐린더에서 확인", f"{ACT_LEAD} · 캐린더에서 확인"),
+        (f"{ACT_LEAD} 어제 답장을 보냈어요.", f"{ACT_LEAD} {ACT_PATH}"),
+    ],
+)
+def test_completion_claim_is_replaced_by_the_admission(raw: str, expected: str) -> None:
+    assert without_completion_claims(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "guidance",
+    [
+        "제가 직접 처리할 수는 없어요. '운영' 화면에서 포장 완료를 누르면 돼요.",
+        "아직 처리되었다고 표시되지 않았어요. 카드의 버튼을 눌러 주세요.",
+        "예약은 처리하지 못했어요.",
+    ],
+)
+def test_guidance_without_a_claim_is_kept(guidance: str) -> None:
+    assert without_completion_claims(guidance) == guidance
 
 
 def test_empty_reply_is_refused() -> None:

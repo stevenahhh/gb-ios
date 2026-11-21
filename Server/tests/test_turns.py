@@ -5,6 +5,8 @@ import pytest
 from prompts import HistoryTurn
 from turns import (
     Reaction,
+    asks_advice,
+    off_topic_reply,
     previous_answer,
     reaction,
     reaction_reply,
@@ -69,6 +71,38 @@ def test_previous_answer_skips_a_trailing_offer() -> None:
 def test_unresolved_reference(question: str, *, dangling: bool) -> None:
     assert unresolved_reference(question, ()) is dangling
     assert unresolved_reference(question, DRAFTED) is False
+
+
+@pytest.mark.parametrize(
+    ("question", "advice"),
+    [
+        ("이번 주말 클래스 어떻게 홍보하면 좋을까?", True), ("가격을 얼마로 하면 좋을지 모르겠어", True),
+        ("인스타에 어떻게 올릴까?", True), ("토요일에 하는 게 나을까?", True),
+        ("가격 올려도 괜찮을까?", True),
+        ("크리스마스 클래스 추천해 줄래?", True), ("손님 늘릴 방법 있을까?", True),
+        ("어떻게 홍보하면 좋을지 글로 써 줘", False), ("홍보 글 작성해줘, 어떻게 하면 좋을까", False),
+        ("괜찮을까 싶은 문구로 공지 만들어 줘", False), ("주말 클래스 홍보 글 써줘", False),
+        ("오늘 예약 몇 건이야?", False), ("포장 완료 처리해줘", False),
+    ],
+)
+def test_asks_advice(question: str, *, advice: bool) -> None:
+    assert asks_advice(question) is advice
+
+
+@pytest.mark.parametrize(
+    ("question", "topic"),
+    [
+        ("오늘 날씨 어때?", "날씨"), ("내일 비 와?", "날씨"), ("요즘 뉴스 뭐 있어?", "뉴스"),
+        ("삼성 주가 얼마야?", "시세"), ("날씨 추우면 주말 클래스 예약 줄까?", None),
+        ("수업 준비와 정리 순서 알려줘", None), ("점심 뭐 먹지?", None),
+    ],
+)
+def test_off_topic_reply_names_what_it_cannot_know(question: str, topic: str | None) -> None:
+    reply = off_topic_reply(question)
+    if topic is None:
+        assert reply is None
+    else:
+        assert reply == f"{topic}는 제가 알 수 없어요. 대신 오늘 수업이나 발송 일정은 바로 알려 드릴게요."
 
 
 def test_without_drafts_keeps_questions_and_plain_answers() -> None:
