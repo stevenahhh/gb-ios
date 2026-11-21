@@ -78,7 +78,7 @@ open GongbangAssistant.xcodeproj
 
 ### 비서 막대
 
-"비서에게 물어보세요" 막대는 모든 탭에서 탭 바 위에 붙어 있습니다. 막대를 누르면 비서 시트가 올라옵니다. 시트가 열리면 커서가 바로 입력창에 놓이고 추천 질문 세 개가 보입니다. 입력창 아래에는 "비서가 틀릴 수 있어요"라는 문구를 넣었습니다. 마이크 버튼은 말을 녹음해 서버의 음성 인식으로 글자로 바꿉니다. 질문을 보내면 서버가 DB 현황을 근거로 답을 돌려줍니다. 앞선 대화 6개를 함께 보내므로 "그중 내일 것만"처럼 이어서 물어도 됩니다. 화면에서는 이 기능을 모두 "비서"라고 부르고, 반짝이 아이콘은 비서 기능에만 씁니다.
+"비서에게 맡기기" 막대는 모든 탭에서 탭 바 위에 붙어 있습니다. 막대를 누르면 비서 시트가 올라옵니다. 시트가 열리면 커서가 바로 입력창에 놓이고 추천 질문 세 개가 보입니다. 입력창 아래에는 "비서가 틀릴 수 있어요"라는 문구를 넣었습니다. 마이크 버튼은 말을 녹음해 서버의 음성 인식으로 글자로 바꿉니다. 질문을 보내면 서버가 DB 현황을 근거로 답을 돌려줍니다. 앞선 대화 6개를 함께 보내므로 "그중 내일 것만"처럼 이어서 물어도 됩니다. 화면에서는 이 기능을 모두 "비서"라고 부릅니다. 점토색 원에 흰 화병을 그린 비서 얼굴은 비서 기능에만 씁니다.
 
 ### 캘린더
 
@@ -310,10 +310,10 @@ UI 테스트는 운영 서버를 쓰지 않습니다. 로컬 PostgreSQL에 시�
 | 테스트 클래스 | 수 | 확인하는 내용 |
 |---|---|---|
 | TabNavigationUITests | 10 | 탭 이동, 관리 화면 이동, 필터와 검색, 비서 시트, 설정 누락 안내 |
-| ActionFlowUITests | 6 | 버튼 동작이 서버에 저장되는지 |
+| ActionFlowUITests | 10 | 버튼 동작이 서버에 저장되는지 |
 | ScreenshotTourUITests | 2 | 모든 화면과 빈 화면을 찍어 테스트 첨부물로 저장 |
 
-문의 처리 규칙은 패키지 테스트로 확인합니다. 터미널에서 `swift test --package-path Packages/RoundupCore`를 실행하면 10개가 돕니다.
+문의 처리 규칙과 오늘 탭 제목 규칙은 패키지 테스트로 확인합니다. 터미널에서 `swift test --package-path Packages/RoundupCore`를 실행하면 20개가 돕니다.
 
 결과는 Test navigator(⌘6)에 뜹니다. 스크린샷은 Report navigator(⌘9)에서 해당 실행 아래에 있습니다.
 
@@ -442,7 +442,7 @@ GongbangAssistant/
 └── Assets.xcassets                AccentColor, AppIcon (라이트, 다크, 틴트)
 Packages/RoundupCore/              문의 답변 규칙 (로컬 Swift 패키지)
 ├── Sources/RoundupCore/           InquiryStore, 모델, 저장 계약
-└── Tests/RoundupCoreTests/        규칙 테스트 13개
+└── Tests/RoundupCoreTests/        규칙 테스트 20개
 GongbangAssistantUITests/
 ├── RoundupUITestCase.swift
 ├── TabNavigationUITests.swift

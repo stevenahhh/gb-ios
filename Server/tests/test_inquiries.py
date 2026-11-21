@@ -40,7 +40,7 @@ async def test_seed_has_three_real_looking_inquiries(
         assert "가상" not in row.customer
     clay = next(row for row in rows if row.id == "inquiry-clay")
     assert clay.customer == "김하늘"
-    assert clay.facts[2] == "제작 안내 · 건조와 소성에 약 3주가 필요하며 당일 수령은 불가합니다."
+    assert clay.facts[2] == "제작 안내 · 건조와 소성에 약 3주가 걸려서 당일에는 받아 가실 수 없어요."
 
 
 async def test_edit_preserves_whitespace_and_survives_new_pool(

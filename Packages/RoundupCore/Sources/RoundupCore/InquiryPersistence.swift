@@ -27,6 +27,7 @@ public protocol InquiryRepository {
     func load() async throws -> [Inquiry]
     func save(id: String, draft: InquiryDraft) async throws -> Inquiry
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry
+    func undoCompletion(id: String, expectedRevision: Int) async throws -> Inquiry
 }
 
 public enum InquiryPersistenceError: Error, LocalizedError {

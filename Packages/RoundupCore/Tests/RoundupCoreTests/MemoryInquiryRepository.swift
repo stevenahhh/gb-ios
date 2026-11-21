@@ -58,6 +58,15 @@ final class MemoryInquiryRepository: InquiryRepository {
         return records[index]
     }
 
+    func undoCompletion(id: String, expectedRevision: Int) async throws -> Inquiry {
+        if writeFails { throw Failure.offline }
+        let index = try writableIndex(id: id, revision: expectedRevision)
+        guard records[index].status == .approved else { throw InquiryPersistenceError.conflict }
+        records[index].status = .pending
+        records[index].revision += 1
+        return records[index]
+    }
+
     func waitForSave() async {
         if saveGate != nil { return }
         await withCheckedContinuation { saveStarted = $0 }

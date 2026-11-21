@@ -9,6 +9,8 @@ public final class InquiryStore {
     public private(set) var isSavingInquiry = false
     public private(set) var hasLoadedInquiries = false
     public private(set) var inquiryLoadError: String?
+    /// When inquiries last loaded successfully, shown as "마지막 확인 3:05" while offline.
+    public private(set) var lastLoadedAt: Date?
     public private(set) var requiresInquiryReload = false
     @ObservationIgnored private let repository: any InquiryRepository
     public var isInquiryBusy: Bool { isLoadingInquiries || isSavingInquiry }
@@ -30,10 +32,11 @@ public final class InquiryStore {
         do {
             inquiries = try await repository.load()
             hasLoadedInquiries = true
+            lastLoadedAt = Date()
             requiresInquiryReload = false
             inquiryLoadError = nil
         } catch {
-            inquiryLoadError = "문의를 불러오지 못했어요. " + error.localizedDescription
+            inquiryLoadError = "연결이 끊겨 문의를 불러오지 못했어요."
         }
     }
 
@@ -64,6 +67,22 @@ public final class InquiryStore {
             replace(try await repository.decide(id: id, decision: decision))
         } catch {
             // A lost response can follow a committed write. Reconcile before retrying.
+            requiresInquiryReload = true
+            throw error
+        }
+    }
+
+    /// Returns a completed reply to waiting with its text. Completing sent nothing, so nothing is recalled.
+    @MainActor
+    public func undoCompletion(id: String, expectedRevision: Int) async throws {
+        let current = try writableInquiry(id: id)
+        guard current.status == .approved else { throw ReplyError.notCompleted }
+        guard current.revision == expectedRevision else { throw InquiryPersistenceError.conflict }
+        isSavingInquiry = true
+        defer { isSavingInquiry = false }
+        do {
+            replace(try await repository.undoCompletion(id: id, expectedRevision: expectedRevision))
+        } catch {
             requiresInquiryReload = true
             throw error
         }

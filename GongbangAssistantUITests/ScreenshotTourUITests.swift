@@ -13,7 +13,8 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         app = try launch()
 
         selectTab("오늘")
-        XCTAssertTrue(app.segmentedControls.firstMatch.waitForExistence(timeout: 10))
+        // 확인해 주실 일 sits above the segments, so they may start below the fold.
+        XCTAssertTrue(scrollTo(app.segmentedControls.firstMatch, in: app))
         for segment in ["할 일", "채널", "배송", "비서 추천"] {
             selectSegment(segment, menu: "today.segment")
             capture("today-\(segment)")
@@ -31,7 +32,8 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         scrollToTop()
         app.buttons["calendar.mode.month"].tap()
         capture("calendar-month")
-        tapIfExists(app.buttons.matching(NSPredicate(format: "label CONTAINS '9'")).firstMatch)
+        // Only month-grid days: a looser "9" can match a row under the tab bar and tap 오늘 instead.
+        tapIfExists(app.buttons.matching(NSPredicate(format: "label MATCHES %@", ".*9일.*일정.*")).firstMatch)
         scrollToEnd()
         capture("calendar-month-end")
         scrollToTop()
@@ -44,6 +46,16 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         scrollToEnd()
         capture("operations-end")
         scrollToTop()
+        let remaining = app.buttons["operations.remaining"]
+        if reveal(remaining) {
+            remaining.tap()
+            waitForPush(from: "운영")
+            capture("operations-remaining")
+            goBack()
+            scrollToTop()
+        } else {
+            XCTFail("operations 남은 N건 보기 was not reachable")
+        }
         for area in ["bookings", "orders", "deliveries", "channels"] {
             let row = app.buttons["operations.\(area)"]
             guard reveal(row) else { continue }
@@ -90,6 +102,17 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         } else {
             XCTFail("settings row 공방 정보 was not reachable")
         }
+        for (identifier, name) in [("settings.delegation", "settings-delegation"), ("settings.activities", "assistant-activities")] {
+            let row = app.buttons[identifier]
+            if reveal(row) {
+                row.tap()
+                waitForPush(from: "설정")
+                capture(name)
+                goBack()
+            } else {
+                XCTFail("settings row \(identifier) was not reachable")
+            }
+        }
 
         selectTab("오늘")
         let accessory = app.buttons["assistant.accessory"]
@@ -124,7 +147,11 @@ final class ScreenshotTourUITests: RoundupUITestCase {
     @MainActor
     private func selectTab(_ label: String) {
         let barButton = app.tabBars.buttons[label]
-        if barButton.waitForExistence(timeout: 3) {
+        // A scrolled list minimizes the tab bar to the current tab; scrolling back up brings the others back.
+        for _ in 0..<6 where !barButton.waitForExistence(timeout: 1) {
+            app.swipeDown()
+        }
+        if barButton.exists {
             barButton.tap()
         } else {
             app.buttons[label].firstMatch.tap()
@@ -134,7 +161,7 @@ final class ScreenshotTourUITests: RoundupUITestCase {
     @MainActor
     private func selectSegment(_ label: String, menu identifier: String? = nil) {
         let segment = app.segmentedControls.buttons[label].firstMatch
-        if segment.waitForExistence(timeout: 3) {
+        if segment.waitForExistence(timeout: 3) || scrollTo(segment, in: app) {
             segment.tap()
             return
         }

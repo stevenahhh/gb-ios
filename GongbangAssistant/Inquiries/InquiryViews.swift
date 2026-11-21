@@ -19,7 +19,7 @@ private enum RewriteStyle: String, CaseIterable, Identifiable {
 
 extension Inquiry {
     var badge: Status {
-        status == .approved ? Status(text: "답변 완료", tone: .done) : Status(text: "답변 대기", tone: .attention)
+        status == .approved ? Status(text: "답변 준비됨", tone: .done) : Status(text: "답변 대기", tone: .attention)
     }
 }
 
@@ -34,6 +34,7 @@ struct InquiryDetailView: View {
     @State private var editorRevision: Int?
     @State private var savedDraft = ""
     @State private var completionCount = 0
+    @State private var isDraftFresh = false
 
     private var isEditingLocked: Bool {
         isGenerating || store.isInquiryBusy || store.requiresInquiryReload
@@ -66,6 +67,12 @@ struct InquiryDetailView: View {
             if phase != .active { saveUnsavedEdit() }
         }
         .onDisappear(perform: saveUnsavedEdit)
+        // This screen reads the inquiry store directly, so a failed load or save gets the shared connection line here.
+        .safeAreaInset(edge: .top) {
+            if store.inquiryLoadError != nil || store.requiresInquiryReload {
+                ConnectionNotice(retry: {}) { store.inquiryLoadError != nil }
+            }
+        }
     }
 
     private func detail(_ inquiry: Inquiry) -> some View {
@@ -77,7 +84,7 @@ struct InquiryDetailView: View {
                         .font(.headline)
                     Text(inquiry.customer)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .padding(.vertical, 4)
                 Text(inquiry.question)
@@ -85,9 +92,11 @@ struct InquiryDetailView: View {
             }
 
             CardSection {
-                TextEditor(text: $draft)
-                    .scrollContentBackground(.hidden)
+                KoreanTextEditor(text: $draft, isFresh: $isDraftFresh)
                     .frame(minHeight: 160)
+                    // The reply about to be replaced is dimmed while the assistant writes.
+                    .opacity(isGenerating ? 0.4 : 1)
+                    .animation(.default, value: isGenerating)
                     .accessibilityLabel("답변 작성")
                     .accessibilityIdentifier("inquiry.draft")
                     .disabled(isEditingLocked)
@@ -112,6 +121,10 @@ struct InquiryDetailView: View {
                     HStack(spacing: 8) { replyActions(inquiry) }
                     VStack(spacing: 8) { replyActions(inquiry) }
                 }
+                // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
+                if inquiry.status == .approved && draft == inquiry.draft {
+                    DraftShareActions(share: .inquiry, text: inquiry.draft)
+                }
             } header: {
                 Text("답변 작성")
             } footer: {
@@ -129,7 +142,7 @@ struct InquiryDetailView: View {
     @ViewBuilder
     private func replyActions(_ inquiry: Inquiry) -> some View {
         Menu {
-            Button("새로 쓰기", systemImage: "sparkles") {
+            Button("새로 쓰기") {
                 Task { await generateDraft(for: inquiry) }
             }
             ForEach(RewriteStyle.allCases) { style in
@@ -141,10 +154,11 @@ struct InquiryDetailView: View {
         } label: {
             Group {
                 if isGenerating {
-                    ProgressView()
+                    GeneratingIndicator(label: "쓰는 중이에요", showsFace: false)
                 } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
+                    HStack(spacing: 6) {
+                        AssistantFace(size: .card)
+                            .accessibilityHidden(true)
                         Text("비서로 다시 쓰기")
                             .lineLimit(1)
                             .fixedSize()
@@ -161,16 +175,9 @@ struct InquiryDetailView: View {
         .accessibilityIdentifier("inquiry.generate")
 
         Button(action: complete) {
-            Group {
-                if store.isSavingInquiry {
-                    ProgressView()
-                } else {
-                    Text("답변 완료")
-                        .foregroundStyle(Color(.systemBackground))
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 30)
+            BusyLabel(title: "답변 완료", isBusy: store.isSavingInquiry, isProminent: true)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
@@ -180,6 +187,8 @@ struct InquiryDetailView: View {
 
     private func loadEditorFromStore() {
         guard let inquiry = store.inquiry(id: id) else { return }
+        // Server text is not something the assistant just wrote, so it never plays the reveal.
+        isDraftFresh = false
         draft = inquiry.draft
         savedDraft = inquiry.draft
         editorRevision = inquiry.revision
@@ -189,10 +198,8 @@ struct InquiryDetailView: View {
         isGenerating = true
         defer { isGenerating = false }
         do {
-            // Generated text is an unsaved edit, and never overwrites an in-flight completion.
-            draft = try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
-                                               question: inquiry.question, facts: inquiry.facts)
-            errorMessage = nil
+            show(generated: try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
+                                                       question: inquiry.question, facts: inquiry.facts))
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -202,12 +209,20 @@ struct InquiryDetailView: View {
         isGenerating = true
         defer { isGenerating = false }
         do {
-            draft = try await RoundupAPI.rewrite(kind: .inquiry, title: inquiry.subject, text: draft,
-                                                 instruction: style.instruction)
-            errorMessage = nil
+            show(generated: try await RoundupAPI.rewrite(kind: .inquiry, title: inquiry.subject, text: draft,
+                                                         instruction: style.instruction))
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Generated text is an unsaved edit, and never overwrites an in-flight completion.
+    /// The editor reveals it once, and VoiceOver hears about it once.
+    private func show(generated text: String) {
+        draft = text
+        isDraftFresh = true
+        errorMessage = nil
+        AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 다 썼어요. 내용을 확인해 주세요.").post()
     }
 
     /// The owner has no save button, so edits persist when the screen or app is left.

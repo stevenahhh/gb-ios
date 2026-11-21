@@ -26,7 +26,7 @@ enum CalendarEventState: Hashable {
     case done, next, upcoming, missed
 }
 
-/// A row the owner made or owns: it can be checked off and moved to today.
+/// A row the owner made or owns, so the owner can check it off.
 enum OwnerItem: Hashable {
     case task(id: String, revision: Int)
     case event(id: String, revision: Int)
@@ -57,11 +57,15 @@ struct TimelineEntry: Identifiable, Hashable {
     let reportsDone: Bool
     let destination: TimelineDestination?
     let ownerItem: OwnerItem?
+    /// A task or owner entry with no time of day; it leads the timeline and never ends by the clock.
+    let isAllDay: Bool
 
     var end: Int { start + (minutes ?? 0) }
 
     init?(_ item: AgendaItem) {
-        guard let start = Self.minutes(of: item.time) else { return nil }
+        let isAllDay = item.time == "종일"
+        guard let start = isAllDay ? 0 : Self.minutes(of: item.time) else { return nil }
+        self.isAllDay = isAllDay
         let parts = item.id.split(separator: ":", maxSplits: 1).map(String.init)
         let prefix = parts.first ?? ""
         switch prefix {
@@ -102,6 +106,7 @@ struct TimelineEntry: Identifiable, Hashable {
         reportsDone = pickups.allSatisfy { $0.isDone != nil }
         destination = .area(AreaRoute(area: .deliveries, filter: "scheduled"))
         ownerItem = nil
+        isAllDay = false
     }
 
     static func minutes(of time: String) -> Int? {
@@ -118,8 +123,10 @@ struct DaySchedule {
     let entries: [TimelineEntry]
 
     init(items: [AgendaItem]) {
-        allDay = items.filter { $0.time == "종일" }
-        let timed = items.filter { $0.time != "종일" }
+        // Arrivals and other all-day facts go to the pinned box; all-day tasks stay in the timeline.
+        let ownerAllDay = { (item: AgendaItem) in item.id.hasPrefix("task:") || item.id.hasPrefix("event:") }
+        allDay = items.filter { $0.time == "종일" && !ownerAllDay($0) }
+        let timed = items.filter { $0.time != "종일" || ownerAllDay($0) }
         orders = timed.filter { $0.id.hasPrefix("order:") }
         let rest = timed.filter { !$0.id.hasPrefix("order:") }
         var entries: [TimelineEntry] = []
@@ -162,7 +169,7 @@ struct TimelinePlan {
 
     init(entries: [TimelineEntry], relation: DayRelation, now: Int) {
         var rows = entries.map { entry -> Row in
-            let hasPassed = relation == .past || (relation == .today && entry.start < now)
+            let hasPassed = relation == .past || (relation == .today && !entry.isAllDay && entry.start < now)
             switch entry.kind {
             case .task:
                 return Row(entry: entry, state: entry.isDone ? .done : hasPassed ? .missed : .upcoming, isOverdue: false)
@@ -183,12 +190,13 @@ struct TimelinePlan {
             nowIndex = nil
             return
         }
-        let next = rows.firstIndex { $0.state == .upcoming && !$0.isOverdue }
+        let next = rows.firstIndex { $0.state == .upcoming && !$0.isOverdue && !$0.entry.isAllDay }
         if let next {
             rows[next] = Row(entry: rows[next].entry, state: .next, isOverdue: false)
         }
         self.rows = rows
-        nowIndex = next ?? rows.count
+        // The line sits between rows that have started (including one in progress) and rows still ahead.
+        nowIndex = rows.firstIndex { !$0.entry.isAllDay && $0.entry.start > now } ?? rows.count
     }
 }
 
@@ -264,8 +272,9 @@ struct DaySection: View {
     let overdueShipments: [AgendaItem]
     let now: Date
     let add: () -> Void
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
+    /// The month this day belongs to has not loaded yet.
+    var isLoading = false
 
     private var calendar: Calendar { .workshop }
 
@@ -288,7 +297,7 @@ struct DaySection: View {
                     .foregroundStyle(CalendarTokens.label)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                Text(relation == .today ? "오늘" : "일정 \(day?.items.count ?? 0)건")
+                Text(relation == .today ? "오늘" : isLoading ? "" : "일정 \(day?.items.count ?? 0)건")
                     .font(.subheadline)
                     .foregroundStyle(CalendarTokens.secondary)
             }
@@ -298,14 +307,20 @@ struct DaySection: View {
                 PinnedSummaryCard(date: date, overdue: overdue, allDay: schedule.allDay, orders: schedule.orders)
                     .padding(.top, 14)
             }
-            if schedule.entries.isEmpty {
+            if isLoading {
+                // Not yet "일정이 없어요": this month's rows have not loaded.
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .accessibilityIdentifier("calendar.day.loading")
+            } else if schedule.entries.isEmpty {
                 if hasPinned {
                     Rectangle().fill(CalendarTokens.separator).frame(height: 1).padding(.top, 20)
                 }
                 emptyTimeline(hasPinned ? "시간이 정해진 일정이 없어요" : "일정이 없어요")
             } else {
                 TimelineList(plan: TimelinePlan(entries: schedule.entries, relation: relation, now: nowMinutes),
-                             now: nowMinutes, move: move, check: check)
+                             now: nowMinutes, check: check)
                     .padding(.top, hasPinned ? 20 : 14)
                 TimelineLegend()
                     .padding(.top, 8)
@@ -458,7 +473,6 @@ struct PinnedSummaryCard: View {
 struct TimelineList: View {
     let plan: TimelinePlan
     let now: Int
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
 
     var body: some View {
@@ -467,7 +481,7 @@ struct TimelineList: View {
                 if plan.nowIndex == index {
                     NowIndicator(minutes: now, isFirst: index == 0, isLast: false)
                 }
-                TimelineRow(row: row, now: now, move: move, check: check,
+                TimelineRow(row: row, now: now, check: check,
                             isFirst: index == 0 && plan.nowIndex != 0,
                             isLast: index == plan.rows.count - 1 && plan.nowIndex != plan.rows.count)
             }
@@ -501,7 +515,6 @@ private struct Rail: View {
 struct TimelineRow: View {
     let row: TimelinePlan.Row
     let now: Int
-    let move: (TimelineEntry) -> Void
     let check: (TimelineEntry, Bool) async -> Bool
     let isFirst: Bool
     let isLast: Bool
@@ -586,7 +599,7 @@ struct TimelineRow: View {
     }
 
     private var time: some View {
-        Text(TimelineText.clock(entry.start))
+        Text(entry.isAllDay ? "종일" : TimelineText.clock(entry.start))
             .font(.subheadline.monospacedDigit().weight(timeWeight))
             .foregroundStyle(state == .done || state == .missed ? CalendarTokens.secondary : CalendarTokens.label)
             .accessibilityHidden(true)
@@ -631,29 +644,9 @@ struct TimelineRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, state == .missed && entry.ownerItem != nil ? 4 : 16)
+        .padding(.bottom, 16)
         .contentShape(.rect)
-        VStack(alignment: .leading, spacing: 0) {
-            link(text)
-            if state == .missed, entry.ownerItem != nil {
-                Button {
-                    move(entry)
-                } label: {
-                    Text("오늘로 옮기기")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(CalendarTokens.label)
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 28)
-                        .background(CalendarTokens.fill, in: .capsule)
-                        .frame(minHeight: 44)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .disabled(app.isRunning(entry.id))
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("timeline.move.\(entry.id)")
-            }
-        }
+        link(text)
     }
 
     @ViewBuilder
@@ -867,7 +860,7 @@ struct DayOrdersView: View {
             Text(keepingWords: order.title).font(.body.weight(.medium))
             Text("\(order.time) 접수 · \(order.detail)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
         .accessibilityElement(children: .combine)
     }
@@ -924,7 +917,7 @@ private struct CalendarPreview: View {
     var body: some View {
         NavigationStack {
             CalendarContent(days: days, overdueShipments: [], selectedDay: $day, mode: $mode,
-                            now: CalendarPreviewData.now, add: {}, move: { _ in }, check: { _, _ in true })
+                            now: CalendarPreviewData.now, add: {}, check: { _, _ in true })
                 .navigationTitle("캘린더")
                 .navigationSubtitle("오늘 일정 11건")
         }

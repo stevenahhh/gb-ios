@@ -26,19 +26,40 @@ struct WorkshopInfoView: View {
         _description = State(initialValue: workshop?.description ?? "")
     }
 
+    /// Save turns on only when something changed, as on every settings screen.
+    private var hasChanges: Bool {
+        name != (workshop?.name ?? "") || ownerTitle != (workshop?.ownerTitle ?? "사장님")
+            || phone != (workshop?.phone ?? "") || address != (workshop?.address ?? "")
+            || description != (workshop?.description ?? "") || place != nil
+    }
+
     private var canSave: Bool {
+        hasChanges &&
         !name.trimmingCharacters(in: .whitespaces).isEmpty && !ownerTitle.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
         List {
             CardSection("기본 정보") {
-                TextField("공방 이름", text: $name)
-                    .accessibilityIdentifier("workshop.name")
-                TextField("호칭", text: $ownerTitle)
-                TextField("전화번호", text: $phone)
-                    .keyboardType(.phonePad)
-                TextField("소개", text: $description, axis: .vertical)
+                LabeledContent("공방 이름") {
+                    TextField("공방 이름", text: $name)
+                        .multilineTextAlignment(.trailing)
+                        .accessibilityIdentifier("workshop.name")
+                }
+                LabeledContent("대표자") {
+                    TextField("호칭", text: $ownerTitle)
+                        .multilineTextAlignment(.trailing)
+                }
+                LabeledContent("전화번호") {
+                    TextField("전화번호", text: $phone)
+                        .keyboardType(.phonePad)
+                        .multilineTextAlignment(.trailing)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("소개")
+                    TextField("공방 소개", text: $description, axis: .vertical)
+                        .foregroundStyle(Color.secondaryText)
+                }
             }
 
             CardSection {
@@ -81,9 +102,11 @@ struct WorkshopInfoView: View {
                         } else {
                             ProgressView()
                                 .frame(maxWidth: .infinity, minHeight: 160)
+                                .background(CalendarTokens.fill)
                         }
                     }
                     .clipShape(.rect(cornerRadius: 12))
+                    .animation(.default, value: mapImage == nil)
                 }
             }
         }
@@ -92,13 +115,11 @@ struct WorkshopInfoView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                if app.isRunning(runID) {
-                    ProgressView()
-                } else {
-                    Button("저장", action: save)
-                        .disabled(!canSave)
-                        .accessibilityIdentifier("workshop.save")
+                Button(action: save) {
+                    BusyLabel(title: "저장", isBusy: app.isRunning(runID))
                 }
+                .disabled(app.isRunning(runID) || !canSave)
+                .accessibilityIdentifier("workshop.save")
             }
         }
     }

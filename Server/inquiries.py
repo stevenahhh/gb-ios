@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common import Offset, Revision, Session
+from bookings import ExpectedRevision
+from common import Offset, Revision, Session, invalid_transition
 from models import InquiryRow
 
 InquiryId = NewType("InquiryId", str)
@@ -86,6 +87,18 @@ async def decide(inquiry_id: InquiryId, body: Decision, db: Session) -> Inquiry:
         raise HTTPException(422, "blank reply cannot be completed")
     row.status = "approved"
     row.draft = text
+    row.revision += 1
+    await db.flush()
+    return Inquiry.model_validate(row)
+
+
+@router.post("/inquiries/{inquiry_id}/undo-completion")
+async def undo_completion(inquiry_id: InquiryId, body: ExpectedRevision, db: Session) -> Inquiry:
+    """Return a completed reply to waiting and keep its text; nothing was sent, so nothing is recalled."""
+    row = await locked_inquiry(inquiry_id, body.expected_revision, db)
+    if row.status != "approved":
+        raise invalid_transition()
+    row.status = "pending"
     row.revision += 1
     await db.flush()
     return Inquiry.model_validate(row)

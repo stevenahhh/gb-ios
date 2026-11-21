@@ -69,7 +69,8 @@ def relative_day(day: date, today: date) -> str:
 
 def relative_moment(moment: datetime, today: date) -> str:
     """Format a nearby deadline."""
-    return f"{relative_day(local(moment).date(), today)} {clock(moment)}"
+    day = relative_day(local(moment).date(), today)
+    return day if is_all_day(moment) else f"{day} {clock(moment)}"
 
 
 def count(value: int) -> str:
@@ -102,3 +103,13 @@ def due(
     """Send a deadline as a Seoul-time moment; the client phrases it against its own clock."""
     at = local(moment).isoformat(timespec="seconds")
     return CardDue(at=at, prefix=prefix, suffix=suffix, missed=missed)
+
+
+def is_all_day(moment: datetime) -> bool:
+    """Treat 23:59:59 Seoul time as "no time of day", so all-day tasks need no extra column."""
+    return local(moment).time() == time(23, 59, 59)
+
+
+def clock_or_all_day(moment: datetime) -> str:
+    """Show a row's time, or 종일 for an all-day task."""
+    return "종일" if is_all_day(moment) else clock(moment)

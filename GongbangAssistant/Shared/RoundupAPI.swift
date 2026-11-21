@@ -141,10 +141,6 @@ enum RoundupAPI {
         return moved.revision
     }
 
-    static func setTaskDone(id: String, done: Bool, revision: Int) async throws {
-        let _: Acknowledged = try await post("tasks/\(id)/completion", Completion(done: done, expectedRevision: revision))
-    }
-
     static func setSessionDone(id: String, done: Bool, revision: Int) async throws {
         let _: Acknowledged = try await post("class-sessions/\(id)/completion", Completion(done: done, expectedRevision: revision))
     }
@@ -164,14 +160,17 @@ enum RoundupAPI {
             "assistant-drafts/\(kind.rawValue)/\(id)/reopen", Revisioned(expectedRevision: revision))
     }
 
-    static func setDone(_ item: TaskItem, done: Bool) async throws {
-        struct State: Decodable {}
-        let body = Completion(done: done, expectedRevision: item.revision)
+    /// Returns the saved revision, so an undo can follow without guessing it.
+    static func setDone(_ item: TaskItem, done: Bool, revision: Int? = nil) async throws -> Int {
+        struct Saved: Decodable { let revision: Int }
+        let body = Completion(done: done, expectedRevision: revision ?? item.revision)
+        let saved: Saved
         switch item.target {
-        case .session: let _: State = try await post("class-sessions/\(item.id)/completion", body)
-        case .task: let _: State = try await post("tasks/\(item.id)/completion", body)
+        case .session: saved = try await post("class-sessions/\(item.id)/completion", body)
+        case .task: saved = try await post("tasks/\(item.id)/completion", body)
         case .shipment: preconditionFailure("shipments use their own actions")
         }
+        return saved.revision
     }
 
     static func createBooking(sessionID: String, customerName: String, phone: String, partySize: Int) async throws {
@@ -208,6 +207,10 @@ enum RoundupAPI {
         try await post("inquiries/\(id)/decision", decision)
     }
 
+    static func undoInquiryCompletion(id: String, revision: Int) async throws -> Inquiry {
+        try await post("inquiries/\(id)/undo-completion", Revisioned(expectedRevision: revision))
+    }
+
     // MARK: Provider proxies
 
     static func staticMap(for place: GeocodeResult) async throws -> Data {
@@ -230,12 +233,20 @@ enum RoundupAPI {
         let text: String
     }
 
+    struct AskReply: Decodable {
+        let answer: String
+        let items: [WorkItem]?
+    }
+
+    static func assistantActivities() async throws -> [AssistantActivity] {
+        try await get("assistant/activities")
+    }
+
     /// The server builds the workshop context from its own database; earlier turns let follow-ups work.
-    static func ask(question: String, history: [ChatTurn] = []) async throws -> String {
+    static func ask(question: String, history: [ChatTurn] = []) async throws -> (answer: String, items: [WorkItem]) {
         struct Body: Encodable { let question: String; let history: [ChatTurn] }
-        struct Reply: Decodable { let answer: String }
-        let reply: Reply = try await post("ask", Body(question: question, history: Array(history.suffix(6))))
-        return reply.answer
+        let reply: AskReply = try await post("ask", Body(question: question, history: Array(history.suffix(6))))
+        return (reply.answer, reply.items ?? [])
     }
 
     enum RewriteKind: String, Encodable {
@@ -382,6 +393,9 @@ struct APIInquiryRepository: InquiryRepository {
     }
     func decide(id: String, decision: InquiryDecision) async throws -> Inquiry {
         try await RoundupAPI.decideInquiry(id: id, decision: decision)
+    }
+    func undoCompletion(id: String, expectedRevision: Int) async throws -> Inquiry {
+        try await RoundupAPI.undoInquiryCompletion(id: id, revision: expectedRevision)
     }
 }
 
