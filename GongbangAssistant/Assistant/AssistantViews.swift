@@ -1,24 +1,5 @@
 import SwiftUI
 
-private struct ChatTurn: Identifiable {
-    enum Role { case owner, assistant, failure }
-    let id = UUID()
-    let role: Role
-    let text: String
-    var items: [WorkItem] = []
-    /// True until the answer has been revealed once.
-    var isFresh = false
-
-    /// Failed turns stay on screen but never reach the model.
-    var apiTurn: RoundupAPI.ChatTurn? {
-        switch role {
-        case .owner: RoundupAPI.ChatTurn(role: .owner, text: text)
-        case .assistant: RoundupAPI.ChatTurn(role: .assistant, text: text)
-        case .failure: nil
-        }
-    }
-}
-
 struct AssistantAccessory: View {
     let openText: () -> Void
     let openVoice: () -> Void
@@ -60,28 +41,30 @@ struct AssistantSheet: View {
     let launch: AssistantLaunch
     @Environment(\.dismiss) private var dismiss
     @State private var message = ""
-    @State private var sent: [ChatTurn] = []
-    @State private var isAnswering = false
+    /// When this sheet opened: an answer that arrives later is written out once, a saved one rests.
+    @State private var openedAt = Date.now
+    @State private var revealed: Set<ConversationStore.Turn.ID> = []
     @State private var isConfirmingDiscard = false
     @State private var recorder = VoiceRecorder()
     @State private var isTranscribing = false
     @State private var voiceError: String?
     @FocusState private var isFieldFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private let store = ConversationStore.shared
 
     private let suggestions = ["오늘 발송할 주문 알려줘", "예약금 안 낸 손님 알려줘", "주말 클래스 홍보 글 써 줘"]
 
     var body: some View {
         NavigationStack {
             Group {
-                if sent.isEmpty {
+                if let conversation = store.current {
+                    transcript(conversation)
+                } else {
                     ScrollView {
                         welcome
                             .padding(.top, 8)
                     }
                     .scrollBounceBehavior(.basedOnSize)
-                } else {
-                    conversation
                 }
             }
             .navigationTitle("비서")
@@ -103,6 +86,21 @@ struct AssistantSheet: View {
                         Button("계속 쓰기", role: .cancel) {}
                     }
                 }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        AssistantHistoryView()
+                    } label: {
+                        Label("지난 대화", systemImage: "clock.arrow.circlepath")
+                    }
+                    .accessibilityIdentifier("assistant.history")
+                    // The way back from a conversation to the start; the conversation stays in 지난 대화.
+                    if store.current != nil {
+                        Button("새 대화", systemImage: "square.and.pencil") {
+                            store.startNew()
+                        }
+                        .accessibilityIdentifier("assistant.new")
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom) {
                 composer
@@ -112,6 +110,9 @@ struct AssistantSheet: View {
         // Half height leaves no room for the suggestions at accessibility sizes, so those open full height.
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
+        .onAppear {
+            store.resume()
+        }
         .task {
             isFieldFocused = true
         }
@@ -142,10 +143,18 @@ struct AssistantSheet: View {
         .padding(.horizontal)
     }
 
-    private var conversation: some View {
+    private func isFresh(_ turn: ConversationStore.Turn, in conversation: ConversationStore.Conversation) -> Binding<Bool> {
+        Binding(
+            get: { turn.id == conversation.turns.last?.id && turn.date > openedAt && !revealed.contains(turn.id) },
+            set: { if !$0 { revealed.insert(turn.id) } }
+        )
+    }
+
+    private func transcript(_ conversation: ConversationStore.Conversation) -> some View {
         ScrollViewReader { proxy in
             List {
-                ForEach($sent) { $turn in
+                ForEach(conversation.turns) { turn in
+                    let isFresh = isFresh(turn, in: conversation)
                     switch turn.role {
                     case .owner:
                         HStack {
@@ -159,7 +168,7 @@ struct AssistantSheet: View {
                     case .assistant:
                         VStack(alignment: .leading, spacing: 10) {
                             Label {
-                                GeneratedText(Self.rendered(turn.text), isFresh: $turn.isFresh)
+                                GeneratedText(Self.rendered(turn.text), isFresh: isFresh)
                                     .textSelection(.enabled)
                             } icon: {
                                 AssistantFace(size: .card)
@@ -171,9 +180,9 @@ struct AssistantSheet: View {
                                     .padding(12)
                                     .background(.fill.quaternary, in: .inner)
                             }
-                            .opacity(turn.isFresh ? 0 : 1)
+                            .opacity(isFresh.wrappedValue ? 0 : 1)
                         }
-                        .animation(.default, value: turn.isFresh)
+                        .animation(.default, value: isFresh.wrappedValue)
                         .listRowSeparator(.hidden)
                     case .failure:
                         Label(turn.text, systemImage: "exclamationmark.circle.fill")
@@ -181,7 +190,7 @@ struct AssistantSheet: View {
                             .listRowSeparator(.hidden)
                     }
                 }
-                if isAnswering {
+                if store.isAnswering {
                     GeneratingIndicator(label: "비서가 현황을 보고 있어요")
                         .font(.subheadline)
                         .listRowSeparator(.hidden)
@@ -190,13 +199,18 @@ struct AssistantSheet: View {
             }
             .listStyle(.plain)
             // A List has no bottom anchor, so the waiting row and then the answer's first line are scrolled into view.
-            .onChange(of: isAnswering) {
+            .onChange(of: store.isAnswering) {
                 withAnimation {
-                    if isAnswering {
+                    if store.isAnswering {
                         proxy.scrollTo(Self.waitingRow, anchor: .bottom)
-                    } else if let last = sent.last {
+                    } else if let last = conversation.turns.last {
                         proxy.scrollTo(last.id, anchor: .top)
                     }
+                }
+            }
+            .onChange(of: conversation.turns.last?.id) {
+                if let last = conversation.turns.last, last.role == .assistant {
+                    AccessibilityNotification.Announcement(last.text).post()
                 }
             }
         }
@@ -299,22 +313,8 @@ struct AssistantSheet: View {
     private func send(_ text: String) {
         let value = trimmed(text)
         guard !value.isEmpty else { return }
-        let history = sent.compactMap(\.apiTurn)
-        sent.append(ChatTurn(role: .owner, text: value))
         message = ""
-        Task { await answer(value, history: history) }
-    }
-
-    private func answer(_ question: String, history: [RoundupAPI.ChatTurn]) async {
-        isAnswering = true
-        defer { isAnswering = false }
-        do {
-            let reply = try await RoundupAPI.ask(question: question, history: history)
-            sent.append(ChatTurn(role: .assistant, text: reply.answer, items: reply.items, isFresh: true))
-            AccessibilityNotification.Announcement(reply.answer).post()
-        } catch {
-            sent.append(ChatTurn(role: .failure, text: error.localizedDescription))
-        }
+        store.ask(value)
     }
 }
 
