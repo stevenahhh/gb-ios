@@ -544,6 +544,7 @@ struct WorkCard: View {
                     }
                     .tint(.gray)
                     .disabled(app.isRunning(item.id))
+                    .accessibilityIdentifier("swipe.\(item.id)")
                 }
             }
             .sheet(isPresented: $isEnteringInvoice) {

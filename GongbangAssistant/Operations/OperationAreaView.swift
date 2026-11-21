@@ -157,7 +157,8 @@ private struct SelectableWorkRow: View {
     }
 }
 
-/// The control bar for chosen rows: one button per next step among them, the earliest step prominent.
+/// The control bar for chosen rows: the earliest step among them is the one prominent button, and any later
+/// steps share one row beneath it, so the bar stays short and the chosen rows stay visible.
 private struct BatchActionBar: View {
     let choosable: [WorkItem]
     @Binding var selection: Set<WorkItem.ID>
@@ -176,22 +177,14 @@ private struct BatchActionBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ForEach(Array(groups.enumerated()), id: \.element.code) { index, group in
-                let button = Button {
-                    run(group.code, group.items)
-                } label: {
-                    BusyLabel(title: "\(group.code.batchLabel) \(group.items.count)건", isBusy: isRunning,
-                              isProminent: index == 0)
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity, minHeight: 30)
-                }
-                .controlSize(.large)
-                .disabled(isRunning)
-                .accessibilityIdentifier("batch.\(group.code.rawValue)")
-                if index == 0 {
-                    button.buttonStyle(.borderedProminent)
-                } else {
-                    button.buttonStyle(.bordered)
+            if let first = groups.first {
+                stepButton(first, isProminent: true)
+            }
+            let rest = groups.dropFirst()
+            if !rest.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { ForEach(rest, id: \.code) { stepButton($0, isProminent: false) } }
+                    VStack(spacing: 8) { ForEach(rest, id: \.code) { stepButton($0, isProminent: false) } }
                 }
             }
             HStack {
@@ -211,6 +204,27 @@ private struct BatchActionBar: View {
         .padding(.top, 12)
         .padding(.bottom, 4)
         .background(.bar)
+    }
+
+    @ViewBuilder
+    private func stepButton(_ group: (code: ActionCode, items: [WorkItem]), isProminent: Bool) -> some View {
+        let button = Button {
+            run(group.code, group.items)
+        } label: {
+            BusyLabel(title: "\(group.code.batchLabel) \(group.items.count)건", isBusy: isRunning, isProminent: isProminent)
+                .font(isProminent ? .body.weight(.semibold) : .subheadline.weight(.semibold))
+                .lineLimit(1)
+                .fixedSize()
+                .frame(maxWidth: .infinity, minHeight: isProminent ? 30 : 22)
+        }
+        .controlSize(isProminent ? .large : .regular)
+        .disabled(isRunning)
+        .accessibilityIdentifier("batch.\(group.code.rawValue)")
+        if isProminent {
+            button.buttonStyle(.borderedProminent)
+        } else {
+            button.buttonStyle(.bordered)
+        }
     }
 }
 

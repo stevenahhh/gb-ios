@@ -59,7 +59,7 @@ enum ActionCode: String, Decodable, Hashable {
         case .confirmOrder: "주문 확인했어요"
         case .pack: "포장 완료했어요"
         case .registerInvoice: "송장 등록했어요"
-        case .markDelivered: "배송 완료로 바꿨어요"
+        case .markDelivered: "배송 완료했어요"
         case .reviewContent: "검토했어요"
         case .completeTask: "완료했어요"
         case .acknowledgeRecommendation: "확인했어요"

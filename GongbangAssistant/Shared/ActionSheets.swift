@@ -108,42 +108,27 @@ struct InvoiceSheet: View {
             } footer: {
                 Text("마지막에 쓴 택배사를 기억해요.")
             }
-            Group {
-                ForEach(items) { item in
-                    Section {
-                        numberRow(item)
-                    } header: {
-                        Text(item.title)
-                    } footer: {
-                        footer(item)
-                    }
-                }
-            }
-            // The number pad has no return key, so the bar above it moves to the next empty parcel.
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(nextEmpty == nil ? "완료" : "다음") { focused = nextEmpty }
-                        .accessibilityIdentifier("invoice.next")
+            ForEach(items) { item in
+                Section {
+                    numberRow(item)
+                } header: {
+                    Text(item.title)
+                } footer: {
+                    footer(item)
                 }
             }
         }
+        // The keyboard is up at once, so the first parcel needs no tap before typing.
+        .defaultFocus($focused, items.first?.id, priority: .userInitiated)
         .presentationDetents(items.count == 1 ? [.medium, .large] : [.large])
         .fullScreenCover(item: $scanning) { item in
-            BarcodeScanSheet(title: item.title) { numbers[item.id] = $0 }
+            BarcodeScanSheet(title: item.title) { fill(item, with: $0) }
         }
         .onAppear {
             if choice.isEmpty { choice = Self.carriers.contains(lastCarrier) ? lastCarrier : Self.customCarrier }
             if choice == Self.customCarrier, customName.isEmpty, !Self.carriers.contains(lastCarrier) { customName = lastCarrier }
-            // The keyboard is up at once, so the first parcel needs no tap before typing.
             focused = items.first?.id
         }
-    }
-
-    /// The next parcel still waiting for a valid number, after the focused one.
-    private var nextEmpty: String? {
-        let start = items.firstIndex { $0.id == focused }.map { $0 + 1 } ?? 0
-        return (items[start...] + items[..<start]).first { !number($0).isValid && $0.id != focused }?.id
     }
 
     private func numberRow(_ item: WorkItem) -> some View {
@@ -161,7 +146,7 @@ struct InvoiceSheet: View {
             if number(item).isEmpty {
                 // The system paste control reads the clipboard only when tapped, so no permission prompt appears.
                 PasteButton(payloadType: String.self) { strings in
-                    if let text = strings.first { numbers[item.id] = TrackingNumber(text) }
+                    if let text = strings.first { fill(item, with: TrackingNumber(text)) }
                 }
                 .labelStyle(.iconOnly)
                 .buttonBorderShape(.circle)
@@ -181,6 +166,13 @@ struct InvoiceSheet: View {
                 .accessibilityIdentifier("invoice.scan.\(item.actionTarget.id)")
             }
         }
+    }
+
+    /// A pasted or scanned number is complete, so the next parcel still waiting takes focus.
+    private func fill(_ item: WorkItem, with number: TrackingNumber) {
+        numbers[item.id] = number
+        guard number.isValid else { return }
+        focused = items.first { !self.number($0).isValid }?.id
     }
 
     @ViewBuilder
