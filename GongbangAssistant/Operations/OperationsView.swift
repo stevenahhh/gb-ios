@@ -1,15 +1,17 @@
 import SwiftUI
 
 struct OperationsView: View {
+    @State private var path = NavigationPath()
     @State private var period: OperationPeriod?
     @State private var isPickingPeriod = false
     @State private var loader = Loader<OperationsData>()
     @Environment(AppModel.self) private var app
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var loadKey: String { "\(period?.rangeText ?? "current")|\(app.dataVersion)" }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             LoadableContent(loader: loader, retry: load) { data in
                 list(data)
             }
@@ -32,8 +34,12 @@ struct OperationsView: View {
     private func list(_ data: OperationsData) -> some View {
         List {
             CardSection {
-                ForEach(data.attention) { metric in
-                    attentionRow(metric)
+                if dynamicTypeSize.isAccessibilitySize {
+                    ForEach(data.attention) { metric in
+                        attentionRow(metric)
+                    }
+                } else {
+                    attentionStrip(data.attention)
                 }
             } header: {
                 HStack {
@@ -146,6 +152,69 @@ struct OperationsView: View {
         .accessibilityIdentifier("operations.period")
     }
 
+    /// Three tappable tiles laid out like the today numbers; each opens its filtered list.
+    /// Buttons push the route themselves, because a List row with several links fires only one of them.
+    private func attentionStrip(_ metrics: [Metric]) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+                if index > 0 {
+                    Divider().frame(height: 72)
+                }
+                Button {
+                    path.append(route(for: metric))
+                } label: {
+                    attentionTile(metric)
+                }
+                .buttonStyle(AttentionTileStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(metric.label) \(metric.display)\(metric.detail.map { ", \($0)" } ?? "")")
+                .accessibilityHint("목록을 열어요")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("operations.attention.\(metric.key)")
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+    }
+
+    private func attentionTile(_ metric: Metric) -> some View {
+        VStack(spacing: 4) {
+            Text(metric.display)
+                .font(.title3.bold())
+                .monospacedDigit()
+            HStack(spacing: 2) {
+                Text(metric.label)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Image(systemName: "chevron.forward")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.subheadline.weight(.semibold))
+            Group {
+                if let due = metric.due {
+                    DueLabel(due: due, font: .caption)
+                } else if let detail = metric.detail {
+                    Text(detail)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .frame(height: 32, alignment: .top)
+            Text("보기")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tint)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(.tint.opacity(0.12), in: .capsule)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .contentShape(.rect)
+    }
+
     private func attentionRow(_ metric: Metric) -> some View {
         NavigationLink(value: route(for: metric)) {
             LabeledContent {
@@ -243,5 +312,15 @@ struct OpportunitiesView: View {
 
     private func load() async {
         await loader.load { try await RoundupAPI.opportunities() }
+    }
+}
+
+/// Darkens a tile while it is pressed, so the owner sees it reacts like a button.
+private struct AttentionTileStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear),
+                        in: .rect(cornerRadius: 14))
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

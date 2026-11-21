@@ -50,6 +50,7 @@ enum RelativeDayFormatter {
 /// A deadline line: a plain clock before it is due, "기한 지남" in red once it passes.
 struct DueLabel: View {
     let due: CardDue
+    var font: Font = .subheadline
 
     var body: some View {
         TimelineView(.everyMinute) { context in
@@ -78,7 +79,7 @@ struct DueLabel: View {
                         .foregroundStyle(.primary)
                 }
             }
-            .font(.subheadline)
+            .font(font)
             .accessibilityElement(children: .combine)
         }
     }
