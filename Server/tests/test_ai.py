@@ -11,7 +11,7 @@ from pydantic import JsonValue
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from prompts import INTENT_GUIDES, INTENT_SYSTEM, Intent
+from prompts import ACT_LEAD, INTENT_GUIDES, INTENT_SYSTEM, Intent
 from providers import ChatMessage, Sampling
 from tests.conftest import NOW
 from turns import CLARIFY_REPLY
@@ -250,7 +250,7 @@ async def test_new_question_after_a_draft_is_asked_as_usual(
 @pytest.mark.parametrize(
     ("question", "intent"),
     [
-        ("이번 주말 클래스 어떻게 홍보하면 좋을까?", "advise"),
+        ("주말 클래스 홍보 전략 조언 좀", "advise"),
         ("연말 휴무 공지 문자 써줘", "write"),
         ("점심 뭐 먹지?", "out_of_scope"),
         ("그거 토요일로 할까 일요일로 할까?", "clarify"),
@@ -291,6 +291,44 @@ async def test_act_request_gets_guidance_and_the_card_of_the_item(
     assert body["answer"] == guidance
     assert [item["id"] for item in body["items"]] == ["shipment-order-1040"]
     assert INTENT_GUIDES["act"] in fake.calls[0][0].content
+
+
+@pytest.mark.postgres
+async def test_advice_question_is_advised_by_rule_even_when_it_mentions_promotion(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "조언", intent=classified("write"))
+    response = await client.post("/ask", json={"question": "이번 주말 클래스 어떻게 홍보하면 좋을까?"})
+    assert response.json() == {"answer": "조언", "items": [], "intent": "advise"}
+    assert fake.classified == []
+    [messages] = fake.calls
+    assert INTENT_GUIDES["advise"] in messages[0].content
+
+
+@pytest.mark.postgres
+async def test_act_answer_claiming_the_change_leads_with_the_admission(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claim = "머그컵 2종 세트 포장을 완료 처리했어요. '운영' 화면의 배송 관리에서 확인할 수 있어요."
+    fake = fake_chat(monkeypatch, claim, intent=classified("act"))
+    body = (await client.post("/ask", json={"question": "포장 완료 처리해줘"})).json()
+    assert body["intent"] == "act"
+    assert body["answer"] == f"{ACT_LEAD} '운영' 화면의 배송 관리에서 확인할 수 있어요."
+    assert [item["id"] for item in body["items"]] == ["shipment-order-1040"]
+    assert len(fake.calls) == 1
+
+
+async def test_weather_question_is_declined_without_the_model(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch)
+    response = await client.post("/ask", json={"question": "오늘 날씨 어때?"})
+    assert response.json() == {
+        "answer": "날씨는 제가 알 수 없어요. 대신 오늘 수업이나 발송 일정은 바로 알려 드릴게요.",
+        "items": [], "intent": "out_of_scope",
+    }
+    assert fake.calls == []
+    assert fake.classified == []
 
 
 @pytest.mark.postgres

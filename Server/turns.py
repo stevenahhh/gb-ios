@@ -61,6 +61,28 @@ REVISION: Final = re.compile(REVISION_WORDS)
 NEW_QUESTION: Final = re.compile(r"몇|언제|어디|누구|얼마|무슨|뭐|무엇|어떻게|왜|알려|일정|현황")
 REFERENCE: Final = re.compile(r"그거|그걸|그것|그\s*글|아까|방금|저번|이전")
 AGAIN: Final = re.compile(rf"다시|또|{REVISION_WORDS}")
+# Asking how or whether to do something is a request for judgment, even when it mentions 홍보 or 공지.
+ADVICE_WORDS: Final = (
+    r"(?:좋을|나을|괜찮을)(?:까|지)|어떻게[^?]*?(?:까|하지|하나)요?\s*(?:\?|$)|어떻게[^?]*?해야"
+    r"|게\s*(?:더\s*)?(?:낫|좋)(?:겠|지\s*않)|추천(?:해\s*)?(?:줄래|줘|주세요|좀)"
+    r"|방법(?:이)?\s*(?:있을까|없을까|있어|있나|있을지)"
+)
+ADVICE: Final = re.compile(ADVICE_WORDS)
+DRAFT_REQUEST: Final = re.compile(
+    r"써\s*(?:줘|주세요|줄래|줄\s*수|봐|달라)|작성|만들어\s*(?:줘|주세요|줄래|봐|달라)",
+)
+# Facts the assistant has no data for; a message that also names workshop work goes to the model.
+OFF_TOPICS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+    ("날씨", re.compile(
+        r"날씨|기온|미세\s*먼지|우산|(?<![가-힣])(?:비|눈)\s*(?:가\s*|이\s*)?(?:와|오|올|내리)",
+    )),
+    ("뉴스", re.compile(r"뉴스|속보")),
+    ("시세", re.compile(r"주식|주가|코스피|코스닥|비트코인|코인|환율")),
+)
+WORKSHOP: Final = re.compile(
+    r"클래스|수업|예약|주문|배송|발송|택배|포장|문의|손님|고객|홍보|공지|매출|재고|공방|일정|가마|재료",
+)
+OFF_TOPIC_REPLY: Final = "{topic}는 제가 알 수 없어요. 대신 오늘 수업이나 발송 일정은 바로 알려 드릴게요."
 CLARIFY_REPLY: Final = (
     "어떤 걸 다시 해 드릴까요? 이 대화에는 아직 제가 쓴 글이 없어요.\n"
     "· 홍보 글 새로 쓰기\n· 문의 답장 초안 쓰기\n· 오늘 할 일 다시 보기"
@@ -144,6 +166,19 @@ def unresolved_reference(question: str, history: Sequence[HistoryTurn]) -> bool:
         REFERENCE.search(question) is not None and AGAIN.search(question) is not None
         and NEW_QUESTION.search(question) is None
     )
+
+
+def asks_advice(question: str) -> bool:
+    """Tell when the owner asks how or whether to do something rather than for the piece itself."""
+    return ADVICE.search(question) is not None and DRAFT_REQUEST.search(question) is None
+
+
+def off_topic_reply(question: str) -> str | None:
+    """Decline a weather, news, or price question without guessing, unless it is about the workshop."""
+    if WORKSHOP.search(question) is not None:
+        return None
+    topic = next((name for name, pattern in OFF_TOPICS if pattern.search(question)), None)
+    return None if topic is None else OFF_TOPIC_REPLY.format(topic=topic)
 
 
 def without_drafts(history: Sequence[HistoryTurn]) -> list[HistoryTurn]:
