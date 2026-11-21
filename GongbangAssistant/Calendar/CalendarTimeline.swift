@@ -388,7 +388,7 @@ struct PinnedSummaryCard: View {
                 }
             }
             .padding(.horizontal, 14)
-            .background(CalendarTokens.pinned, in: .rect(cornerRadius: 16))
+            .background(CalendarTokens.pinned, in: .card)
         }
     }
 

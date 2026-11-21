@@ -1,0 +1,7 @@
+// Signing settings shared by every target.
+// Teammates installing on their own iPhone run scripts/setup-iphone.sh, which writes
+// Signing.local.xcconfig (ignored by Git) so the bundle ID and team stay out of the project file.
+
+GB_BUNDLE_ID_PREFIX = com.stevenahhh
+
+#include? "Signing.local.xcconfig"

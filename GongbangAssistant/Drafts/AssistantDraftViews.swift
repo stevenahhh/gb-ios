@@ -216,7 +216,7 @@ struct AssistantDraftCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.fill.tertiary, in: .rect(cornerRadius: 12))
+        .background(.fill.tertiary, in: .inner)
         // The text about to be replaced is dimmed while the assistant writes.
         .opacity(isRewriting ? 0.4 : 1)
         .animation(.default, value: isRewriting)
@@ -228,7 +228,7 @@ struct AssistantDraftCard: View {
             KoreanTextEditor(text: $buffer, isFresh: $isBufferFresh)
                 .frame(minHeight: 160)
                 .padding(8)
-                .background(.fill.tertiary, in: .rect(cornerRadius: 12))
+                .background(.fill.tertiary, in: .inner)
                 .accessibilityLabel("초안 수정")
                 .accessibilityIdentifier("draft.editor")
             HStack(spacing: 8) {

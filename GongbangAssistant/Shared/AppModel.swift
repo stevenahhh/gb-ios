@@ -163,7 +163,7 @@ struct ConnectionNotice: View {
         .padding(.leading, 14)
         .padding(.trailing, 6)
         .padding(.vertical, 4)
-        .background(AppPalette.card, in: .rect(cornerRadius: 16))
+        .background(AppPalette.card, in: .card)
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)

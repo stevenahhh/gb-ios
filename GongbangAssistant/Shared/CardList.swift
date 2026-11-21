@@ -1,17 +1,18 @@
 import SwiftUI
-import UIKit
 
+/// Every tab sits on the calendar's page: plain white (black in dark mode), with cards drawn as its light pinned boxes.
 enum AppPalette {
-    static let listBackground = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 16 / 255, green: 16 / 255, blue: 18 / 255, alpha: 1)
-            : .systemGroupedBackground
-    })
-    static let card = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 26 / 255, green: 26 / 255, blue: 29 / 255, alpha: 1)
-            : .secondarySystemGroupedBackground
-    })
+    static let listBackground = CalendarTokens.background
+    static let card = CalendarTokens.pinned
+    /// The system inset-grouped radius (26pt on iOS 26 and 27), so a drawn box matches the list cards.
+    static let cardRadius: CGFloat = 26
+    /// A box that sits inside a card, such as draft text or a map.
+    static let innerRadius: CGFloat = 18
+}
+
+extension Shape where Self == RoundedRectangle {
+    static var card: RoundedRectangle { RoundedRectangle(cornerRadius: AppPalette.cardRadius, style: .continuous) }
+    static var inner: RoundedRectangle { RoundedRectangle(cornerRadius: AppPalette.innerRadius, style: .continuous) }
 }
 
 extension EnvironmentValues {
@@ -21,12 +22,11 @@ extension EnvironmentValues {
 }
 
 extension View {
-    // Inset-grouped lists clip rows to a fixed system radius, so cards are drawn per row instead.
+    // The inset-grouped style rounds every card with the system radius, the same in light and dark mode.
     func cardList(separators: Visibility = .automatic) -> some View {
-        listStyle(.grouped)
+        listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .background(AppPalette.listBackground)
-            .contentMargins(.horizontal, 16, for: .scrollContent)
             .listSectionSpacing(20)
             .environment(\.cardSeparators, separators)
     }
@@ -37,7 +37,6 @@ struct CardSection<Content: View, Header: View, Footer: View>: View {
     private let header: Header
     private let footer: Footer
     @Environment(\.cardSeparators) private var separators
-    @Environment(\.colorScheme) private var colorScheme
 
     init(@ViewBuilder content: () -> Content,
          @ViewBuilder header: () -> Header,
@@ -49,12 +48,10 @@ struct CardSection<Content: View, Header: View, Footer: View>: View {
 
     var body: some View {
         Section {
-            Group(subviews: content) { rows in
-                ForEach(rows) { row in
-                    row
-                        .listRowBackground(background(isFirst: row.id == rows.first?.id, isLast: row.id == rows.last?.id))
-                        .listRowSeparator(separators)
-                }
+            ForEach(subviews: content) { row in
+                row
+                    .listRowBackground(AppPalette.card)
+                    .listRowSeparator(separators)
             }
         } header: {
             // The system's grouped header gray measures about 3.7:1; headers that set their own color keep it.
@@ -63,18 +60,6 @@ struct CardSection<Content: View, Header: View, Footer: View>: View {
             footer.foregroundStyle(Color.secondaryText)
         }
         .listSectionSeparator(.hidden)
-    }
-
-    private func background(isFirst: Bool, isLast: Bool) -> some View {
-        let radius: CGFloat = colorScheme == .dark ? 14 : 26
-        return UnevenRoundedRectangle(
-            topLeadingRadius: isFirst ? radius : 0,
-            bottomLeadingRadius: isLast ? radius : 0,
-            bottomTrailingRadius: isLast ? radius : 0,
-            topTrailingRadius: isFirst ? radius : 0,
-            style: .continuous
-        )
-        .fill(AppPalette.card)
     }
 }
 

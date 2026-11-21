@@ -382,7 +382,7 @@ private struct AttentionTileStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? AnyShapeStyle(.fill.secondary) : AnyShapeStyle(.clear),
-                        in: .rect(cornerRadius: 14))
+                        in: .inner)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

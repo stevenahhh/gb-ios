@@ -105,7 +105,7 @@ struct WorkshopInfoView: View {
                                 .background(CalendarTokens.fill)
                         }
                     }
-                    .clipShape(.rect(cornerRadius: 12))
+                    .clipShape(.inner)
                     .animation(.default, value: mapImage == nil)
                 }
             }
