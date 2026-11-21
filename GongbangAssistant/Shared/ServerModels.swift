@@ -11,7 +11,7 @@ struct Metric: Decodable, Identifiable, Hashable {
     var id: String { key }
 }
 
-enum StatusTone: String, Decodable, Hashable {
+enum StatusTone: String, Codable, Hashable {
     case attention
     case done
     case progress
@@ -34,12 +34,12 @@ enum StatusTone: String, Decodable, Hashable {
     }
 }
 
-struct Status: Decodable, Hashable {
+struct Status: Codable, Hashable {
     let text: String
     let tone: StatusTone
 }
 
-enum ActionCode: String, Decodable, Hashable {
+enum ActionCode: String, Codable, Hashable {
     case confirmDeposit
     case confirmOrder
     case pack
@@ -85,7 +85,7 @@ struct CardTarget: Decodable, Hashable {
     let revision: Int
 }
 
-struct CardAction: Decodable, Hashable {
+struct CardAction: Codable, Hashable {
     let code: ActionCode
     let label: String
     let target: CardTarget?
@@ -96,7 +96,7 @@ struct CardList: Decodable {
     let items: [WorkItem]
 }
 
-enum CardKind: String, Decodable, Hashable {
+enum CardKind: String, Codable, Hashable {
     case booking
     case order
     case shipment
@@ -106,12 +106,12 @@ enum CardKind: String, Decodable, Hashable {
     case recommendation
 }
 
-struct UndoAction: Decodable, Hashable {
+struct UndoAction: Codable, Hashable {
     let label: String
     let path: String
 }
 
-enum DraftKind: String, Decodable, Hashable {
+enum DraftKind: String, Codable, Hashable {
     case content
     case recommendation
 
@@ -123,14 +123,14 @@ enum DraftKind: String, Decodable, Hashable {
     }
 }
 
-struct DraftReference: Decodable, Hashable {
+struct DraftReference: Codable, Hashable {
     let kind: DraftKind
     let id: String
     let status: ReplyStatus
     let preview: String
 }
 
-struct BookingSummary: Decodable, Hashable {
+struct BookingSummary: Codable, Hashable {
     let day: String
     let dayTitle: String
     let time: String
@@ -138,7 +138,7 @@ struct BookingSummary: Decodable, Hashable {
     let people: Int
 }
 
-struct WorkItem: Decodable, Identifiable, Hashable, HasDue {
+struct WorkItem: Codable, Identifiable, Hashable, HasDue {
     let id: String
     let kind: CardKind
     let title: String
@@ -310,13 +310,13 @@ struct DayEvent: Decodable, Hashable {
     let display: String
 }
 
-struct CardField: Decodable, Hashable {
+struct CardField: Codable, Hashable {
     let label: String
     let value: String
 }
 
 /// Fixed fulfilment steps; `current` is the index of the first unfinished step.
-struct CardProgress: Decodable, Hashable {
+struct CardProgress: Codable, Hashable {
     let steps: [String]
     let current: Int
 }

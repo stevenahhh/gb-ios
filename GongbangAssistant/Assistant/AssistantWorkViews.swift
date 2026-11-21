@@ -48,19 +48,21 @@ struct AssistantActivityView: View {
     }
 }
 
-private struct ActivityRow: View {
-    let activity: AssistantActivity
-
+extension Date {
     /// 24-hour, like the rest of the app ("15:02").
-    static func clock(_ date: Date) -> String {
-        let parts = Calendar.workshop.dateComponents([.hour, .minute], from: date)
+    var clockTime: String {
+        let parts = Calendar.workshop.dateComponents([.hour, .minute], from: self)
         return String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
     }
+}
+
+private struct ActivityRow: View {
+    let activity: AssistantActivity
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(activity.date.map(Self.clock) ?? "")
+                Text(activity.date?.clockTime ?? "")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(Color.secondaryText)
                 Text(keepingWords: activity.summary)
