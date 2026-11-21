@@ -26,7 +26,7 @@ class Action:
 
 ACTIONS: Final = (
     Action("/bookings/booking-jieun/confirm-deposit", {}, "확정"),
-    Action("/orders/order-1042/confirm", {}, "처리 중"),
+    Action("/orders/order-1042/confirm", {}, "포장 대기"),
     Action("/shipments/shipment-order-1040/pack", {}, "송장 대기"),
     Action("/shipments/shipment-order-1041/invoice", INVOICE, "배송 중"),
     Action("/shipments/shipment-order-1038/deliver", {}, "배송 완료"),

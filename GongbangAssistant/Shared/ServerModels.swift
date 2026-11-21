@@ -11,7 +11,7 @@ struct Metric: Decodable, Identifiable, Hashable {
     var id: String { key }
 }
 
-enum StatusTone: String, Decodable, Hashable {
+enum StatusTone: String, Codable, Hashable {
     case attention
     case done
     case progress
@@ -34,12 +34,12 @@ enum StatusTone: String, Decodable, Hashable {
     }
 }
 
-struct Status: Decodable, Hashable {
+struct Status: Codable, Hashable {
     let text: String
     let tone: StatusTone
 }
 
-enum ActionCode: String, Decodable, Hashable {
+enum ActionCode: String, Codable, Hashable {
     case confirmDeposit
     case confirmOrder
     case pack
@@ -48,14 +48,55 @@ enum ActionCode: String, Decodable, Hashable {
     case reviewContent
     case completeTask
     case acknowledgeRecommendation
+
+    /// The fulfilment steps, in the order a parcel takes them; only these run on several rows at once.
+    static let fulfilment: [ActionCode] = [.confirmOrder, .pack, .registerInvoice, .markDelivered]
+
+    /// The finished step for the toast, as in "‘머그컵’ 포장 완료했어요".
+    var doneText: String {
+        switch self {
+        case .confirmDeposit: "입금 확인했어요"
+        case .confirmOrder: "주문 확인했어요"
+        case .pack: "포장 완료했어요"
+        case .registerInvoice: "송장 등록했어요"
+        case .markDelivered: "배송 완료했어요"
+        case .reviewContent: "검토했어요"
+        case .completeTask: "완료했어요"
+        case .acknowledgeRecommendation: "확인했어요"
+        }
+    }
+
+    /// The batch button's verb, followed by the count: "포장 완료 3건".
+    var batchLabel: String {
+        switch self {
+        case .confirmOrder: "주문 확인"
+        case .pack: "포장 완료"
+        case .registerInvoice: "송장 등록"
+        case .markDelivered: "배송 완료"
+        case .confirmDeposit, .reviewContent, .completeTask, .acknowledgeRecommendation: doneText
+        }
+    }
 }
 
-struct CardAction: Decodable, Hashable {
+/// The row an action writes when it is not the card's own, such as an order's parcel.
+struct CardTarget: Codable, Hashable {
+    let kind: CardKind
+    let id: String
+    let revision: Int
+}
+
+struct CardAction: Codable, Hashable {
     let code: ActionCode
     let label: String
+    let target: CardTarget?
 }
 
-enum CardKind: String, Decodable, Hashable {
+/// The cards one batch write changed, in request order.
+struct CardList: Decodable {
+    let items: [WorkItem]
+}
+
+enum CardKind: String, Codable, Hashable {
     case booking
     case order
     case shipment
@@ -65,12 +106,12 @@ enum CardKind: String, Decodable, Hashable {
     case recommendation
 }
 
-struct UndoAction: Decodable, Hashable {
+struct UndoAction: Codable, Hashable {
     let label: String
     let path: String
 }
 
-enum DraftKind: String, Decodable, Hashable {
+enum DraftKind: String, Codable, Hashable {
     case content
     case recommendation
 
@@ -82,14 +123,14 @@ enum DraftKind: String, Decodable, Hashable {
     }
 }
 
-struct DraftReference: Decodable, Hashable {
+struct DraftReference: Codable, Hashable {
     let kind: DraftKind
     let id: String
     let status: ReplyStatus
     let preview: String
 }
 
-struct BookingSummary: Decodable, Hashable {
+struct BookingSummary: Codable, Hashable {
     let day: String
     let dayTitle: String
     let time: String
@@ -97,7 +138,7 @@ struct BookingSummary: Decodable, Hashable {
     let people: Int
 }
 
-struct WorkItem: Decodable, Identifiable, Hashable, HasDue {
+struct WorkItem: Codable, Identifiable, Hashable, HasDue {
     let id: String
     let kind: CardKind
     let title: String
@@ -122,6 +163,12 @@ struct WorkItem: Decodable, Identifiable, Hashable, HasDue {
         case .channel, .content, .recommendation: nil
         }
     }
+
+    /// The row the card's action changes: the card itself, or the parcel an order card points at.
+    var actionTarget: CardTarget { action?.target ?? CardTarget(kind: kind, id: id, revision: revision) }
+
+    /// A fulfilment step this card can take together with others.
+    var batchCode: ActionCode? { action.map(\.code).flatMap { ActionCode.fulfilment.contains($0) ? $0 : nil } }
 }
 
 struct BookingDetail: Decodable {
@@ -263,13 +310,13 @@ struct DayEvent: Decodable, Hashable {
     let display: String
 }
 
-struct CardField: Decodable, Hashable {
+struct CardField: Codable, Hashable {
     let label: String
     let value: String
 }
 
 /// Fixed fulfilment steps; `current` is the index of the first unfinished step.
-struct CardProgress: Decodable, Hashable {
+struct CardProgress: Codable, Hashable {
     let steps: [String]
     let current: Int
 }

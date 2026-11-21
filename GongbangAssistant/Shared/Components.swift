@@ -366,22 +366,47 @@ struct TaskRow: View {
     }
 }
 
-struct CardActionButton: View {
-    private enum InputSheet: String, Identifiable {
-        case invoice
-        var id: Self { self }
+extension AppModel {
+    /// Takes a card's next step in place. The invoice step needs its number, so it asks the caller to open the sheet.
+    func takeStep(_ item: WorkItem, enterInvoice: () -> Void) {
+        guard let code = item.action?.code else { return }
+        guard code != .registerInvoice else { return enterInvoice() }
+        Task {
+            var changed: WorkItem?
+            let saved = await run(id: item.id) { changed = try await RoundupAPI.perform(code, on: item) }
+            if saved, let changed { showStepToast(code, title: item.title, changed: [changed]) }
+        }
     }
 
+    /// Names the finished step on one line and offers 되돌리기 for every row the server lets go back.
+    func showStepToast(_ code: ActionCode, title: String, changed: [WorkItem]) {
+        let message = changed.count == 1 ? "‘\(title)’ \(code.doneText)" : "\(changed.count)건 \(code.doneText)"
+        guard changed.allSatisfy({ $0.undo != nil }), let first = changed.first else {
+            return showToast(message)
+        }
+        showToast(message) { [self] in
+            await run(id: first.id) {
+                if changed.count == 1, let undo = first.undo {
+                    try await RoundupAPI.undo(undo, revision: first.revision)
+                } else {
+                    try await RoundupAPI.undo(changed)
+                }
+            }
+        }
+    }
+}
+
+struct CardActionButton: View {
     let item: WorkItem
     let action: CardAction
     var isPrimary = false
-    @State private var inputSheet: InputSheet?
+    @State private var isEnteringInvoice = false
     @Environment(AppModel.self) private var app
 
     var body: some View {
         let isRunning = app.isRunning(item.id)
         let button = Button {
-            start()
+            app.takeStep(item) { isEnteringInvoice = true }
         } label: {
             BusyLabel(title: action.label, isBusy: isRunning, isProminent: isPrimary)
                 .font(.subheadline.weight(.semibold))
@@ -390,8 +415,8 @@ struct CardActionButton: View {
         .controlSize(.large)
         .disabled(isRunning)
         .accessibilityIdentifier("action.\(item.id)")
-        .sheet(item: $inputSheet) { _ in
-            InvoiceSheet(item: item)
+        .sheet(isPresented: $isEnteringInvoice) {
+            InvoiceSheet(items: [item])
         }
 
         if isPrimary {
@@ -400,14 +425,26 @@ struct CardActionButton: View {
             button.buttonStyle(.bordered)
         }
     }
+}
 
-    private func start() {
-        switch action.code {
-        case .registerInvoice:
-            inputSheet = .invoice
-        case .confirmDeposit, .confirmOrder, .pack, .markDelivered, .completeTask, .acknowledgeRecommendation, .reviewContent:
-            let (item, code) = (item, action.code)
-            Task { await app.run(id: item.id) { try await RoundupAPI.perform(code, on: item) } }
+/// Where a parcel stands on its fixed steps, as a native bar and "2/5단계"; finished parcels show none.
+struct StepProgressLine: View {
+    let progress: CardProgress
+    @ScaledMetric(relativeTo: .subheadline) private var barWidth = 88
+
+    var body: some View {
+        if progress.current < progress.steps.count {
+            HStack(spacing: 8) {
+                ProgressView(value: Double(progress.current), total: Double(progress.steps.count))
+                    .tint(.primary)
+                    .frame(width: barWidth)
+                Text("\(progress.current)/\(progress.steps.count)단계")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(Color.secondaryText)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("진행 단계")
+            .accessibilityValue("\(progress.steps.count)단계 중 \(progress.current)단계 완료, 다음 \(progress.steps[progress.current])")
         }
     }
 }
@@ -483,6 +520,9 @@ struct WorkCardContent: View {
                 }
                 .font(.subheadline.weight(.semibold))
             }
+            if let progress = item.progress {
+                StepProgressLine(progress: progress)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -491,8 +531,29 @@ struct WorkCardContent: View {
 struct WorkCard: View {
     let item: WorkItem
     var isPrimary = false
+    @State private var isEnteringInvoice = false
+    @Environment(AppModel.self) private var app
 
     var body: some View {
+        card
+            // A full swipe from the leading edge takes the same next step as the button.
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if let action = item.action, item.draft == nil, ActionCode.fulfilment.contains(action.code) {
+                    Button(action.label, systemImage: "checkmark") {
+                        app.takeStep(item) { isEnteringInvoice = true }
+                    }
+                    .tint(.gray)
+                    .disabled(app.isRunning(item.id))
+                    .accessibilityIdentifier("swipe.\(item.id)")
+                }
+            }
+            .sheet(isPresented: $isEnteringInvoice) {
+                InvoiceSheet(items: [item])
+            }
+    }
+
+    @ViewBuilder
+    private var card: some View {
         if let draft = item.draft {
             AssistantDraftRow(title: item.title, reference: draft)
         } else if let route = item.route {

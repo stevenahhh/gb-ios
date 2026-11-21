@@ -9,6 +9,8 @@ public final class InquiryStore {
     public private(set) var isSavingInquiry = false
     public private(set) var hasLoadedInquiries = false
     public private(set) var inquiryLoadError: String?
+    /// The last load failed for a reason that retrying can fix, so the app retries it by itself.
+    public private(set) var inquiryLoadIsTransient = false
     /// When inquiries last loaded successfully, shown as "마지막 확인 3:05" while offline.
     public private(set) var lastLoadedAt: Date?
     public private(set) var requiresInquiryReload = false
@@ -29,14 +31,22 @@ public final class InquiryStore {
         guard !isInquiryBusy else { return }
         isLoadingInquiries = true
         defer { isLoadingInquiries = false }
+        if !hasLoadedInquiries, inquiries.isEmpty, let cached = await repository.cached() {
+            inquiries = cached.inquiries
+            lastLoadedAt = cached.savedAt
+        }
         do {
             inquiries = try await repository.load()
             hasLoadedInquiries = true
             lastLoadedAt = Date()
             requiresInquiryReload = false
             inquiryLoadError = nil
+            inquiryLoadIsTransient = false
+        } catch is CancellationError {
+            // A cancelled load says nothing about the server; the last outcome stands.
         } catch {
             inquiryLoadError = "연결이 끊겨 문의를 불러오지 못했어요."
+            inquiryLoadIsTransient = error is any TransientFailure
         }
     }
 

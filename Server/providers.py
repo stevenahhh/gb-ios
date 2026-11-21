@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 CLOVA_URL: Final = "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-005"
 CSR_URL: Final = "https://naveropenapi.apigw.ntruss.com/recog/v1/stt"
+TTS_URL: Final = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts"
+TTS_DENIED: Final = "speech synthesis is not enabled for this server's NAVER API app"
 GEOCODE_URL: Final = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
 STATIC_MAP_URL: Final = "https://maps.apigw.ntruss.com/map-static/v2/raster"
 TIMEOUT: Final = httpx.Timeout(20.0)
@@ -93,14 +95,17 @@ def maps_headers() -> dict[str, str]:
     }
 
 
-async def send(request: httpx.Request) -> httpx.Response:
-    """Send one upstream request and hide provider failure details."""
+async def send(request: httpx.Request, denied: str | None = None) -> httpx.Response:
+    """Send one upstream request and hide failure details; `denied` reports a rejected credential as 503."""
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             response = await client.send(request)
     except httpx.HTTPError as error:
         LOGGER.warning("upstream_failed", extra={"error_type": type(error).__name__})
         raise HTTPException(502, UPSTREAM_FAILED) from None
+    if denied is not None and response.status_code in {401, 403}:
+        LOGGER.error("upstream_denied", extra={"upstream_status": response.status_code})
+        raise HTTPException(503, denied)
     if response.status_code != HTTP_OK:
         LOGGER.warning("upstream_rejected", extra={"upstream_status": response.status_code})
         raise HTTPException(502, UPSTREAM_FAILED)
@@ -141,6 +146,27 @@ async def transcribe(audio: bytes) -> str:
         },
     ))
     return parsed(SpeechResponse, response).text
+
+
+def tts_credential(suffix: str) -> str:
+    """CLOVA Voice may use its own NAVER API app or share the speech recognition app."""
+    return environ.get(f"NCP_TTS_CLIENT_{suffix}") or require_env(f"NCP_CSR_CLIENT_{suffix}")
+
+
+async def synthesize(text: str) -> bytes:
+    """Read Korean text aloud with CLOVA Voice Premium and return MP3 bytes."""
+    response = await send(httpx.Request(
+        "POST", TTS_URL,
+        headers={
+            "X-NCP-APIGW-API-KEY-ID": tts_credential("ID"),
+            "X-NCP-APIGW-API-KEY": tts_credential("SECRET"),
+        },
+        data={
+            "speaker": environ.get("TTS_SPEAKER") or "vyuna", "text": text, "format": "mp3",
+            "speed": "0", "pitch": "0", "volume": "0",
+        },
+    ), denied=TTS_DENIED)
+    return response.content
 
 
 async def geocode_address(query: str) -> GeocodeAddress | None:

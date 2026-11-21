@@ -13,6 +13,9 @@ final class MemoryInquiryRepository: InquiryRepository {
                 facts: ["변경 규정 · 수업 2일 전까지 가능합니다."], draft: "2일 전까지 가능합니다.", status: .pending),
     ]
     var loadFails = false
+    var loadIsRejected = false
+    var loadIsCancelled = false
+    var cachedRecords: (inquiries: [Inquiry], savedAt: Date)?
     var writeFails = false
     var loseDecisionResponse = false
     var pauseSave = false
@@ -20,11 +23,16 @@ final class MemoryInquiryRepository: InquiryRepository {
     private var saveStarted: CheckedContinuation<Void, Never>?
 
     enum Failure: Error { case offline, unsupportedDecision }
+    struct Offline: TransientFailure {}
 
     func load() async throws -> [Inquiry] {
-        if loadFails { throw Failure.offline }
+        if loadIsCancelled { throw CancellationError() }
+        if loadIsRejected { throw Failure.offline }
+        if loadFails { throw Offline() }
         return records
     }
+
+    func cached() async -> (inquiries: [Inquiry], savedAt: Date)? { cachedRecords }
 
     func save(id: String, draft: InquiryDraft) async throws -> Inquiry {
         if pauseSave {
