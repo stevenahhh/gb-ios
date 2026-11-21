@@ -53,6 +53,7 @@ struct InquiryDetailView: View {
                     Label("문의를 찾을 수 없어요", systemImage: "bubble.left")
                 } description: {
                     Text(keepingWords: "목록으로 돌아가 다시 골라 주세요.")
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
         }

@@ -86,8 +86,15 @@ struct WorkshopInfoView: View {
 
             if let errorMessage {
                 CardSection {
-                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
-                        .foregroundStyle(.orange)
+                    // Orange stays on the symbol; orange words measure about 2:1 on the light card.
+                    Label {
+                        Text(errorMessage)
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                    .accessibilityIdentifier("workshop.error")
                 }
             }
 
