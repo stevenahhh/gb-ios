@@ -1,17 +1,9 @@
 import SwiftUI
-import UIKit
 
+/// Every tab sits on the calendar's page: plain white (black in dark mode), with cards drawn as its light pinned boxes.
 enum AppPalette {
-    static let listBackground = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 16 / 255, green: 16 / 255, blue: 18 / 255, alpha: 1)
-            : .systemGroupedBackground
-    })
-    static let card = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 26 / 255, green: 26 / 255, blue: 29 / 255, alpha: 1)
-            : .secondarySystemGroupedBackground
-    })
+    static let listBackground = CalendarTokens.background
+    static let card = CalendarTokens.pinned
 }
 
 extension EnvironmentValues {
