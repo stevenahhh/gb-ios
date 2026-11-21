@@ -84,32 +84,68 @@ enum RoundupAPI {
 
     // MARK: Actions
 
-    /// Performs a card action that needs no further input.
-    static func perform(_ code: ActionCode, on item: WorkItem) async throws {
-        let revision = Revisioned(expectedRevision: item.revision)
-        let updated: WorkItem
+    /// Performs a card action that needs no further input and returns the changed row, which carries its undo.
+    /// An order card's parcel steps write the parcel the action targets.
+    static func perform(_ code: ActionCode, on item: WorkItem) async throws -> WorkItem {
+        let target = item.actionTarget
+        let revision = Revisioned(expectedRevision: target.revision)
         switch code {
-        case .confirmDeposit: updated = try await post("bookings/\(item.id)/confirm-deposit", revision)
-        case .confirmOrder: updated = try await post("orders/\(item.id)/confirm", revision)
-        case .pack: updated = try await post("shipments/\(item.id)/pack", revision)
-        case .markDelivered: updated = try await post("shipments/\(item.id)/deliver", revision)
-        case .acknowledgeRecommendation: updated = try await post("recommendations/\(item.id)/acknowledge", revision)
+        case .confirmDeposit: return try await post("bookings/\(target.id)/confirm-deposit", revision)
+        case .confirmOrder: return try await post("orders/\(target.id)/confirm", revision)
+        case .pack: return try await post("shipments/\(target.id)/pack", revision)
+        case .markDelivered: return try await post("shipments/\(target.id)/deliver", revision)
+        case .acknowledgeRecommendation: return try await post("recommendations/\(target.id)/acknowledge", revision)
         case .completeTask:
-            updated = try await post("tasks/\(item.id)/completion", Completion(done: true, expectedRevision: item.revision))
+            return try await post("tasks/\(target.id)/completion", Completion(done: true, expectedRevision: target.revision))
         case .registerInvoice, .reviewContent:
             preconditionFailure("\(code) is completed on its own screen")
         }
-        _ = updated
     }
 
-    static func registerInvoice(item: WorkItem, carrier: String, trackingNumber: String) async throws {
+    private struct BatchItem: Encodable { let id: String; let expectedRevision: Int }
+    private struct Batch: Encodable { let items: [BatchItem] }
+
+    /// Takes one fulfilment step on several rows in one transaction; one refused row changes none.
+    static func perform(_ code: ActionCode, on items: [WorkItem]) async throws -> [WorkItem] {
+        let path = switch code {
+        case .confirmOrder: "orders/confirm"
+        case .pack: "shipments/pack"
+        case .markDelivered: "shipments/deliver"
+        case .registerInvoice, .confirmDeposit, .reviewContent, .completeTask, .acknowledgeRecommendation:
+            preconditionFailure("\(code) has no batch without further input")
+        }
+        let batch = Batch(items: items.map { BatchItem(id: $0.actionTarget.id, expectedRevision: $0.actionTarget.revision) })
+        let changed: CardList = try await post(path, batch)
+        return changed.items
+    }
+
+    static func registerInvoice(item: WorkItem, carrier: String, trackingNumber: String) async throws -> WorkItem {
         struct Body: Encodable { let carrier, trackingNumber: String; let expectedRevision: Int }
-        let _: WorkItem = try await post("shipments/\(item.id)/invoice", Body(
-            carrier: carrier, trackingNumber: trackingNumber, expectedRevision: item.revision))
+        let target = item.actionTarget
+        return try await post("shipments/\(target.id)/invoice", Body(
+            carrier: carrier, trackingNumber: trackingNumber, expectedRevision: target.revision))
+    }
+
+    /// Registers one carrier's tracking numbers for several packed parcels at once.
+    static func registerInvoices(_ numbers: [(item: WorkItem, trackingNumber: String)], carrier: String) async throws
+        -> [WorkItem] {
+        struct Item: Encodable { let id, trackingNumber: String; let expectedRevision: Int }
+        struct Body: Encodable { let carrier: String; let items: [Item] }
+        let items = numbers.map {
+            Item(id: $0.item.actionTarget.id, trackingNumber: $0.trackingNumber, expectedRevision: $0.item.actionTarget.revision)
+        }
+        let changed: CardList = try await post("shipments/invoice", Body(carrier: carrier, items: items))
+        return changed.items
     }
 
     static func undo(_ undo: UndoAction, revision: Int) async throws {
         let _: Acknowledged = try await post(undo.path, Revisioned(expectedRevision: revision))
+    }
+
+    /// Moves rows a batch changed back one step each; every row is an order or every row is a parcel.
+    static func undo(_ changed: [WorkItem]) async throws {
+        let path = changed.first?.kind == .order ? "orders/undo-confirm" : "shipments/undo"
+        let _: CardList = try await post(path, Batch(items: changed.map { BatchItem(id: $0.id, expectedRevision: $0.revision) }))
     }
 
     static func confirmDeposit(bookingID: String, revision: Int) async throws {

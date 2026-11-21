@@ -4,6 +4,8 @@
 <dict>
 	<key>RoundupAPIURL</key>
 	<string>$(ROUNDUP_API_URL)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>송장 바코드를 찍어 운송장 번호를 넣을 때만 카메라를 써요.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

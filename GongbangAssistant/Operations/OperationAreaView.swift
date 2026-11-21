@@ -117,12 +117,100 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Orders and parcels move through the same steps, so several can take one step together.
+    var allowsBatch: Bool { self == .orders || self == .deliveries }
+
     var sortOptions: [AreaFilter] {
         switch self {
         case .orders: [AreaFilter("newest", "최근 주문순"), AreaFilter("oldest", "오래된 주문순")]
         case .deliveries: [AreaFilter("soonest", "마감 임박순"), AreaFilter("latest", "늦은 마감순")]
         case .bookings, .channels: []
         }
+    }
+}
+
+/// A row while several are being chosen: the whole row toggles, and rows with no step left stay dimmed.
+private struct SelectableWorkRow: View {
+    let item: WorkItem
+    let isSelected: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        let isChoosable = item.batchCode != nil
+        Button(action: toggle) {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondaryText)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityHidden(true)
+                WorkCardContent(item: item)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isChoosable)
+        .opacity(isChoosable ? 1 : 0.4)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(isChoosable ? "" : "남은 단계가 없어요.")
+        .accessibilityIdentifier("select.\(item.id)")
+    }
+}
+
+/// The control bar for chosen rows: one button per next step among them, the earliest step prominent.
+private struct BatchActionBar: View {
+    let choosable: [WorkItem]
+    @Binding var selection: Set<WorkItem.ID>
+    let isRunning: Bool
+    let run: (ActionCode, [WorkItem]) -> Void
+
+    private var groups: [(code: ActionCode, items: [WorkItem])] {
+        let chosen = choosable.filter { selection.contains($0.id) }
+        return ActionCode.fulfilment.compactMap { code in
+            let matching = chosen.filter { $0.batchCode == code }
+            return matching.isEmpty ? nil : (code, matching)
+        }
+    }
+
+    private var isAllSelected: Bool { !choosable.isEmpty && choosable.allSatisfy { selection.contains($0.id) } }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(Array(groups.enumerated()), id: \.element.code) { index, group in
+                let button = Button {
+                    run(group.code, group.items)
+                } label: {
+                    BusyLabel(title: "\(group.code.batchLabel) \(group.items.count)건", isBusy: isRunning,
+                              isProminent: index == 0)
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .controlSize(.large)
+                .disabled(isRunning)
+                .accessibilityIdentifier("batch.\(group.code.rawValue)")
+                if index == 0 {
+                    button.buttonStyle(.borderedProminent)
+                } else {
+                    button.buttonStyle(.bordered)
+                }
+            }
+            HStack {
+                Text(groups.isEmpty ? "처리할 항목을 골라 주세요" : "\(groups.map(\.items.count).reduce(0, +))건 골랐어요")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondaryText)
+                Spacer(minLength: 8)
+                Button(isAllSelected ? "선택 해제" : "모두 선택") {
+                    selection = isAllSelected ? [] : Set(choosable.map(\.id))
+                }
+                .frame(minHeight: 44)
+                .disabled(choosable.isEmpty)
+                .accessibilityIdentifier("batch.selectAll")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .background(.bar)
     }
 }
 
@@ -145,6 +233,9 @@ struct OperationAreaView: View {
     @State private var nextOffset = 0
     @State private var isLoadingMore = false
     @State private var isAddingBooking = false
+    /// The chosen rows while the owner works on several at once; nil outside that mode.
+    @State private var selection: Set<WorkItem.ID>?
+    @State private var invoiceItems: [WorkItem] = []
     @Environment(AppModel.self) private var app
 
     init(area: OperationArea, initialFilter: String? = nil) {
@@ -175,9 +266,20 @@ struct OperationAreaView: View {
                     .accessibilityIdentifier("booking.add")
                 }
             }
+            if area.allowsBatch, loader.value.map({ $0.total > 0 }) == true {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(selection == nil ? "선택" : "완료") {
+                        withAnimation { selection = selection == nil ? [] : nil }
+                    }
+                    .accessibilityIdentifier("area.select")
+                }
+            }
         }
         .sheet(isPresented: $isAddingBooking) {
             BookingFormSheet()
+        }
+        .sheet(isPresented: Binding(get: { !invoiceItems.isEmpty }, set: { if !$0 { invoiceItems = [] } })) {
+            InvoiceSheet(items: invoiceItems)
         }
         .task(id: loadKey) {
             // Typing replaces this task, so only the settled query reaches the server.
@@ -257,11 +359,11 @@ struct OperationAreaView: View {
                     // Overdue rows lead the whole list, above the inquiries too.
                     let overdue = items.filter { $0.due?.isOverdue(at: .now) == true }
                     ForEach(overdue) { item in
-                        WorkCard(item: item, isPrimary: item.id == primaryID)
+                        row(item, isPrimary: item.id == primaryID)
                     }
                     ForEach(inquiries) { AssistantDraftRow(inquiry: $0) }
                     ForEach(items.filter { $0.due?.isOverdue(at: .now) != true }) { item in
-                        WorkCard(item: item, isPrimary: item.id == primaryID)
+                        row(item, isPrimary: item.id == primaryID)
                     }
                     moreButton
                 } header: {
@@ -272,6 +374,41 @@ struct OperationAreaView: View {
         .cardList(separators: .hidden)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: area.searchPrompt)
         .refreshable { await load() }
+        .safeAreaInset(edge: .bottom) {
+            if let selection {
+                BatchActionBar(
+                    choosable: items.filter { $0.batchCode != nil },
+                    selection: Binding(get: { selection }, set: { self.selection = $0 }),
+                    isRunning: app.isRunning(batchRunID), run: runBatch
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ item: WorkItem, isPrimary: Bool) -> some View {
+        if let selection {
+            SelectableWorkRow(item: item, isSelected: selection.contains(item.id)) {
+                self.selection = selection.symmetricDifference([item.id])
+            }
+        } else {
+            WorkCard(item: item, isPrimary: isPrimary)
+        }
+    }
+
+    private let batchRunID = "area.batch"
+
+    /// Chosen rows stay chosen after a step, so the bar offers their next step at once.
+    private func runBatch(_ code: ActionCode, _ items: [WorkItem]) {
+        guard code != .registerInvoice else {
+            invoiceItems = items
+            return
+        }
+        Task {
+            var changed: [WorkItem] = []
+            let saved = await app.run(id: batchRunID) { changed = try await RoundupAPI.perform(code, on: items) }
+            if saved { app.showStepToast(code, title: items[0].title, changed: changed) }
+        }
     }
 
     private func bookingDays(_ items: [WorkItem]) -> [(day: String, title: String, items: [WorkItem])] {

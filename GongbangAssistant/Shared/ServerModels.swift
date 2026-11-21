@@ -48,11 +48,52 @@ enum ActionCode: String, Decodable, Hashable {
     case reviewContent
     case completeTask
     case acknowledgeRecommendation
+
+    /// The fulfilment steps, in the order a parcel takes them; only these run on several rows at once.
+    static let fulfilment: [ActionCode] = [.confirmOrder, .pack, .registerInvoice, .markDelivered]
+
+    /// The finished step for the toast, as in "‘머그컵’ 포장 완료했어요".
+    var doneText: String {
+        switch self {
+        case .confirmDeposit: "입금 확인했어요"
+        case .confirmOrder: "주문 확인했어요"
+        case .pack: "포장 완료했어요"
+        case .registerInvoice: "송장 등록했어요"
+        case .markDelivered: "배송 완료로 바꿨어요"
+        case .reviewContent: "검토했어요"
+        case .completeTask: "완료했어요"
+        case .acknowledgeRecommendation: "확인했어요"
+        }
+    }
+
+    /// The batch button's verb, followed by the count: "포장 완료 3건".
+    var batchLabel: String {
+        switch self {
+        case .confirmOrder: "주문 확인"
+        case .pack: "포장 완료"
+        case .registerInvoice: "송장 등록"
+        case .markDelivered: "배송 완료"
+        case .confirmDeposit, .reviewContent, .completeTask, .acknowledgeRecommendation: doneText
+        }
+    }
+}
+
+/// The row an action writes when it is not the card's own, such as an order's parcel.
+struct CardTarget: Decodable, Hashable {
+    let kind: CardKind
+    let id: String
+    let revision: Int
 }
 
 struct CardAction: Decodable, Hashable {
     let code: ActionCode
     let label: String
+    let target: CardTarget?
+}
+
+/// The cards one batch write changed, in request order.
+struct CardList: Decodable {
+    let items: [WorkItem]
 }
 
 enum CardKind: String, Decodable, Hashable {
@@ -122,6 +163,12 @@ struct WorkItem: Decodable, Identifiable, Hashable, HasDue {
         case .channel, .content, .recommendation: nil
         }
     }
+
+    /// The row the card's action changes: the card itself, or the parcel an order card points at.
+    var actionTarget: CardTarget { action?.target ?? CardTarget(kind: kind, id: id, revision: revision) }
+
+    /// A fulfilment step this card can take together with others.
+    var batchCode: ActionCode? { action.map(\.code).flatMap { ActionCode.fulfilment.contains($0) ? $0 : nil } }
 }
 
 struct BookingDetail: Decodable {
