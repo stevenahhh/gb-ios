@@ -169,9 +169,9 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
 }
 
 enum LiveSpeechConfig {
-    /// CLOVA Voice through the server's /tts. Off until the owner enables the paid NAVER plan; the device voice
-    /// speaks meanwhile, with no network wait per sentence.
-    static let usesServerSpeech = false
+    /// CLOVA Voice Premium through the server's /tts (enabled on the NCP app on 2026-11-21). Turn this off if the
+    /// plan is cancelled; the device voice then speaks, with no network wait per sentence.
+    static let usesServerSpeech = true
     /// After a /tts failure the device voice takes over for this long, so no answer waits on a dead endpoint.
     static var serverSpeechPausedUntil = Date.distantPast
 
