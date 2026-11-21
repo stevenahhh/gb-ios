@@ -30,6 +30,7 @@ from providers import geocode_address, require_env, static_map_image, transcribe
 from recommendations import router as recommendation_router
 from schedule import router as schedule_router
 from shipments import router as shipment_router
+from speech import router as speech_router
 from tasks import router as task_router
 from today import router as today_router
 from undo import router as undo_router
@@ -56,7 +57,7 @@ app.add_middleware(RequestBoundary)
 for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
-    detail_router, draft_router, undo_router, ai_router, activity_router,
+    detail_router, draft_router, undo_router, ai_router, activity_router, speech_router,
 ):
     app.include_router(router)
 
