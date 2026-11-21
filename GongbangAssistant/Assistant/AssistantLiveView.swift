@@ -148,7 +148,8 @@ struct AssistantLiveView: View {
         var spoken = AttributedString(sentence.substring(to: spokenLength).keepingWords)
         spoken.foregroundColor = .primary
         var rest = AttributedString(sentence.substring(from: spokenLength).keepingWords)
-        rest.foregroundColor = Color.secondaryText.opacity(0.7)
+        // Full-strength gray: a thinner one drops under 3:1 on the light backdrop.
+        rest.foregroundColor = Color.secondaryText
         return Text(spoken + rest)
             .font(.title2.weight(.medium))
             .lineLimit(6)

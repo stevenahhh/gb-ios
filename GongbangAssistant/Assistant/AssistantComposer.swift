@@ -90,6 +90,7 @@ struct AssistantComposer: View {
         }
         .padding([.horizontal, .bottom])
         .padding(.top, Self.fadeRoom)
+        .background(alignment: .top) { ComposerCover() }
     }
 
     private func toggleRecording() async {
@@ -108,6 +109,25 @@ struct AssistantComposer: View {
         } catch {
             voiceError = error.localizedDescription
         }
+    }
+}
+
+/// Covers the messages that scroll under the composer, from where the backdrop turns fully opaque (the field's top
+/// edge) down, with a short soft edge so a line of text is not cut sharply. Above it the messages stay readable.
+private struct ComposerCover: View {
+    private static let softEdge: CGFloat = 12
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: AssistantComposer.fadeRoom - Self.softEdge)
+            LinearGradient(colors: [AppPalette.listBackground.opacity(0), AppPalette.listBackground],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: Self.softEdge)
+            AppPalette.listBackground
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
     }
 }
 

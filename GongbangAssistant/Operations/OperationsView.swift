@@ -51,7 +51,8 @@ struct OperationsView: View {
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(.default, value: data.attentionCount)
-                        .foregroundStyle(.primary)
+                        // `Color.primary` is the label color; `.primary` alone would be the header's gray.
+                        .foregroundStyle(Color.primary)
                 }
             }
 
@@ -158,10 +159,12 @@ struct OperationsView: View {
                 Text(period.month.key == "custom" ? period.month.range : period.month.title).monospacedDigit()
                 Image(systemName: "chevron.down").imageScale(.small)
             }
-            .font(.footnote.weight(.semibold))
-            .padding(.horizontal, 10)
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
             .frame(minHeight: 32)
             .background(.fill.tertiary, in: .capsule)
+            .frame(minHeight: 44)
+            .contentShape(.rect)
         }
         .textCase(nil)
         .accessibilityLabel("기간 선택, \(period.month.range)")
@@ -171,10 +174,11 @@ struct OperationsView: View {
     /// Three tappable tiles laid out like the today numbers; each opens its filtered list.
     /// Buttons push the route themselves, because a List row with several links fires only one of them.
     private func attentionStrip(_ metrics: [Metric]) -> some View {
+        // Tiles share the tallest one's height, so every 보기 sits on the same line whatever the detail's length.
         HStack(alignment: .top, spacing: 0) {
             ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
                 if index > 0 {
-                    Divider().frame(height: 72)
+                    Divider().padding(.vertical, 14)
                 }
                 Button {
                     path.append(route(for: metric))
@@ -189,6 +193,7 @@ struct OperationsView: View {
                 .accessibilityIdentifier("operations.attention.\(metric.key)")
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
     }
 
@@ -206,24 +211,25 @@ struct OperationsView: View {
                 .minimumScaleFactor(0.8)
             Group {
                 if let due = metric.due {
-                    DueLabel(due: due, font: .caption)
+                    DueLabel(due: due)
                 } else if let detail = metric.detail {
-                    Text(detail)
+                    // A name keeps its 님 on the same line; alone on the next line it reads as a stray word.
+                    Text(detail.replacingOccurrences(of: " 님", with: "\u{00A0}님"))
                 }
             }
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(Color.secondaryText)
-            .lineLimit(2)
+            .lineLimit(3)
             .multilineTextAlignment(.center)
-            .frame(height: 32, alignment: .top)
+            Spacer(minLength: 0)
             Text("보기")
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.tint)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 4)
                 .background(.tint.opacity(0.12), in: .capsule)
         }
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
         .contentShape(.rect)

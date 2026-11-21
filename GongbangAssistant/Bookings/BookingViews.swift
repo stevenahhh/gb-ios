@@ -331,22 +331,10 @@ struct WorkDetailView: View {
                 if kind == .task, item.action != nil, let due = item.due?.date {
                     TaskScheduleSection(item: item, due: due)
                 }
-                if item.action != nil || item.undo != nil {
+                // A fulfilment detail keeps its step controls under the steps; any other detail gives them a card.
+                if item.progress == nil, item.action != nil || item.stepBack != nil {
                     CardSection("처리") {
-                        if let undo = item.undo {
-                            HStack {
-                                Text("이전 단계로 돌아갈 수 있어요.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.secondaryText)
-                                Spacer(minLength: 8)
-                                UndoButton(label: "상태", isRunning: app.isRunning(item.id)) {
-                                    Task { await app.run(id: item.id) { try await RoundupAPI.undo(undo, revision: item.revision) } }
-                                }
-                            }
-                        }
-                        if let action = item.action {
-                            CardActionButton(item: item, action: action, isPrimary: true)
-                        }
+                        CardActions(item: item, isPrimary: true)
                     }
                 }
             }
@@ -366,54 +354,47 @@ struct WorkDetailView: View {
     }
 }
 
-/// Order and shipment details share one label-value template and the fulfilment steps.
+/// Order and shipment details open with one centered card: what was ordered, where it stands on the fulfilment
+/// steps, and the controls that move it. The label-value rows follow.
 struct OrderSummarySections: View {
     let item: WorkItem
     let progress: CardProgress
 
-    /// The first card line, without the sales channel already shown above the title.
-    private var headline: String? {
-        guard let line = item.lines.first else { return nil }
-        guard let source = item.source else { return line }
-        return line.hasSuffix(" · \(source)") ? String(line.dropLast(source.count + 3)) : line
-    }
-
     var body: some View {
         CardSection {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
-                    if let source = item.source {
-                        Text(source)
+            VStack(spacing: 20) {
+                VStack(spacing: 4) {
+                    Text(keepingWords: item.title)
+                        .font(.title3.bold())
+                        .multilineTextAlignment(.center)
+                    if let line = item.lines.first {
+                        PhraseText(text: line, selectable: true, alignment: .center)
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                     }
-                    Spacer(minLength: 8)
+                    if let due = item.due {
+                        DueLabel(due: due)
+                    } else if let deadline = item.deadline {
+                        Label {
+                            Text(keepingWords: deadline).foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "clock").foregroundStyle(Color.secondaryText)
+                        }
+                        .font(.subheadline.weight(.semibold))
+                    }
+                }
+                VStack(spacing: 10) {
                     if let status = item.status {
                         StatusBadge(status)
                     }
+                    ProgressSteps(progress: progress)
                 }
-                Text(keepingWords: item.title)
-                    .font(.title3.bold())
-                if let line = headline {
-                    PhraseText(text: line)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondaryText)
-                }
-                if let due = item.due {
-                    DueLabel(due: due)
-                } else if let deadline = item.deadline {
-                    Label {
-                        Text(keepingWords: deadline).foregroundStyle(.primary)
-                    } icon: {
-                        Image(systemName: "clock").foregroundStyle(Color.secondaryText)
-                    }
-                    .font(.subheadline.weight(.semibold))
+                if item.action != nil || item.stepBack != nil {
+                    CardActions(item: item, isPrimary: true)
                 }
             }
-            .padding(.vertical, 4)
-        }
-        CardSection {
-            ProgressSteps(progress: progress)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
         }
         if let fields = item.fields, !fields.isEmpty {
             CardSection(item.kind == .shipment ? "배송 정보" : "주문 정보") {
@@ -423,28 +404,41 @@ struct OrderSummarySections: View {
     }
 }
 
+/// The fulfilment steps as a track. A finished step fills its node and draws a check into it, and the line to the
+/// next node fills behind it. A step taken back plays the same marks in reverse: the check retracts and the node
+/// empties. Under Reduce Motion the marks only cross-fade.
 struct ProgressSteps: View {
     let progress: CardProgress
     @ScaledMetric(relativeTo: .body) private var marker = 22
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Clear space between a node and the line that reaches it.
+    private let gap: CGFloat = 4
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
+        // Five labels cannot share a row at accessibility sizes, so the track turns and reads top to bottom.
+        let isStacked = dynamicTypeSize.isAccessibilitySize
+        let track = isStacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
+        let cell = isStacked ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 6))
+        track {
             ForEach(Array(progress.steps.enumerated()), id: \.offset) { index, step in
-                VStack(spacing: 6) {
-                    ZStack {
-                        connectors(index)
-                        dot(index)
-                    }
+                cell {
+                    StepNode(isDone: index < progress.current, isCurrent: index == progress.current, size: marker)
                     Text(step)
                         .font(.subheadline.weight(index == progress.current ? .semibold : .regular))
                         .foregroundStyle(index <= progress.current ? Color.primary : Color.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        // In a row the labels stop growing at xLarge, so long and short names keep one size.
+                        .dynamicTypeSize(DynamicTypeSize.xSmall...(isStacked ? .accessibility5 : .xLarge))
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: isStacked ? .leading : .top)
+                .frame(height: isStacked ? marker + 20 : nil)
             }
         }
-        .padding(.vertical, 8)
+        .background { lines(isStacked: isStacked) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("진행 단계")
         .accessibilityValue(accessibilityValue)
@@ -456,34 +450,105 @@ struct ProgressSteps: View {
         return "\(done)다음 단계 \(progress.steps[progress.current])"
     }
 
-    private func connectors(_ index: Int) -> some View {
-        HStack(spacing: marker + 8) {
-            Rectangle()
-                .fill(index == 0 ? Color.clear : segment(done: index <= progress.current))
-            Rectangle()
-                .fill(index == progress.steps.count - 1 ? Color.clear : segment(done: index < progress.current))
+    /// One line per pair of neighbouring nodes, centered on the border between their cells.
+    private func lines(isStacked: Bool) -> some View {
+        GeometryReader { proxy in
+            let count = progress.steps.count
+            let cell = (isStacked ? proxy.size.height : proxy.size.width) / CGFloat(max(count, 1))
+            let length = max(0, cell - marker - gap * 2)
+            ForEach(0..<max(count - 1, 0), id: \.self) { index in
+                let border = cell * CGFloat(index + 1)
+                StepLine(isFilled: index < progress.current, axis: isStacked ? .vertical : .horizontal)
+                    .frame(width: isStacked ? 2 : length, height: isStacked ? length : 2)
+                    .position(x: isStacked ? marker / 2 : border, y: isStacked ? border : marker / 2)
+            }
         }
-        .frame(height: 2)
+        .accessibilityHidden(true)
+    }
+}
+
+/// When each mark of a step moves. Going forward the node fills, its check draws, the line runs on, and the next
+/// node wakes; going back the same marks leave in the opposite order.
+private enum StepMotion {
+    static let crossFade = Animation.easeInOut(duration: 0.25)
+
+    static func fill(_ isDone: Bool) -> Animation {
+        isDone ? .spring(duration: 0.4, bounce: 0.4) : .easeIn(duration: 0.2).delay(0.3)
     }
 
-    private func segment(done: Bool) -> Color {
-        done ? .primary : Color.secondary.opacity(0.35)
+    static func check(_ isDone: Bool) -> Animation {
+        isDone ? .easeOut(duration: 0.28).delay(0.16) : .easeIn(duration: 0.18).delay(0.12)
     }
 
-    @ViewBuilder
-    private func dot(_ index: Int) -> some View {
-        if index < progress.current {
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color(.systemBackground))
-                .frame(width: marker, height: marker)
-                .background(.primary, in: .circle)
-        } else {
+    static func line(_ isFilled: Bool) -> Animation {
+        isFilled ? .easeInOut(duration: 0.32).delay(0.24) : .easeInOut(duration: 0.24).delay(0.04)
+    }
+
+    static func ring(_ isReached: Bool) -> Animation {
+        isReached ? .easeOut(duration: 0.25).delay(0.5) : .easeOut(duration: 0.15)
+    }
+}
+
+/// One step's mark: a thin ring while it waits, a heavy ring when it is next, and a filled disc with a check once
+/// it is done.
+private struct StepNode: View {
+    let isDone: Bool
+    let isCurrent: Bool
+    let size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let isReached = isDone || isCurrent
+        ZStack {
             Circle()
-                .strokeBorder(index == progress.current ? Color.primary : Color.secondary.opacity(0.5),
-                              lineWidth: index == progress.current ? 2.5 : 1.5)
-                .frame(width: marker, height: marker)
+                .strokeBorder(isReached ? Color.primary : Color.secondary.opacity(0.5), lineWidth: isReached ? 2.5 : 1.5)
+                .animation(reduceMotion ? StepMotion.crossFade : StepMotion.ring(isReached), value: isReached)
+            // With motion the disc grows from the center and the check is drawn along its stroke; without it both fade.
+            Circle()
+                .scale(isDone || reduceMotion ? 1 : 0)
+                .fill(.primary)
+                .opacity(isDone || !reduceMotion ? 1 : 0)
+                .animation(reduceMotion ? StepMotion.crossFade : StepMotion.fill(isDone), value: isDone)
+            StepCheck()
+                .trim(from: 0, to: isDone || reduceMotion ? 1 : 0)
+                .stroke(Color(.systemBackground), style: StrokeStyle(lineWidth: size / 9, lineCap: .round, lineJoin: .round))
+                .opacity(isDone || !reduceMotion ? 1 : 0)
+                .animation(reduceMotion ? StepMotion.crossFade : StepMotion.check(isDone), value: isDone)
         }
+        .frame(width: size, height: size)
+    }
+}
+
+/// The check as one stroke that starts at its short leg, so a trim draws it in and takes it back.
+nonisolated private struct StepCheck: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.29, y: rect.minY + rect.height * 0.53))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.44, y: rect.minY + rect.height * 0.67))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.71, y: rect.minY + rect.height * 0.36))
+        return path
+    }
+}
+
+/// The line between two nodes. It fills from the earlier node and empties back toward it.
+private struct StepLine: View {
+    let isFilled: Bool
+    let axis: Axis
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let isDrawn = isFilled || reduceMotion
+        ZStack {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.35))
+            Rectangle()
+                .scale(x: axis == .horizontal && !isDrawn ? 0 : 1, y: axis == .vertical && !isDrawn ? 0 : 1,
+                       anchor: axis == .horizontal ? .leading : .top)
+                .fill(.primary)
+                .opacity(isFilled || !reduceMotion ? 1 : 0)
+        }
+        .clipShape(.capsule)
+        .animation(reduceMotion ? StepMotion.crossFade : StepMotion.line(isFilled), value: isFilled)
     }
 }
 

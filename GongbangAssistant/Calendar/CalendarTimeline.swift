@@ -564,8 +564,9 @@ struct TimelineRow: View {
     private var checkButton: some View {
         Button(action: toggle) {
             ZStack {
+                // The empty ring is a control edge, so it takes the text gray like the today rows' ring.
                 Circle()
-                    .strokeBorder(isDone ? CalendarTokens.label : CalendarTokens.tertiary, lineWidth: 1.5)
+                    .strokeBorder(isDone ? CalendarTokens.label : CalendarTokens.secondary, lineWidth: 1.5)
                     .background(isDone ? CalendarTokens.label : Color.clear, in: .circle)
                 if isDone {
                     Image(systemName: "checkmark")
@@ -633,12 +634,12 @@ struct TimelineRow: View {
                 .foregroundStyle(state == .done ? CalendarTokens.secondary : CalendarTokens.label)
                 .lineLimit(2)
             metaText
-                .font(.footnote)
+                .font(.subheadline)
                 .foregroundStyle(CalendarTokens.secondary)
                 .lineLimit(2)
             if state == .next {
                 Text(TimelineText.next(entry, now: now))
-                    .font(.footnote.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(CalendarTokens.label)
                     .padding(.top, 4)
             }
@@ -766,16 +767,21 @@ struct NowIndicator: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth = 48
 
+    private static let chipPadding: CGFloat = 7
+
     var body: some View {
         HStack(spacing: 0) {
+            // The row times' own size. The capsule hangs into the page margin by its padding, so its digits
+            // line up with the times above and below.
             Text(TimelineText.clock(minutes))
-                .font(.caption.bold().monospacedDigit())
+                .font(.subheadline.bold().monospacedDigit())
                 .foregroundStyle(CalendarTokens.background)
-                .padding(.horizontal, 8)
-                .frame(height: 22)
+                .padding(.horizontal, Self.chipPadding)
+                .frame(minHeight: 24)
                 .background(CalendarTokens.label, in: .capsule)
                 .fixedSize()
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : timeWidth, alignment: .leading)
+                .offset(x: -Self.chipPadding)
             ZStack {
                 Rail(isFirst: isFirst, isLast: isLast, center: 18)
                 Circle().fill(CalendarTokens.label).frame(width: 9, height: 9)
@@ -802,7 +808,7 @@ struct TimelineLegend: View {
                 HStack(spacing: 14) { items }
                 VStack(alignment: .leading, spacing: 6) { items }
             }
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(CalendarTokens.secondary)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("범례: 채운 원 예약, 사각형 배송, 빈 원 할 일, 회색 체크 끝남, 빨간 점선 원 지남")
@@ -814,21 +820,24 @@ struct TimelineLegend: View {
         item(.reservation, "예약")
         item(.delivery, "배송")
         item(.task, "할 일")
+        // The timeline's own done node: a bare separator-colored dot measured 1.3:1 on the page.
         HStack(spacing: 5) {
-            Circle().fill(CalendarTokens.separator).frame(width: 10, height: 10)
+            NodeShape(kind: .reservation, isDone: true, size: Self.markSize)
             Text("끝남")
         }
         HStack(spacing: 5) {
             Circle()
                 .stroke(Color.overdueRed, style: StrokeStyle(lineWidth: 1.5, dash: [2, 1.5]))
-                .frame(width: 10, height: 10)
+                .frame(width: Self.markSize, height: Self.markSize)
             Text("지남").foregroundStyle(Color.overdueRed)
         }
     }
 
+    private static let markSize: CGFloat = 12
+
     private func item(_ kind: CalendarEventKind, _ label: String) -> some View {
         HStack(spacing: 5) {
-            NodeShape(kind: kind, isDone: false, size: 10)
+            NodeShape(kind: kind, isDone: false, size: Self.markSize)
             Text(label)
         }
     }

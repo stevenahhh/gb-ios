@@ -129,7 +129,8 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// A row while several are being chosen: the whole row toggles, and rows with no step left stay dimmed.
+/// A row while several are being chosen: the whole row toggles. A row with no step left turns gray and loses its
+/// circle's weight, but stays readable; fading the whole row took its detail lines under 2:1.
 private struct SelectableWorkRow: View {
     let item: WorkItem
     let isSelected: Bool
@@ -142,15 +143,16 @@ private struct SelectableWorkRow: View {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
                     .foregroundStyle(isSelected ? Color.primary : Color.secondaryText)
+                    .opacity(isChoosable ? 1 : 0.35)
                     .frame(minWidth: 44, minHeight: 44)
                     .accessibilityHidden(true)
                 WorkCardContent(item: item)
+                    .foregroundStyle(isChoosable ? Color.primary : Color.secondaryText)
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressDimStyle())
         .disabled(!isChoosable)
-        .opacity(isChoosable ? 1 : 0.4)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityHint(isChoosable ? "" : "남은 단계가 없어요.")
         .accessibilityIdentifier("select.\(item.id)")
@@ -387,6 +389,8 @@ struct OperationAreaView: View {
         }
         .cardList(separators: .hidden)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: area.searchPrompt)
+        // Rows pass under the pinned search field; the hard edge keeps their text from reading through it.
+        .scrollEdgeEffectStyle(.hard, for: .top)
         .refreshable { await load() }
         .safeAreaInset(edge: .bottom) {
             if let selection {
@@ -495,6 +499,7 @@ struct OperationAreaView: View {
             Label(area.noDataTitle, systemImage: area.systemImage)
         } description: {
             Text(keepingWords: area.noDataMessage)
+                .foregroundStyle(Color.secondaryText)
         } actions: {
             if area == .bookings {
                 Button {
@@ -513,12 +518,19 @@ struct OperationAreaView: View {
     @ViewBuilder
     private var emptyView: some View {
         if !query.isEmpty {
-            ContentUnavailableView.search(text: query)
+            // The system's search view writes its hint in a gray that measures 3.3:1 on the card.
+            ContentUnavailableView {
+                Label("‘\(query)’ 검색 결과가 없어요", systemImage: "magnifyingglass")
+            } description: {
+                Text(keepingWords: "다른 검색어로 다시 찾아보세요.")
+                    .foregroundStyle(Color.secondaryText)
+            }
         } else {
             ContentUnavailableView {
                 Label(area.emptyTitle, systemImage: "tray")
             } description: {
                 Text(keepingWords: "지금 고른 상태에는 항목이 없어요.")
+                    .foregroundStyle(Color.secondaryText)
             } actions: {
                 if filter != area.filters[0].key {
                     Button("전체 보기") {
