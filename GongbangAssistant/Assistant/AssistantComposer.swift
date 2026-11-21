@@ -34,6 +34,12 @@ struct AssistantComposer: View {
                     .focused(isFocused)
                     .submitLabel(.send)
                     .onSubmit(send)
+                    // A wrapping field takes the keyboard's send key as a line break, so that break sends instead.
+                    .onChange(of: message) {
+                        guard message.last?.isNewline == true else { return }
+                        message.removeLast()
+                        send()
+                    }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 11)
                     .frame(minHeight: 44)
