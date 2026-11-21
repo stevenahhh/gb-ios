@@ -27,8 +27,7 @@ Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으
 - [서버 연결 설정](#서버-연결-설정)
 - [시뮬레이터에서 실행하기](#시뮬레이터에서-실행하기)
 - [시뮬레이터 사용 팁](#시뮬레이터-사용-팁)
-- [실제 iPhone에서 실행하기 (검증하지 않음)](#실제-iphone에서-실행하기-검증하지-않음)
-- [Mac 없이 iPhone에 설치하기](#mac-없이-iphone에-설치하기)
+- [실제 iPhone에 설치하기 (무료 계정)](#실제-iphone에-설치하기-무료-계정)
 - [테스트 실행하기](#테스트-실행하기)
 - [명령줄로 빌드·테스트하기](#명령줄로-빌드테스트하기)
 - [운영 서버](#운영-서버)
@@ -60,7 +59,7 @@ open GongbangAssistant.xcodeproj
 | 코드 push | 저장소 쓰기 권한 |
 | 서버 배포 | 운영 Mac의 SSH 키, ACG에 등록된 IP |
 
-Mac이 없다면 [Mac 없이 iPhone에 설치하기](#mac-없이-iphone에-설치하기)를 봐 주세요.
+본인 iPhone에 설치하려면 [실제 iPhone에 설치하기](#실제-iphone에-설치하기-무료-계정)를 봐 주세요. 돈은 들지 않습니다.
 
 ## 화면 구성
 
@@ -237,34 +236,72 @@ Xcode를 처음 여는 분도 아래 순서를 그대로 따라 하면 됩니다
 | 글자 크기 바꾸기 | Xcode 디버그 막대의 Environment Overrides 버튼(Dynamic Type), 또는 시뮬레이터 안 Settings 앱 > Accessibility > Display & Text Size > Larger Text |
 | iPad 화면 보기 | 실행 대상을 "iPad Pro 11-inch (M5)"로 바꾸고 다시 실행 |
 
-## 실제 iPhone에서 실행하기 (검증하지 않음)
+## 실제 iPhone에 설치하기 (무료 계정)
 
-> 이 절의 절차는 실제 기기에서 시험하지 않았습니다. 작업하는 동안 쓸 수 있는 iPhone이 없었기 때문입니다. 순서대로 해도 막히는 곳이 있을 수 있습니다.
+돈을 내지 않고 iPhone에 앱을 넣는 방법은 무료 Apple Account의 Personal Team으로 Xcode에서 직접 설치하는 것뿐입니다. 그래서 Mac과 케이블이 필요하고 아래 제약이 붙습니다.
 
-Apple Account가 있어야 합니다. 무료 Personal Team으로도 앱에 서명할 수 있습니다.
+- 설치한 앱은 7일 뒤 실행되지 않습니다. 같은 Mac에 다시 연결해 **⌘R**을 누르면 7일이 새로 시작되고 앱 데이터도 남아 있습니다.
+- 무료 계정으로는 한 기기에 이 방법으로 만든 앱을 3개까지 넣을 수 있습니다. 새 번들 ID는 7일에 10개까지 만들 수 있습니다.
+- iPhone은 iOS 26.1 이상이어야 합니다.
+- 앱 키가 앱 안에 들어가므로 믿을 수 있는 팀원 기기에만 설치합니다.
 
-1. **Xcode > Settings… > Accounts**에서 Apple Account를 추가합니다.
-2. 프로젝트 내비게이터에서 GongbangAssistant 프로젝트를 고른 뒤 target GongbangAssistant > **Signing & Capabilities**로 갑니다. **Team**에서 본인 팀을 고릅니다.
-3. Bundle Identifier `com.stevenahhh.GongbangAssistant`를 겹치지 않는 값으로 바꿉니다. 예를 들어 `com.<yourname>.GongbangAssistant`처럼 씁니다. 기기에서 테스트도 돌릴 생각이면 UI 테스트 타깃의 `com.stevenahhh.GongbangAssistantUITests`도 바꿔 줍니다.
-4. iPhone을 케이블로 Mac에 연결하고 iPhone 화면에서 **Trust**를 누릅니다. iPhone은 iOS 26.1 이상이어야 합니다.
-5. iPhone에서 개발자 모드를 켭니다. Settings > Privacy & Security > Developer Mode를 켜고 재시동한 뒤 확인을 누릅니다.
-6. Xcode 실행 대상을 연결한 iPhone으로 바꾸고 **⌘R**을 누릅니다.
-7. 무료 계정이면 첫 실행이 신뢰하지 않은 개발자라는 이유로 막힐 수 있습니다. 그때는 iPhone의 Settings > General > VPN & Device Management에서 개발자 인증서를 신뢰로 바꿉니다.
+> 2026년 11월 21일에 무료 Personal Team으로 iPhone 18 Pro(iOS 26 이상)에 `scripts/install-iphone.sh`를 써서 설치했습니다. 설치 직후 첫 실행은 개발자를 신뢰하기 전까지 막힙니다. 아래 2단계를 거치면 됩니다.
+>
+> 계정을 막 추가한 Xcode는 Team ID를 바로 저장하지 않습니다. 그래서 스크립트가 Team을 찾지 못하면 Signing & Capabilities에서 Team을 한 번 고른 뒤 다시 실행합니다.
 
-## Mac 없이 iPhone에 설치하기
+### 처음 한 번 준비하기
 
-TestFlight가 없어도 설치할 수 있습니다. Mac이 있는 팀원에게 iPhone을 가져가 케이블로 연결하면 됩니다. iPhone 주인의 무료 Apple 계정을 Xcode에 추가한 뒤 [실제 iPhone에서 실행하기](#실제-iphone에서-실행하기-검증하지-않음) 순서대로 진행합니다. 이렇게 설치한 앱은 7일 뒤 실행되지 않으므로 다시 연결해 설치해야 합니다. 무료 계정으로는 한 기기에 앱을 3개까지 설치할 수 있습니다.
+1. **Xcode > Settings… > Accounts**에서 **+**를 눌러 본인 Apple Account를 추가합니다. 개발자 프로그램에 가입하지 않아도 됩니다.
+2. 저장소 최상위 폴더에서 설정 스크립트를 실행합니다. 앱 키를 물으면 [서버 연결 설정](#서버-연결-설정)에 적힌 값을 붙여 넣습니다.
+
+   ```bash
+   scripts/setup-iphone.sh
+   ```
+
+   스크립트는 Git이 무시하는 파일 두 개를 만듭니다. `Config/Signing.local.xcconfig`에는 본인만 쓰는 번들 ID가 들어갑니다. `GongbangAssistant/RoundupSecrets.plist`에는 서버 주소와 앱 키가 들어갑니다. 이미 있는 파일은 덮어쓰지 않으므로 다시 실행해도 번들 ID가 바뀌지 않습니다.
+3. Xcode에서 프로젝트를 열고 target GongbangAssistant > **Signing & Capabilities**로 갑니다. **Team**에서 "이름 (Personal Team)"을 고릅니다. Bundle Identifier는 스크립트가 정했으므로 건드리지 않습니다.
+4. iPhone을 케이블로 Mac에 연결하고 iPhone 화면에서 **신뢰**를 누릅니다.
+5. iPhone에서 **설정 > 개인정보 보호 및 보안 > 개발자 모드**를 켭니다. iPhone이 재시동되면 확인을 누릅니다. 이 메뉴는 Mac에 한 번 연결한 뒤에 나타납니다.
+
+### 설치하기
+
+Xcode 창을 열지 않고 명령 하나로 빌드, 설치, 실행까지 하려면 iPhone을 연결한 뒤 아래 명령을 실행합니다. Team은 Xcode에 추가한 계정에서 찾고, 연결된 iPhone도 스스로 고릅니다.
+
+```bash
+scripts/install-iphone.sh
+```
+
+Xcode에서 설치하는 순서는 아래와 같습니다.
+
+1. Xcode 도구 막대의 실행 대상을 연결한 iPhone으로 바꾸고 **⌘R**을 누릅니다.
+2. 첫 실행은 "신뢰하지 않는 개발자"라는 안내와 함께 막힙니다. iPhone의 **설정 > 일반 > VPN 및 기기 관리**에서 본인 Apple Account를 눌러 신뢰합니다.
+3. 다시 **⌘R**을 누르거나 홈 화면의 앱 아이콘을 누릅니다.
+
+같은 Wi-Fi에 있다면 Xcode의 **Window > Devices and Simulators**에서 해당 iPhone의 **Connect via network**를 켜 두면 다음부터는 케이블 없이 다시 설치할 수 있습니다.
+
+Team을 고르면 Xcode가 `project.pbxproj`에 `DEVELOPMENT_TEAM`을 적습니다. 이 변경은 커밋하지 않습니다. 프로젝트 파일을 건드리지 않으려면 Team ID를 스크립트에 넘깁니다. Team ID는 Team을 고른 뒤 `git diff`에 보이는 영문 대문자와 숫자 10자리입니다.
+
+```bash
+git checkout GongbangAssistant.xcodeproj/project.pbxproj
+scripts/setup-iphone.sh ABCDE12345
+```
+
+### Mac이 없는 팀원
+
+Mac이 있는 팀원에게 iPhone을 가져가 연결합니다. 그 Mac의 Xcode에 iPhone 주인의 Apple Account를 추가하고 위 순서대로 진행합니다. 7일마다 다시 연결해야 하므로 시연 날짜에 맞춰 설치하는 편이 낫습니다.
+
+### 돈을 내면 달라지는 점
 
 Mac에 연결하지 않고 원격으로 설치하려면 유료 Apple Developer Program이 필요합니다. 가입비는 [멤버십 1년에 99달러](https://developer.apple.com/programs/enroll/)이고 지역별 금액은 가입할 때 표시됩니다.
 
 | 방법 | 팀원이 할 일 | 조건 | 판단 |
 |---|---|---|---|
-| [TestFlight 내부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers/) | App Store Connect 초대 수락, TestFlight 앱에서 설치 | App Store Connect 사용자 최대 100명 | 추천 |
+| [TestFlight 내부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers/) | App Store Connect 초대 수락, TestFlight 앱에서 설치 | App Store Connect 사용자 최대 100명 | 유료일 때 추천 |
 | [TestFlight 외부 테스터](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers) | 이메일이나 공개 링크로 TestFlight에서 설치 | 최대 10,000명, 베타 심사 정보 제출 필요 | 팀 밖 시연용 |
 | [Ad Hoc 배포](https://developer.apple.com/help/account/devices/devices-overview/) | 기기 식별자를 전달하고 설치 파일로 설치 | 제품군별 등록 기기 최대 100대 | 기기를 추가할 때마다 다시 빌드 |
-| [무료 Personal Team](https://developer.apple.com/library/archive/qa/qa1915/_index.html) | iPhone을 Mac에 연결하고 개발자 모드 켜기 | 본인 기기용, 7일마다 다시 설치 | 지금 바로 가능 |
+| [무료 Personal Team](https://developer.apple.com/library/archive/qa/qa1915/_index.html) | iPhone을 Mac에 연결하고 개발자 모드 켜기 | 본인 기기용, 7일마다 다시 설치 | 지금 쓰는 방법 |
 
-TestFlight 빌드는 [최대 90일](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview) 동안 시험할 수 있으므로 그 전에 새 빌드를 올려야 합니다. 가입 뒤에는 운영 Mac에서 Xcode로 Archive를 만들어 App Store Connect에 올립니다. 이 빌드에는 `RoundupSecrets.plist`의 앱 키가 들어갑니다. 아직 실제 iPhone에서는 시험하지 않았습니다.
+TestFlight 빌드는 [최대 90일](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview) 동안 시험할 수 있으므로 그 전에 새 빌드를 올려야 합니다.
 
 ## 테스트 실행하기
 
@@ -364,7 +401,7 @@ Server/deploy.sh
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | "Unable to find a destination matching the provided destination specifier" | 그 시뮬레이터나 런타임이 설치돼 있지 않음 | `xcrun simctl list devices available`로 확인한 뒤 Settings > Components에서 런타임을 설치하거나 다른 기기 이름을 고릅니다 |
-| "Signing for "GongbangAssistant" requires a development team" | 실제 기기로 빌드할 때만 생김 | [실제 iPhone](#실제-iphone에서-실행하기-검증하지-않음) 절의 2단계대로 Team을 지정합니다 |
+| "Signing for "GongbangAssistant" requires a development team" | 실제 기기로 빌드할 때만 생김 | [실제 iPhone에 설치하기](#처음-한-번-준비하기)의 3단계대로 Team을 고릅니다 |
 | Xcode 버전을 바꾼 뒤 이상한 빌드 오류 | 이전 빌드 산출물이 남아 있음 | Product > Clean Build Folder(⇧⌘K)를 누르거나 `~/Library/Developer/Xcode/DerivedData/GongbangAssistant-*`를 지웁니다 |
 | VS Code나 Cursor에 "No such module 'UIKit'" 또는 "No such module 'XCTest'" | 편집기의 Swift 언어 서버가 Command Line Tools를 씀 | Xcode나 xcodebuild로 빌드합니다 |
 | `xcrun simctl boot`에서 "Unable to boot device in current state: Booted" | 그 시뮬레이터가 이미 켜져 있음 | 오류가 아니므로 다음 명령으로 넘어갑니다 |
@@ -411,6 +448,9 @@ GongbangAssistantUITests/
 ├── TabNavigationUITests.swift
 ├── ActionFlowUITests.swift
 └── ScreenshotTourUITests.swift
+Config/                            Info.plist, 서명 설정(Signing.xcconfig), 서버 설정 예시
+scripts/setup-iphone.sh            실제 iPhone 설치용 번들 ID와 서버 설정 파일 생성
+scripts/install-iphone.sh          연결한 iPhone에 빌드, 서명, 설치, 실행
 Server/                            FastAPI 서버, Alembic 마이그레이션, 시드, 배포 스크립트
 web/                               브라우저용 웹 버전 (Bun, React)
 ├── index.html                     진입 HTML
