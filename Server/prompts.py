@@ -10,9 +10,13 @@ from providers import ChatMessage, Sampling
 
 type Speaker = Literal["owner", "assistant"]
 type RewriteKind = Literal["content", "recommendation", "inquiry"]
+type Intent = Literal["lookup", "write", "edit", "advise", "act", "react", "clarify", "out_of_scope"]
 
 DRAFT_SAMPLING: Final = Sampling(temperature=0.3, max_tokens=500)
 ASK_SAMPLING: Final = Sampling(temperature=0.2, max_tokens=600)
+CLASSIFY_SAMPLING: Final = Sampling(temperature=0.1, max_tokens=100)
+CLASSIFY_TURNS: Final = 4
+CLASSIFY_TURN_CHARS: Final = 150
 REWRITE_SAMPLING: Final = Sampling(temperature=0.5, max_tokens=600)
 HISTORY_TURNS: Final = 6
 NONE_GIVEN: Final = "- (없음)"
@@ -89,6 +93,60 @@ ASK_SYSTEM: Final = """\
 - 예약 확정, 답장 발송, 결제, 주문 처리, 게시를 했다고 말하지 않습니다. 당신에게는 실행 권한이 없습니다.
 - 사장님이 직접 처리할 화면을 안내합니다. 오늘 할 일과 대기 건은 '오늘', 수업과 일정은 '캘린더', \
 예약·주문·배송·문의 처리는 '운영', 공방 정보와 규정 수정은 '설정' 화면입니다."""
+
+INTENT_SYSTEM: Final = """\
+당신은 공방 사장님이 업무 비서에게 보낸 마지막 메시지의 의도를 하나로 고릅니다.
+이전 대화는 마지막 메시지의 뜻을 파악하는 데만 씁니다. 주제가 바뀌었으면 마지막 메시지를 따릅니다.
+
+[의도]
+- lookup: 예약, 주문, 배송, 문의, 일정, 매출 같은 사실을 묻는다. 예: "오늘 예약 몇 건이야?", "그럼 내일은?"
+- write: 새 글을 써 달라고 한다. 홍보 글, 손님 답장, 공지, 안내 문자. 예: "주말 클래스 홍보 글 써줘"
+- edit: 비서가 직전에 쓴 글을 고쳐 달라고 한다. 예: "좀 더 짧게", "해시태그 빼줘", \
+비서가 "줄여 드릴까요?"라고 물은 뒤의 "응"
+- advise: 판단이나 방법을 묻는다. 예: "이번 주말 클래스 어떻게 홍보하면 좋을까?", "가격 올려도 괜찮을까?"
+- act: 앱의 데이터를 바꿔 달라고 한다. 예: "포장 완료 처리해줘", "예약 확정해줘", "이 답장 보내줘"
+- react: 칭찬, 감사, 맞장구, 마무리 인사만 한다. 예: "좋네", "고마워"
+- clarify: 어떻게 읽느냐에 따라 전혀 다른 답이 나오고 대화로도 정할 수 없다. \
+예: 앞서 쓴 글이 없는데 "그거 다시"
+- out_of_scope: 공방 일과 상관없는 잡담이다. 예: "점심 뭐 먹지?"
+
+[출력]
+JSON 한 줄만 씁니다. 다른 글은 쓰지 않습니다.
+{"intent": "<위 의도 중 하나>", "confidence": <0에서 1 사이 숫자>, \
+"reading": "<사장님이 원하는 것 한 문장>"}"""
+
+INTENT_GUIDES: Final[dict[Intent, str]] = {
+    "lookup": """\
+[이번 요청: 현황 확인]
+- 현황에서 찾은 사실로 짧게 답합니다. 글을 새로 쓰지 않습니다.
+- 관련 예약, 주문, 발송 건은 현황에 적힌 이름 그대로 씁니다.""",
+    "write": """\
+[이번 요청: 새 글 쓰기]
+- 요청한 글을 바로 씁니다. 앞뒤 설명 없이 글 본문만 씁니다.
+- 이전 대화에서 쓴 다른 글은 참고하지 않습니다.""",
+    "edit": """\
+[이번 요청: 직전 글 고치기]
+- 요청한 부분만 고치고 나머지 문장, 사실, 숫자는 그대로 둡니다. 고친 글 본문만 씁니다.""",
+    "advise": """\
+[이번 요청: 조언]
+- 현황을 근거로 한두 문장으로 판단을 말하고, 바로 해 볼 수 있는 제안을 "· " 줄로 1~3개 씁니다.
+- 홍보 글이나 답장 같은 긴 초안은 쓰지 않습니다. \
+글이 필요해 보이면 마지막에 "글로 써 드릴까요?"라고 묻습니다.""",
+    "act": """\
+[이번 요청: 앱에서 처리할 일]
+- 당신은 데이터를 바꿀 수 없습니다. 처리했다거나 처리해 두겠다고 말하지 않습니다.
+- 어느 화면에서 무엇을 누르면 되는지 한두 문장으로 안내합니다.
+- 처리할 건은 현황에 적힌 이름 그대로 적어 카드가 함께 보이게 합니다.""",
+    "react": """\
+[이번 메시지: 반응]
+- 새 글을 쓰지 않고 해요체 한두 문장으로 짧게 답합니다.""",
+    "clarify": """\
+[이번 요청: 뜻이 둘 이상]
+- 추측해서 답하지 않습니다. 짧은 질문 하나와 고를 수 있는 선택지 2~3개를 "· " 줄로 씁니다.""",
+    "out_of_scope": """\
+[이번 메시지: 공방 일과 무관한 이야기]
+- 친근하게 한 문장으로 받고, 공방 일 가운데 도울 수 있는 것을 한 문장으로 권합니다.""",
+}
 
 REWRITE_RULES: Final = """\
 당신은 작은 공방 사장님의 글을 다듬는 편집자입니다.
@@ -213,13 +271,31 @@ def history_message(turn: HistoryTurn) -> ChatMessage:
             assert_never(turn.role)
 
 
+def classify_messages(history: Sequence[HistoryTurn], question: str) -> list[ChatMessage]:
+    """Build the intent classification call from the newest message and a few clipped turns."""
+    lines = [
+        f"{'사장님' if turn.role == 'owner' else '비서'}: {turn.text[:CLASSIFY_TURN_CHARS]}"
+        for turn in history[-CLASSIFY_TURNS:]
+    ]
+    user = f"최근 대화:\n{bullets(lines)}\n\n마지막 메시지: {question}"
+    return [ChatMessage("system", INTENT_SYSTEM), ChatMessage("user", user)]
+
+
+def intent_guide(intent: Intent, reading: str) -> str:
+    """Name what this turn asks for, with the classifier's one-line reading when it gave one."""
+    guide = INTENT_GUIDES[intent]
+    return f"{guide}\n- 사장님이 원하는 것: {reading}" if reading else guide
+
+
 def ask_messages(
-    context: Sequence[str], history: Sequence[HistoryTurn], question: str, revising: str | None = None,
+    context: Sequence[str], history: Sequence[HistoryTurn], question: str, guide: str,
+    revising: str | None = None,
 ) -> list[ChatMessage]:
     """Build the owner conversation; only the newest turns are kept.
 
-    `revising` holds the previous answer when the owner asked to change it, so the model
-    edits that text instead of starting over.
+    `guide` adds the instructions for this turn's intent to the system prompt. `revising`
+    holds the previous answer when the owner asked to change it, so the model edits that
+    text instead of starting over.
     """
     recent = [history_message(turn) for turn in history[-HISTORY_TURNS:]] if history else []
     facts = f"현재 공방 현황:\n{bullets(context)}"
@@ -227,7 +303,7 @@ def ask_messages(
         f"{facts}\n\n질문: {question}" if revising is None
         else f"{facts}\n\n직전 답변:\n{revising}\n\n요청: {question}\n\n{REVISE_REQUEST}"
     )
-    return [ChatMessage("system", ASK_SYSTEM), *recent, ChatMessage("user", user)]
+    return [ChatMessage("system", f"{ASK_SYSTEM}\n\n{guide}"), *recent, ChatMessage("user", user)]
 
 
 def rewrite_messages(kind: RewriteKind, original: tuple[str, str], instruction: str) -> list[ChatMessage]:
