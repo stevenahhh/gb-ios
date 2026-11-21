@@ -130,10 +130,25 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `POST /tts` | `{text}` (1-2000 characters) read aloud by CLOVA Voice Premium as `audio/mpeg`; markdown is stripped first |
 
 `/ask` accepts `{question, history?}`, reads workshop facts from PostgreSQL, and returns
-`{answer, items}`, where `items` holds up to three cards the answer names. `history`
+`{answer, items, intent}`, where `items` holds up to three cards the answer names and `intent`
+names how the turn was read. `history`
 is a list of `{role: "owner" | "assistant", text}` (at most 40 items, each text up to 2000
 characters); only the newest 6 turns reach the model. A `context` field from older clients
-is ignored. `/draft` keeps `{customer, subject, question, facts}` and adds the workshop
+is ignored. `turns.py` reads the newest owner turn first. A message that only praises,
+thanks, acknowledges, or closes ("오 좋은데?", "고마워", "끝") gets a short fixed reply
+with no items and no model call, unless it answers a question the assistant just asked. A
+short change request ("좀 더 짧게", "다시 써줘") sends the previous answer to the model to
+edit instead of starting over. A redo of "그거" with no earlier answer gets one fixed question
+with three options. Every other turn goes through the intent gate in `intents.py`. One short
+HyperCLOVA X call (3-second deadline, 100 tokens) runs while the facts load and returns
+`{intent, confidence, reading}`. The intents are `lookup`, `write`, `edit`, `advise`, `act`, `react`,
+`clarify`, and `out_of_scope`, and each adds its own instructions to the answer prompt. An `act`
+answer says where to tap, because the assistant cannot change data. When the classifier
+times out, fails, or returns malformed JSON, keywords pick `act`, `write`, or `lookup`.
+Only `edit`, `advise`, and `react` keep earlier drafts in the context, so a new topic is never
+answered from a stale draft. The server logs each choice as `ask_intent` with `intent`,
+`intent_source` (`rules`, `model`, or `fallback`), and `confidence`. The owner's text
+never appears in that log. `/draft` keeps `{customer, subject, question, facts}` and adds the workshop
 profile and editable settings text from PostgreSQL. `/rewrite` accepts
 `{kind: "content" | "recommendation" | "inquiry", title, text, instruction?}` and returns
 `{draft}`. Prompts live in `prompts.py`. Every model answer is cleaned by `ai_output.py`.

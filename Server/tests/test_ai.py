@@ -1,5 +1,7 @@
 """AI endpoints send server-loaded facts to the model and refuse unsafe or empty output."""
 
+import asyncio
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -9,8 +11,10 @@ from pydantic import JsonValue
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from prompts import ACT_LEAD, INTENT_GUIDES, INTENT_SYSTEM, Intent
 from providers import ChatMessage, Sampling
 from tests.conftest import NOW
+from turns import CLARIFY_REPLY
 
 pytestmark = pytest.mark.anyio
 type Body = dict[str, JsonValue]
@@ -24,19 +28,35 @@ DRAFT_BODY: Body = {
 }
 
 
+def classified(intent: Intent) -> str:
+    return json.dumps({"intent": intent, "confidence": 0.9, "reading": ""})
+
+
 @dataclass(slots=True)
 class FakeChat:
+    """Answers the classifier with `intent` (None never answers) and every other call with `replies`."""
+
     replies: Sequence[str]
+    intent: str | None
     calls: list[list[ChatMessage]] = field(default_factory=list)
+    classified: list[str] = field(default_factory=list)
 
     async def __call__(self, messages: Sequence[ChatMessage], _sampling: Sampling) -> str:
+        if messages[0].content == INTENT_SYSTEM:
+            self.classified.append(messages[-1].content)
+            if self.intent is None:
+                _ = await asyncio.Event().wait()
+            return self.intent or ""
         self.calls.append(list(messages))
         return self.replies[len(self.calls) - 1]
 
 
-def fake_chat(monkeypatch: pytest.MonkeyPatch, *replies: str) -> FakeChat:
-    fake = FakeChat(replies)
+def fake_chat(
+    monkeypatch: pytest.MonkeyPatch, *replies: str, intent: str | None = classified("lookup"),
+) -> FakeChat:
+    fake = FakeChat(replies, intent)
     monkeypatch.setattr("ai.chat", fake)
+    monkeypatch.setattr("intents.chat", fake)
     return fake
 
 
@@ -111,7 +131,7 @@ async def test_ask_context_comes_from_rows_not_the_client(
     fake = fake_chat(monkeypatch, "답변")
     body: Body = {"question": "오늘 뭐 해?", "context": ["클라이언트가 보낸 거짓"]}
     response = await client.post("/ask", json=body)
-    assert response.json() == {"answer": "답변", "items": []}
+    assert response.json() == {"answer": "답변", "items": [], "intent": "lookup"}
     prompt = fake.calls[0][-1].content
     assert "클라이언트가 보낸 거짓" not in prompt
     assert f"오늘 날짜: {NOW:%Y-%m-%d}" in prompt
@@ -154,6 +174,182 @@ async def test_ask_forwards_the_last_six_history_turns_in_order(
         ("user" if index % 2 == 0 else "assistant", f"turn-{index}") for index in range(2, 8)
     ]
     assert fake.calls[0][-1].content.endswith("질문: 그럼 내일은?")
+
+
+PROMO_REQUEST = "주말 클래스 홍보 글 써줘"
+PROMO_DRAFT = "이번 주말, 흙으로 머그컵을 빚어 보세요. 토요일 14:00 반에 2자리 남았어요. #도자기공방"
+PROMO_HISTORY: list[JsonValue] = [
+    {"role": "owner", "text": PROMO_REQUEST}, {"role": "assistant", "text": PROMO_DRAFT},
+]
+
+
+@pytest.mark.parametrize(
+    ("question", "opening"),
+    [("오 좋은데?", "마음에 드신다니"), ("고마워!", "천만에요"), ("수고했어", "수고 많으셨어요")],
+)
+async def test_reaction_after_a_promo_draft_gets_a_short_reply_without_the_model(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, question: str, opening: str,
+) -> None:
+    fake = fake_chat(monkeypatch)
+    response = await client.post("/ask", json={"question": question, "history": PROMO_HISTORY})
+    body = response.json()
+    assert response.status_code == 200
+    assert body["items"] == []
+    assert body["answer"].startswith(opening)
+    assert body["intent"] == "react"
+    assert PROMO_DRAFT not in body["answer"]
+    assert len(body["answer"]) < 80
+    assert fake.calls == []
+    assert fake.classified == []
+
+
+@pytest.mark.postgres
+async def test_yes_to_an_assistant_offer_goes_to_the_model(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "짧게 고친 글", intent=classified("edit"))
+    history: list[JsonValue] = [*PROMO_HISTORY, {"role": "assistant", "text": "더 짧게 줄여 드릴까요?"}]
+    response = await client.post("/ask", json={"question": "응", "history": history})
+    assert response.json()["answer"] == "짧게 고친 글"
+    assert response.json()["intent"] == "edit"
+    [messages] = fake.calls
+    assert f"직전 답변:\n{PROMO_DRAFT}" in messages[-1].content
+    assert INTENT_GUIDES["edit"] in messages[0].content
+
+
+@pytest.mark.postgres
+async def test_refinement_rewrites_the_previous_answer(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "주말엔 머그컵 클래스! 토요일 14:00, 2자리 남았어요.")
+    response = await client.post("/ask", json={"question": "좀 더 짧게", "history": PROMO_HISTORY})
+    assert response.json()["answer"] == "주말엔 머그컵 클래스! 토요일 14:00, 2자리 남았어요."
+    assert response.json()["intent"] == "edit"
+    assert fake.classified == []
+    [messages] = fake.calls
+    prompt = messages[-1].content
+    assert f"직전 답변:\n{PROMO_DRAFT}" in prompt
+    assert "요청: 좀 더 짧게" in prompt
+    assert "예약금 대기 2건" in prompt
+
+
+@pytest.mark.postgres
+async def test_new_question_after_a_draft_is_asked_as_usual(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "답변")
+    response = await client.post("/ask", json={"question": "오늘 예약 몇 건이야?", "history": PROMO_HISTORY})
+    assert response.json() == {"answer": "답변", "items": [], "intent": "lookup"}
+    [messages] = fake.calls
+    assert messages[-1].content.endswith("질문: 오늘 예약 몇 건이야?")
+    assert "직전 답변" not in messages[-1].content
+    assert all(PROMO_DRAFT not in message.content for message in messages)
+    assert ("user", PROMO_REQUEST) in [(message.role, message.content) for message in messages]
+
+
+@pytest.mark.parametrize(
+    ("question", "intent"),
+    [
+        ("주말 클래스 홍보 전략 조언 좀", "advise"),
+        ("연말 휴무 공지 문자 써줘", "write"),
+        ("점심 뭐 먹지?", "out_of_scope"),
+        ("그거 토요일로 할까 일요일로 할까?", "clarify"),
+    ],
+)
+@pytest.mark.postgres
+async def test_classified_intent_adds_its_guide_to_the_system_prompt(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    question: str, intent: Intent,
+) -> None:
+    fake = fake_chat(monkeypatch, "답변", intent=classified(intent))
+    response = await client.post("/ask", json={"question": question})
+    assert response.json() == {"answer": "답변", "items": [], "intent": intent}
+    [classification] = fake.classified
+    assert classification.endswith(f"마지막 메시지: {question}")
+    [messages] = fake.calls
+    assert INTENT_GUIDES[intent] in messages[0].content
+
+
+@pytest.mark.postgres
+async def test_advice_about_a_draft_keeps_the_draft(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "괜찮아요.", intent=classified("advise"))
+    response = await client.post("/ask", json={"question": "이 정도면 괜찮을까?", "history": PROMO_HISTORY})
+    assert response.json()["intent"] == "advise"
+    assert ("assistant", PROMO_DRAFT) in [(message.role, message.content) for message in fake.calls[0]]
+
+
+@pytest.mark.postgres
+async def test_act_request_gets_guidance_and_the_card_of_the_item(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guidance = "포장 완료는 '운영' 화면의 머그컵 2종 세트에서 포장 완료를 누르면 돼요."
+    fake = fake_chat(monkeypatch, guidance, intent=classified("act"))
+    body = (await client.post("/ask", json={"question": "포장 완료 처리해줘"})).json()
+    assert body["intent"] == "act"
+    assert body["answer"] == guidance
+    assert [item["id"] for item in body["items"]] == ["shipment-order-1040"]
+    assert INTENT_GUIDES["act"] in fake.calls[0][0].content
+
+
+@pytest.mark.postgres
+async def test_advice_question_is_advised_by_rule_even_when_it_mentions_promotion(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch, "조언", intent=classified("write"))
+    response = await client.post("/ask", json={"question": "이번 주말 클래스 어떻게 홍보하면 좋을까?"})
+    assert response.json() == {"answer": "조언", "items": [], "intent": "advise"}
+    assert fake.classified == []
+    [messages] = fake.calls
+    assert INTENT_GUIDES["advise"] in messages[0].content
+
+
+@pytest.mark.postgres
+async def test_act_answer_claiming_the_change_leads_with_the_admission(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claim = "머그컵 2종 세트 포장을 완료 처리했어요. '운영' 화면의 배송 관리에서 확인할 수 있어요."
+    fake = fake_chat(monkeypatch, claim, intent=classified("act"))
+    body = (await client.post("/ask", json={"question": "포장 완료 처리해줘"})).json()
+    assert body["intent"] == "act"
+    assert body["answer"] == f"{ACT_LEAD} '운영' 화면의 배송 관리에서 확인할 수 있어요."
+    assert [item["id"] for item in body["items"]] == ["shipment-order-1040"]
+    assert len(fake.calls) == 1
+
+
+async def test_weather_question_is_declined_without_the_model(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch)
+    response = await client.post("/ask", json={"question": "오늘 날씨 어때?"})
+    assert response.json() == {
+        "answer": "날씨는 제가 알 수 없어요. 대신 오늘 수업이나 발송 일정은 바로 알려 드릴게요.",
+        "items": [], "intent": "out_of_scope",
+    }
+    assert fake.calls == []
+    assert fake.classified == []
+
+
+@pytest.mark.postgres
+async def test_classifier_timeout_falls_back_and_still_answers(
+    database: AsyncEngine, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("intents.CLASSIFY_SECONDS", 0.05)
+    fake = fake_chat(monkeypatch, "답변", intent=None)
+    response = await client.post("/ask", json={"question": "포장 완료 처리해줘"})
+    assert response.json() == {"answer": "답변", "items": [], "intent": "act"}
+    assert len(fake.classified) == 1
+
+
+async def test_redo_with_nothing_to_redo_asks_which_without_the_model(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = fake_chat(monkeypatch)
+    response = await client.post("/ask", json={"question": "그거 다시"})
+    assert response.json() == {"answer": CLARIFY_REPLY, "items": [], "intent": "clarify"}
+    assert fake.calls == []
+    assert fake.classified == []
 
 
 @pytest.mark.postgres

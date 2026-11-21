@@ -3,6 +3,8 @@
 import re
 from typing import Final
 
+from prompts import ACT_LEAD
+
 FENCE: Final = re.compile(r"^[ \t]*```[\w-]*[ \t]*$", re.MULTILINE)
 LABEL: Final = re.compile(
     r"^\s*(?:답변\s*초안|답장\s*초안|답변|답장|초안|수정본|수정안|다시\s*쓴\s*글|홍보\s*글|결과)\s*[:\uff1a]\s*",
@@ -30,6 +32,16 @@ COMMITMENTS: Final = (
     ("결제 완료", re.compile(r"결제(?:가|는|도)?\s*(?:완료|확인되었|확인됐|처리되었|처리됐)")),
     ("할인 약속", re.compile(r"할인(?:을|은)?\s*(?:적용\s*)?(?:해\s*드[리릴렸]|되었|됐|됩니다)")),
 )
+# A sentence telling the owner the app's data already changed; the assistant cannot change it.
+COMPLETION_CLAIM: Final = re.compile(
+    (
+        r"(?:처리|완료|반영|변경|확정|등록|취소|발송|전송|환불)(?:를|을|가|이|는|은|도)?\s*"
+        r"(?:했|해\s*(?:두었|뒀|놓았|놨|드렸)|되었|됐|되어\s*있|돼\s*있)|보냈"
+    ),
+)
+NEGATION: Final = re.compile(r"수\s*(?:는\s*)?없|못|않|안\s*(?:했|됐|되었)|아직")
+SENTENCE_BREAK: Final = re.compile(r"((?<=[.!?])[ \t]+|\n+)")
+ACT_PATH: Final = "'운영' 화면에서 해당 카드를 열어 직접 처리해 주세요."
 AMOUNT: Final = re.compile(r"\d[\d,]*\s*원")
 DATE: Final = re.compile(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일")
 
@@ -51,6 +63,28 @@ def normalize(raw: str) -> str:
     text = BULLET.sub("· ", text)
     text = FILLER.sub("", text)
     return BLANK_RUN.sub("\n\n", text).strip()
+
+
+def claims_done(sentence: str) -> bool:
+    """Tell when a sentence says something was processed without denying it."""
+    return COMPLETION_CLAIM.search(sentence) is not None and NEGATION.search(sentence) is None
+
+
+def without_completion_claims(text: str) -> str:
+    """Drop sentences that claim an app change happened and lead with the fixed admission instead.
+
+    The rest of the answer, usually the screen path, stays; when nothing is left the owner
+    still gets a path to the operations screen.
+    """
+    parts = SENTENCE_BREAK.split(text)
+    sentences, breaks = parts[::2], [*parts[1::2], ""]
+    if not any(claims_done(sentence) for sentence in sentences):
+        return text
+    kept = "".join(
+        sentence + gap for sentence, gap in zip(sentences, breaks, strict=True)
+        if not claims_done(sentence) and sentence.strip() != ACT_LEAD
+    ).strip()
+    return f"{ACT_LEAD} {kept or ACT_PATH}"
 
 
 def amounts(text: str) -> set[str]:
