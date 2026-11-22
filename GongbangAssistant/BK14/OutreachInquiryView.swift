@@ -90,6 +90,8 @@ struct OutreachInquiryView: View {
                             Button(inquiry.subject) { text = String(inquiry.question.prefix(2000)) }
                         }
                     }
+                    .menuStyle(.button)
+                    .buttonStyle(.bordered)
                     .accessibilityIdentifier("outreach.existing")
                 }
             }

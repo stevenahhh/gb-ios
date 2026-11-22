@@ -276,6 +276,8 @@ struct OutreachQuoteDetailView: View {
                     }
                 }
             }
+            .menuStyle(.button)
+            .buttonStyle(.bordered)
             .accessibilityIdentifier("outreach.outcome")
         }
     }
