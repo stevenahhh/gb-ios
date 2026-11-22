@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from typing import Final, Literal
 
 type AmountRole = Literal["each", "total", "any"]
-type Topic = Literal["parking", "refund", "materials"]
+type Topic = Literal["parking", "refund", "materials", "discount"]
 type Quantity = tuple[str, float]
 
 HOUR_MINUTES: Final = 60
@@ -210,12 +210,14 @@ TOPIC_WORDS: Final[dict[Topic, re.Pattern[str]]] = {
     "parking": re.compile(r"주차|차(?:는|를|도)?\s[^.,!?\n]{0,14}(?:대실|대셔|대시|세우|세워)"),
     "refund": re.compile(r"환불|취소|위약|변경|일정을\s*바[꾸꿀]|돌려\s*[드받]"),
     "materials": re.compile(r"재료|준비물|앞치마|도구|점토|유약|물감"),
+    "discount": re.compile(r"할인|세일"),
 }
 # A sentence that only says 2시간 무료예요 continues the topic of the sentence before it.
 TOPIC_HINTS: Final[dict[Topic, re.Pattern[str]]] = {
     "parking": re.compile(r"무료|유료|요금"),
     "refund": re.compile(r"전액|돌려|수수료|공제"),
     "materials": re.compile(r"제공|포함"),
+    "discount": re.compile(r"깎아"),
 }
 CLASS_WORDS: Final = re.compile(
     r"수업|클래스|체험|과정|코스|진행|소요|걸리|걸려|자리|좌석|정원|예약|가격|수업료",
@@ -246,6 +248,7 @@ QUANTITIES: Final[dict[Topic, re.Pattern[str]]] = {
         ),
     ),
     "refund": re.compile(rf"{QUANTITY_HOURS}|{QUANTITY_DAYS}|{QUANTITY_MONTHS}|{QUANTITY_PERCENT}"),
+    "discount": re.compile(QUANTITY_PERCENT),
     "materials": re.compile(
         rf"(?P<piece>{DIGIT}\d+(?:\.\d+)?|{WORD}(?:{NATIVE}))\s*(?P<unit>{PIECES})",
     ),
@@ -634,6 +637,14 @@ def time_spans(text: str) -> list[TimeSpan]:
     return spans
 
 
+def times_near(text: str, position: int) -> list[frozenset[int]]:
+    """Return the times of the sentence around a number, the closest one before it first."""
+    first, last = around(text, position, position + 1, SENTENCE_BREAK)
+    inside = [span for span in time_spans(text) if first <= span.start < last]
+    before = [span.minutes for span in inside if span.start <= position]
+    return [*reversed(before), *(span.minutes for span in inside if span.start > position)]
+
+
 def capacity_spans(text: str) -> list[NumberSpan]:
     """Find stated class capacities."""
     return [
@@ -706,10 +717,17 @@ def topic_clauses(text: str) -> list[tuple[int, int, frozenset[Topic]]]:
     clauses: list[tuple[int, int, frozenset[Topic]]] = []
     current: frozenset[Topic] = frozenset()
     for first, last in pieces(text, SENTENCE_BREAK, 0, len(text)):
+        opening = len(clauses)
         for start, end in pieces(text, CLAUSE_BREAK, first, last):
             clause = text[start:end]
             own: frozenset[Topic] = frozenset(t for t in TOPIC_WORDS if mentions_topic(clause, t))
             if own:
+                # 하루 전까지, 전액 환불돼요: the words before the topic belong to it too.
+                if not any(topics for _, _, topics in clauses[opening:]):
+                    clauses[opening:] = [
+                        (low, high, frozenset() if CLASS_WORDS.search(text[low:high]) else own)
+                        for low, high, _ in clauses[opening:]
+                    ]
                 current = own
             elif start == first:
                 current = frozenset(topic for topic in current if TOPIC_HINTS[topic].search(clause))

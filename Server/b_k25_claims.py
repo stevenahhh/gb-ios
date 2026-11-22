@@ -43,6 +43,7 @@ from b_k25_numbers import (
     quantities_in,
     read,
     time_spans,
+    times_near,
     topics_at,
     whole_number,
 )
@@ -70,7 +71,9 @@ NAME_TIME: Final = "시각"
 NAME_SEATS: Final = "남은 자리"
 NAME_LENGTH: Final = "수업 길이"
 NAME_CAPACITY: Final = "정원"
-TOPIC_NAMES: Final[dict[Topic, str]] = {"parking": "주차", "refund": "환불", "materials": "재료"}
+TOPIC_NAMES: Final[dict[Topic, str]] = {
+    "parking": "주차", "refund": "환불", "materials": "재료", "discount": "할인",
+}
 
 PRICE_ASKED: Final = re.compile(r"가격|얼마|비용|요금|금액|견적|수업료|할인|단가|총액|예산|만\s*원|\d\s*원")
 RULE_MINIMUM: Final = re.compile(rf"(?P<n>{COUNT})\s*(?:명|인|분|사람)\s*(?:부터|이상)")
@@ -159,6 +162,8 @@ class CardFact:
                 return self.refund_policy
             case "materials":
                 return self.included_materials
+            case "discount":
+                return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,11 +224,16 @@ class Ledger:
         return tuple(session for session in candidates if session.day in days) if days else candidates
 
     def sessions_at(self, draft: str, position: int) -> tuple[SessionFact, ...]:
-        """Return the sessions a number at a position is about, by the day its sentence names."""
+        """Return the sessions a number at a position is about, by the day and hour its sentence names."""
         days = days_near(draft, position, self.today)
-        if not days:
-            return self.dated_sessions(draft)
-        return tuple(session for session in self.sessions_of(draft) if session.day in days)
+        sessions = self.dated_sessions(draft)
+        if days:
+            sessions = tuple(session for session in self.sessions_of(draft) if session.day in days)
+        for minutes in times_near(draft, position):
+            same = tuple(session for session in sessions if session.clock[0] in minutes)
+            if same:
+                return same
+        return sessions
 
     def cards_of(self, draft: str) -> tuple[CardFact, ...]:
         """Return the fact cards of the classes in question."""
@@ -570,9 +580,10 @@ def check_date(span: DateSpan, draft: str, ledger: Ledger) -> Claim:
 
 def is_end(span: TimeSpan, draft: str) -> bool:
     """Tell whether a time says when the class ends rather than when it starts."""
-    previous = max((other.end for other in time_spans(draft) if other.end <= span.start), default=None)
     first, _ = around(draft, span.start, span.end, CLAUSE_BREAK)
-    if previous is not None and previous > first and RANGE.search(draft[previous:span.start]):
+    ends = [other.end for other in time_spans(draft) if first <= other.start < span.start]
+    earlier = max(ends, default=None)
+    if earlier is not None and RANGE.search(draft, earlier, span.start):
         return True
     after = draft[span.end:]
     if ENDS.match(after):

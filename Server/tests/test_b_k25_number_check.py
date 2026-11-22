@@ -94,6 +94,7 @@ WRONG = [
     ("지금 다섯 분 자리가 남았어요.", "3자리"),
     ("총 150분입니다.", "120분"),
     ("두 자리 예약하시면 70,000원이에요.", "76,000원"),
+    ("하루 전까지, 전액 환불돼요.", "2일 전까지"),
 ]
 KEPT = [
     "1인 38,000원이에요.", "1인 3만8천원이에요.", "남은 자리 3자리예요.", "11월 21일 토요일 10시예요.",
@@ -234,6 +235,26 @@ def test_each_day_is_compared_with_its_own_session() -> None:
     assert len(mismatched("11월 21일은 7자리, 11월 28일은 3자리 남았어요.", two)) == 2
     assert mismatched("11월 28일은 오후 2시에 시작해요.", two) == []
     assert len(mismatched("11월 21일은 오후 2시에 시작해요.", two)) == 1
+
+
+def test_each_class_of_a_day_is_compared_with_its_own_seats_and_hours() -> None:
+    day = replace(LEDGER, sessions=(session(SATURDAY, 3), session(SATURDAY + timedelta(hours=4), 7)))
+    assert mismatched("토요일 오전 10시 수업은 3자리, 오후 2시 수업은 7자리 남았어요.", day) == []
+    assert len(mismatched("토요일 오전 10시 수업은 7자리, 오후 2시 수업은 3자리 남았어요.", day)) == 2
+    assert mismatched("수업은 오후 2시부터 4시까지예요.", day) == []
+    (late,) = mismatched("수업은 오전 10시부터 오후 4시까지예요.", day)
+    assert late.replacement == "오후 12시"
+
+
+def test_a_discount_needs_the_owners_own_words() -> None:
+    (promised,) = mismatched("10% 할인해 드려요.")
+    assert (promised.source, promised.ledger_value) == ("none", None)
+    rule = replace(LEDGER, rules=(RuleFact("6명부터 10% 할인", WEEKEND),))
+    (claim,) = check_numbers("단체는 10% 할인해 드려요.", rule)
+    assert (claim.status, claim.source) == ("matched", "owner_rule")
+    (wrong,) = mismatched("단체는 20% 할인해 드려요.", rule)
+    assert (wrong.ledger_value, wrong.replacement) == ("6명부터 10% 할인", "10%")
+    assert mismatched("20% 할인은 어려워요.", rule) == []
 
 
 def test_a_half_hour_start_is_a_time_and_not_a_length() -> None:
