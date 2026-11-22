@@ -33,6 +33,11 @@ struct TodayView: View {
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
             .navigationSubtitle(subtitle)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    AssistantFace(size: .sheet)
+                        .accessibilityHidden(true)
+                }
+                .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         AssistantActivityView()

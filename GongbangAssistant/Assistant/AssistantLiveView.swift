@@ -414,12 +414,8 @@ private struct LiveTranscript: View {
             }
         case .assistant:
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    AssistantFace(size: .card)
-                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
-                    Text(Self.rendered(turn.text))
-                        .textSelection(.enabled)
-                }
+                Text(Self.rendered(turn.text))
+                    .textSelection(.enabled)
                 ForEach(turn.items) { item in
                     WorkCard(item: item, isPrimary: false)
                         .padding(12)

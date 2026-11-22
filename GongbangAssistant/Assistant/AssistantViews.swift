@@ -10,7 +10,7 @@ struct AssistantAccessory: View {
                 HStack(spacing: 10) {
                     AssistantFace(size: .composer)
                         .accessibilityHidden(true)
-                    Text("\(AssistantIdentity.name)에게 맡기기")
+                    Text("글을 입력하세요")
                         .foregroundStyle(Color.secondaryText)
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -20,7 +20,7 @@ struct AssistantAccessory: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(AssistantIdentity.name)에게 맡기기")
+            .accessibilityLabel("글을 입력하세요")
             .accessibilityIdentifier("assistant.accessory")
 
             Button(action: openVoice) {

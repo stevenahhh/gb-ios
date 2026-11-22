@@ -401,7 +401,7 @@ struct BK25FieldInput: View {
         VStack(alignment: .leading, spacing: 12) {
             BK25VoiceField(text: $text, prompt: field.hint)
             if isWorking {
-                GeneratingIndicator(label: "답을 칸에 맞게 정리하는 중이에요", showsFace: false)
+                GeneratingIndicator(label: "답을 칸에 맞게 정리하는 중이에요")
             }
             if let message {
                 Label(message, systemImage: "exclamationmark.circle")

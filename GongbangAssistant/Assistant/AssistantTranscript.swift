@@ -108,13 +108,8 @@ struct AssistantTranscript: View {
             set: { if !$0 { revealed.insert(turn.id) } }
         )
         return VStack(alignment: .leading, spacing: 10) {
-            Label {
-                GeneratedText(AssistantSheet.rendered(turn.text), isFresh: isFresh)
-                    .textSelection(.enabled)
-            } icon: {
-                AssistantFace(size: .card)
-            }
-            .labelStyle(TopAlignedIconLabelStyle())
+            GeneratedText(AssistantSheet.rendered(turn.text), isFresh: isFresh)
+                .textSelection(.enabled)
             // The items the answer names, each with its one next action. They stay hidden until the text has settled.
             ForEach(turn.items) { item in
                 WorkCard(item: item, isPrimary: false)
@@ -131,12 +126,7 @@ struct AssistantTranscript: View {
     @ViewBuilder
     private var pending: some View {
         if isAnswering {
-            Label {
-                GeneratingIndicator(label: "\(AssistantIdentity.name)가 현황을 보고 있어요", showsFace: false)
-            } icon: {
-                AssistantFace(size: .card)
-            }
-            .labelStyle(TopAlignedIconLabelStyle())
+            GeneratingIndicator(label: "\(AssistantIdentity.name)가 현황을 보고 있어요")
         } else if conversation.turns.last?.role == .owner {
             UnansweredNotice(text: "답을 받지 못했어요.", retry: retry)
         }
@@ -168,13 +158,12 @@ private struct UnansweredNotice: View {
         } icon: {
             Image(systemName: "exclamationmark.circle")
                 .foregroundStyle(Color.secondaryText)
-                .frame(width: AssistantFace.Size.card.rawValue)
         }
         .labelStyle(TopAlignedIconLabelStyle())
     }
 }
 
-/// Keeps the assistant's face beside the first line of a long answer instead of its vertical middle.
+/// Keeps the icon beside the first line of a long message instead of its vertical middle.
 private struct TopAlignedIconLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
