@@ -239,6 +239,11 @@ A store order becomes an order under a local order number. A collected row is up
 is 0, so owner work is never overwritten. Seed inquiries and seed orders of a channel stay until the first real
 row of that kind arrives for the channel; then seed rows with revision 0 are removed, and `seed.py` keeps them out.
 
+Channel label: `GET /channels` shows the result of the source's last check, not of this moment. A run that collects
+at least one item sets its channel to 연결됨. A run that finds setup missing or switched off, or is refused, sets it
+to 아직 연결 안 됨; a temporary failure leaves it alone. Only the Instagram, Smart Store, and blog channels follow a
+collector, so 네이버 예약 is never changed.
+
 VPC deployment: the collectors run on the API server inside the NCP VPC and need outbound HTTPS only
 (`graph.instagram.com`, `api.commerce.naver.com`, and a feed host if one is turned on). They open no port, so no
 inbound rule changes. Install the timer once, by hand, after a release that contains it:

@@ -79,7 +79,7 @@ async def connect_channel(db: AsyncSession, source: SourceId) -> None:
 
 
 async def disconnect_channel(db: AsyncSession, source: SourceId) -> None:
-    """Show the channel as not connected after the platform refused."""
+    """Show the source's own channel as not connected; other channels are never touched."""
     channel = SOURCE_CHANNELS.get(source)
     if channel is not None:
         await set_connection(db, channel.id, "not_connected")

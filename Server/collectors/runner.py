@@ -93,7 +93,7 @@ async def finish(run_id: str, outcome: Outcome, now: datetime) -> None:
 
 
 async def run_source(source: SourceId, gateway: Gateway, clock: Clock) -> Outcome:
-    """Run one source; a source that is not set up makes no request."""
+    """Run one source; one that is not set up makes no request and its channel reads not connected."""
     started = clock()
     async with transaction() as db:
         row = await locked_source(db, source)
@@ -102,6 +102,7 @@ async def run_source(source: SourceId, gateway: Gateway, clock: Clock) -> Outcom
         collector = build(source, gateway, row.config)
         problem = collector.connection_problem()
         if problem is not None:
+            await disconnect_channel(db, source)
             return Outcome(source, "needs_connection", problem, error="needs_connection")
         earliest = started - FIRST_WINDOW
         since = max(row.last_collected_at - OVERLAP, earliest) if row.last_collected_at else earliest

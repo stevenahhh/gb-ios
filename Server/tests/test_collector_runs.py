@@ -303,6 +303,79 @@ async def test_refused_credentials_disconnect_the_channel(
     assert connected == "not_connected"
 
 
+async def channel(engine: AsyncEngine, channel_id: str) -> tuple[str, int]:
+    async with engine.connect() as connection:
+        row = (await connection.execute(
+            text("SELECT connection, revision FROM channels WHERE id = :id"), {"id": channel_id},
+        )).one()
+    return row.connection, row.revision
+
+
+async def label(client: AsyncClient, channel_id: str) -> str:
+    cards = (await client.get("/channels?section=channels")).json()["items"]
+    return next(card["status"]["text"] for card in cards if card["id"] == channel_id)
+
+
+async def assert_setup_loss_disconnects_once(
+    engine: AsyncEngine, client: AsyncClient, net: FakeNetwork, source: str, channel_id: str,
+) -> None:
+    """Run a source that just lost its setup twice; only the first run changes its channel."""
+    requests, runs = len(net.requests), await ids(engine, "collector_runs")
+    _, revision = await channel(engine, channel_id)
+    for _ in range(2):
+        result = (await client.post(f"/collectors/{source}/run")).json()
+        assert result["source"]["state"] == "needs_connection"
+        assert await channel(engine, channel_id) == ("not_connected", revision + 1)
+        assert await label(client, channel_id) == "아직 연결 안 됨"
+    assert len(net.requests) == requests
+    assert await ids(engine, "collector_runs") == runs
+
+
+@pytest.mark.usefixtures("store_env")
+@pytest.mark.parametrize(
+    "name", ["NAVER_COMMERCE_SELF_OPERATED", "NAVER_COMMERCE_CLIENT_ID", "NAVER_COMMERCE_CLIENT_SECRET"],
+)
+async def test_removed_store_setup_disconnects_the_channel(
+    database: AsyncEngine, client: AsyncClient, net: FakeNetwork, monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    serve_store(net)
+    _ = await run_store(net.gateway)
+    assert await label(client, "channel-naver-store") == "연결됨"
+    monkeypatch.delenv(name)
+    await assert_setup_loss_disconnects_once(
+        database, client, net, "naver_smartstore", "channel-naver-store",
+    )
+
+
+async def test_blog_switched_off_disconnects_the_channel(
+    database: AsyncEngine, client: AsyncClient, net: FakeNetwork,
+) -> None:
+    net.answers = {"/robots.txt": reply(404), "/studio.xml": reply(text=FEED)}
+    _ = await client.put("/collectors/naver_blog/config", json={"blog_id": "studio", "enabled": True})
+    _ = await client.post("/collectors/naver_blog/run")
+    assert await label(client, "channel-naver-blog") == "연결됨"
+    _ = await client.put("/collectors/naver_blog/config", json={"blog_id": "studio", "enabled": False})
+    await assert_setup_loss_disconnects_once(database, client, net, "naver_blog", "channel-naver-blog")
+
+
+async def test_missing_setup_never_touches_other_channels(
+    database: AsyncEngine, client: AsyncClient, net: FakeNetwork,
+) -> None:
+    async with database.begin() as connection:
+        _ = await connection.execute(text("UPDATE channels SET connection = 'connected', revision = 4"))
+    _ = await client.post("/collectors/naver_smartstore/run")
+    assert await channel(database, "channel-naver-store") == ("not_connected", 5)
+    assert await channel(database, "channel-instagram") == ("connected", 4)
+    _ = await run_all(ALL_SOURCES, net.gateway, clock)
+    assert await channel(database, "channel-naver-booking") == ("connected", 4)
+    assert await label(client, "channel-naver-booking") == "연결됨"
+    assert await channel(database, "channel-instagram") == ("not_connected", 5)
+    assert await ids(database, "channels") == {
+        "channel-instagram", "channel-naver-store", "channel-naver-booking",
+    }
+    assert net.requests == []
+
+
 @pytest.mark.parametrize(("age", "expected"), [(timedelta(minutes=1), 409), (timedelta(hours=1), 200)])
 async def test_live_run_is_refused_and_an_abandoned_one_is_replaced(
     database: AsyncEngine, client: AsyncClient, net: FakeNetwork, age: timedelta, expected: int,
