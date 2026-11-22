@@ -110,9 +110,16 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         keepScreenshot(of: app, named: "k14-09-pdf-open")
         let checked = app.switches["outreach.checked"]
         XCTAssertTrue(scrollTo(checked, in: app))
-        checked.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        // A tap that lands while the list still moves only stops it, so the switch itself says when it is on.
+        for _ in 0..<3 where checked.value as? String != "1" {
+            checked.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+            _ = XCTWaiter().wait(for: [expectation(for: NSPredicate(format: "value == '1'"), evaluatedWith: checked)], timeout: 5)
+        }
+        XCTAssertEqual(checked.value as? String, "1")
         let export = app.buttons["outreach.export"]
         XCTAssertTrue(scrollTo(export, in: app))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: export)
+        waitForExpectations(timeout: 10)
         export.tap()
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 20))
         keepScreenshot(of: app, named: "k14-13-share")
