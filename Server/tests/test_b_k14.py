@@ -8,11 +8,13 @@ import pytest
 from fastapi import HTTPException
 from httpx2 import AsyncClient
 from pydantic import JsonValue
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from b_k14_calc import CostCard, Inputs, Rates, Scenario, SeatHistory, calculate, missing_costs
 from b_k14_extract import contact_kind, is_locked, mask, numbers, with_server_signals
 from providers import ChatMessage, Sampling
+from tests.conftest import downgrade, upgrade
 
 type Body = dict[str, JsonValue]
 CLASS = "도자기 원데이 클래스"
@@ -304,3 +306,24 @@ async def test_stored_quote_holds_no_contact_details(client: AsyncClient, databa
     body["fields"] = {"orgName": "시청 010-1234-5678", "locationText": "별관 a@b.kr"}
     stored = (await client.post("/outreach/quotes", json=body)).json()
     assert (stored["fields"]["orgName"], stored["fields"]["locationText"]) == ("시청", "별관")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("route", ["/outreach/quotes", "/settings/class-costs"])
+async def test_routes_require_the_api_key(client: AsyncClient, route: str) -> None:
+    assert (await client.get(route, headers={"X-Roundup-Key": "wrong"})).status_code == 401
+
+
+@pytest.mark.anyio
+@pytest.mark.postgres
+async def test_downgrade_removes_only_the_new_tables(empty_database: AsyncEngine) -> None:
+    async def tables() -> set[str]:
+        async with empty_database.connect() as connection:
+            return set(await connection.run_sync(lambda sync: inspect(sync).get_table_names()))
+
+    await upgrade(empty_database, "0004")
+    before = await tables()
+    await upgrade(empty_database)
+    assert await tables() - before == {"class_costs", "outreach_defaults", "outreach_quotes"}
+    await downgrade(empty_database, "0004")
+    assert await tables() == before
