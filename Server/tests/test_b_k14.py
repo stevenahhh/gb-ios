@@ -235,6 +235,20 @@ async def test_broken_or_failed_model_falls_back_to_rules(
     "사장님께 선 입금 부탁드립니다",
     "사장님께 먼저 결제 후 정산하겠습니다",
     "저희가 대납 바랍니다",
+    "착수금을 먼저 보내 주세요",
+    "계약금 100만 원 입금 부탁드립니다",
+    "보증금 30만 원 부탁드립니다",
+    "예치금을 납부하셔야 합니다",
+    "물품 대금을 먼저 송금해 주시면 됩니다",
+    "착수금 입금 확인 후 계약서를 보내 드립니다",
+    "계약금은 저희가 지정한 계좌로 입금해 주셔야 합니다",
+    "계약금은 저희가 안내한 계좌로 입금 후 진행됩니다",
+    "등록비를 내셔야 강사로 등록됩니다",
+    "증거금 20만 원이 필요합니다",
+    "계약금 1,000,000원 입금 부탁드립니다",
+    "보증금을 요청드립니다",
+    "예치금 주시면 바로 진행합니다",
+    "가입비 10만 원이 있어야 강사 등록이 됩니다",
     "학교에서 선결제하시면 됩니다",
     "대납 후 정산해 드리겠습니다",
     "사장님이 먼저 입금 완료하시면 됩니다",
@@ -278,6 +292,23 @@ def test_buying_goods_for_the_institution_locks(text: str) -> None:
     "강사님 대신 다른 분이",
     "재료는 저희가 대신 사 드릴게요",
     "선입금은 어렵습니다",
+    "착수금은 저희가 먼저 보내 드리겠습니다",
+    "계약금 30%를 먼저 입금해 드립니다",
+    "계약금은 저희 학교에서 먼저 입금 후 진행 부탁드립니다",
+    "저희가 계약금을 먼저 송금하겠습니다",
+    "계약금 입금할 계좌를 알려 주세요",
+    "계약금 받으시면 영수증 보내 주세요",
+    "계약금 입금 예정입니다",
+    "착수금 입금 완료했습니다",
+    "보증금 관련 문의 부탁드립니다",
+    "계약보증금은 보증보험으로 납부해 주세요",
+    "계약금이 필요하시면 말씀해 주세요",
+    "대금은 행사 후 지급됩니다",
+    "대금 청구서를 먼저 보내 주세요",
+    "예약금 안내 부탁드립니다",
+    "예약금 결제 링크 보내 주세요",
+    "예약금 입금은 어떻게 하면 될까요?",
+    "계약금 확인 부탁드립니다",
     "수업료를 선결제하고 싶습니다",
     "선입금할 계좌를 알려 주시면 입금하겠습니다",
     "견적서를 먼저 보내 주세요",
@@ -301,6 +332,85 @@ async def test_official_wording_with_a_mobile_and_a_margin_locks(
         assert body["fields"]["orgType"] == "public"
         assert {"mobile_only_contact", "margin_offer"} <= set(body["signals"])
         assert body["locked"] is True
+
+
+@pytest.mark.parametrize("text", [
+    "커미션 10% 드릴게요", "수수료로 20만 원 챙겨 드립니다", "사례비는 따로 드리겠습니다",
+    "소개비를 지급합니다", "리베이트 가능합니다", "잘 되면 사례하겠습니다", "차액은 돌려 드려요",
+    "견적을 올려 주시면 수수료를 나눠 드려요",
+    "마진 챙겨 드립니다", "수수료도 있습니다", "커미션 지급은 문제없습니다",
+])
+def test_kickback_offers_are_margin_offers(text: str) -> None:
+    assert "margin_offer" in rule_signals(text)
+
+
+@pytest.mark.parametrize("text", [
+    "카드 수수료는 저희가 지급합니다", "플랫폼 수수료가 있나요?", "수수료 없이 진행합니다",
+    "강사 사례비는 30만 원 지급해 드립니다", "특강 사례비를 드립니다", "우수 사례를 보내 드립니다",
+    "수수료 관련해서 연락드립니다", "커미션은 받지 않습니다",
+    "송금 수수료를 제외하고 드립니다", "강사료를 지급해 드립니다", "강사님 사례비는 30만 원 드립니다",
+    "강연 사례비 지급 규정을 보내 드립니다", "페이백 행사는 없습니다",
+])
+def test_ordinary_fees_are_not_margin_offers(text: str) -> None:
+    assert "margin_offer" not in rule_signals(text)
+
+
+BUDGETS = [
+    ("1인당 예산 3만 원, 40명", 1_200_000),
+    ("인당 35,000원으로 20명입니다", 700_000),
+    ("예산은 1인당 3만5천원이고 30명 정도예요", 1_050_000),
+    ("한 명당 2만 원, 2개 반 각 24명", 960_000),
+    ("1인 예산 3만원 10명", 300_000),
+    ("3만 원/인, 40명", 1_200_000),
+    ("30명이고 인당 2만 원씩입니다", 600_000),
+    ("1인당 3만 원, 총액 120만 원, 40명", 1_200_000),
+    ("1인당 예산 3만 원입니다", None),
+    ("인당 3만 원, 30~40명", None),
+    ("인당 3~5만 원, 40명", None),
+    ("반별 24명, 1인당 2만 원", None),
+    ("40명, 예산은 200만 원", 2_000_000),
+    ("40인 기준 예산 200만 원", 2_000_000),
+    ("1인 창업 교육 예산 200만 원, 40명", 2_000_000),
+    ("1인 1작품, 예산 150만 원, 30명", 1_500_000),
+    ("1인당 재료비 1만 원, 예산 200만 원, 40명", 2_000_000),
+    ("1인당 재료비 1만 원, 40명", None),
+    ("강사비 30만 원, 재료비 1인당 1만 원, 20명", None),
+    ("재료비 포함 1인당 5만 원, 20명", 1_000_000),
+    ("1인당 재료비 포함 5만 원, 20명", 1_000_000),
+    ("1명당 3만 원, 20명", 600_000),
+    ("인당 삼만 원, 20명", None),
+    ("총예산 123만 5천 원, 40명", 1_235_000),
+]
+
+
+@pytest.mark.parametrize(("text", "expected"), BUDGETS)
+def test_rules_never_store_a_per_person_budget_as_the_total(text: str, expected: int | None) -> None:
+    assert from_rules(text, "unknown").budget_krw == expected
+
+
+MODEL_BUDGETS = [
+    ("1인당 예산 3만 원, 40명", 30_000, (1_200_000, "low")),
+    ("1인당 예산 3만 원, 40명", 1_200_000, (1_200_000, "high")),
+    ("1인당 예산 3만 원입니다", 30_000, (None, "low")),
+    ("인당 3만 원, 30~40명", 900_000, (None, "low")),
+    ("1인당 3만 원, 총액 120만 원, 40명", 30_000, (1_200_000, "low")),
+    ("1인당 3만 원, 총액 120만 원, 40명", 1_200_000, (1_200_000, "high")),
+    ("1인당 3만 원, 총액 100만 원, 40명", 1_000_000, (1_000_000, "low")),
+    ("1인당 재료비 1만 원, 예산 200만 원, 40명", 2_000_000, (2_000_000, "high")),
+    ("1인당 재료비 1만 원, 40명", 10_000, (None, "low")),
+    ("1인당 예산 3만 원, 40명", None, (1_200_000, "low")),
+]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("text", "answer", "expected"), MODEL_BUDGETS)
+async def test_model_budget_is_checked_against_a_per_person_price(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, text: str, answer: int | None,
+    expected: tuple[int | None, str],
+) -> None:
+    _ = fake_model(monkeypatch, json.dumps({**READING, "budget_krw": answer}))
+    body = (await client.post("/outreach/extract", json={"text": text})).json()
+    assert (body["fields"]["budgetKrw"], body["confidence"]["budgetKrw"]) == expected
 
 
 HEADCOUNTS = [

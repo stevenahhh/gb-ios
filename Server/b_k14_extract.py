@@ -9,7 +9,16 @@ from typing import ClassVar, Final, Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from b_k14_rules import owner_buys_for_them, owner_pays_first, people_in, written_time_range
+from b_k14_rules import (
+    UNITS,
+    amounts_in,
+    budget_in,
+    offers_margin,
+    owner_buys_for_them,
+    owner_pays_first,
+    people_in,
+    written_time_range,
+)
 from contracts import ApiModel
 from providers import ChatMessage, Sampling, chat
 
@@ -51,19 +60,14 @@ LANDLINE: Final = re.compile(
     r"(?<!\d)(?:0(?:2|[3-6]\d|70)[-.)\s]?\d{3,4}[-.\s]?\d{4}|1[568]\d{2}[-.\s]?\d{4})(?!\d)",
 )
 NUMBER: Final = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(억|천만|백만|만|천)?")
-UNITS: Final = {"억": 100_000_000, "천만": 10_000_000, "백만": 1_000_000, "만": 10_000, "천": 1_000, "": 1}
 TIME_RANGE: Final = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d")
-BUDGET: Final = re.compile(
-    r"(?:예산|금액|총액)\D{0,10}(\d[\d,]*(?:\.\d+)?)\s*(억|천만|백만|만|천)?(?:\s*원|(?<=[억만천]))",
-)
 MONTH_DAY: Final = re.compile(r"\d{1,2}\s*월\s*\d{1,2}\s*일")
 RULES: Final[tuple[tuple[SignalCode, Callable[[str], bool]], ...]] = (
     ("proxy_purchase", owner_buys_for_them),
-    ("margin_offer", lambda text: MARGIN.search(text) is not None),
+    ("margin_offer", offers_margin),
     ("same_day_pressure", lambda text: PRESSURE.search(text) is not None),
     ("prepay_by_owner", owner_pays_first),
 )
-MARGIN: Final = re.compile(r"차액|마진|수수료[를은]?\s*(?:드|지급|챙)")
 PRESSURE: Final = re.compile(r"오늘\s*(?:안|중)|금일\s*(?:중|내)|당장\s*(?:결정|확정)")
 ORG_RULES: Final[tuple[tuple[OrgType, re.Pattern[str]], ...]] = (
     ("school", re.compile(r"학교|초등|중학|고등|유치원|어린이집")),
@@ -153,7 +157,7 @@ def contact_kind(text: str) -> ContactKind:
 
 def numbers(text: str) -> set[int]:
     """Collect every number the inquiry states, in won or people."""
-    found: set[int] = set()
+    found = amounts_in(text)
     for match in NUMBER.finditer(text):
         value = float(match.expand(r"\1").replace(",", ""))
         found.add(round(value * UNITS[match.expand(r"\2")]))
@@ -215,6 +219,17 @@ async def model_reading(masked: str) -> ModelReading | None:
     return None
 
 
+def checked_budget(answer: int | None, masked: str, stated: set[int]) -> tuple[int | None, bool]:
+    """Keep the model's total only when the text supports it; a per-person price is multiplied or dropped."""
+    value = answer if answer is not None and answer > 0 else None
+    written = budget_in(masked)
+    if written.per_person:
+        return written.total, value == written.total and written.consistent and value is not None
+    if value in written.other_amounts and value != written.total:
+        return None, False
+    return value, value is None or value in stated
+
+
 def from_reading(reading: ModelReading, masked: str, kind: ContactKind) -> tuple[ExtractedFields, set[str]]:
     """Turn a valid reading into fields plus the names that still need the owner's check."""
     stated = numbers(masked)
@@ -230,6 +245,9 @@ def from_reading(reading: ModelReading, masked: str, kind: ContactKind) -> tuple
         people = expected
     elif not set(people) <= stated:
         low.add("headcount")
+    budget, sure = checked_budget(reading.budget_krw, masked, stated)
+    if not sure:
+        low.add("budget_krw")
     org_type = reading.org_type
     if org_type == "unknown":
         org_type = org_by_rules(masked)
@@ -238,13 +256,11 @@ def from_reading(reading: ModelReading, masked: str, kind: ContactKind) -> tuple
     fields = ExtractedFields(
         org_type=org_type, org_name=scrub(reading.org_name, 80),
         headcount=min(people, default=None), headcount_max=max(people, default=None),
-        budget_krw=reading.budget_krw if (reading.budget_krw or 0) > 0 else None,
+        budget_krw=budget,
         budget_vat=reading.budget_vat, date=parse_date(reading.date), date_text=scrub(reading.date_text),
         time_range=time_range, location_text=scrub(reading.location_text),
         class_hint=scrub(reading.class_hint), contact_kind=kind,
     )
-    if fields.budget_krw is not None and fields.budget_krw not in stated:
-        low.add("budget_krw")
     return fields, low
 
 
@@ -264,14 +280,10 @@ def org_by_rules(text: str) -> OrgType:
 def from_rules(masked: str, kind: ContactKind) -> ExtractedFields:
     """Fill what plain patterns can prove when the model is unavailable or malformed."""
     people = people_in(masked)
-    budget = BUDGET.search(masked)
-    amount = 0
-    if budget is not None:
-        amount = round(float(budget.expand(r"\1").replace(",", "")) * UNITS[budget.expand(r"\2")])
     day = MONTH_DAY.search(masked)
     return ExtractedFields(
         org_type=org_by_rules(masked), headcount=people.low, headcount_max=people.high,
-        budget_krw=amount or None, date_text=day.group() if day is not None else None,
+        budget_krw=budget_in(masked).total, date_text=day.group() if day is not None else None,
         time_range=written_time_range(masked), contact_kind=kind,
     )
 
