@@ -12,7 +12,15 @@ from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from b_k14_calc import CostCard, Inputs, Rates, Scenario, SeatHistory, calculate, missing_costs
-from b_k14_extract import contact_kind, is_locked, mask, numbers, with_server_signals
+from b_k14_extract import (
+    contact_kind,
+    from_rules,
+    is_locked,
+    mask,
+    numbers,
+    rule_signals,
+    with_server_signals,
+)
 from providers import ChatMessage, Sampling
 from tests.conftest import downgrade, upgrade
 
@@ -212,6 +220,152 @@ async def test_broken_or_failed_model_falls_back_to_rules(
     assert set(body["confidence"].values()) == {"low"}
     assert "proxy_purchase" in body["signals"]
     assert body["locked"] is True
+
+
+@pytest.mark.parametrize("text", [
+    "선입금 해주시면 계약 진행하겠습니다",
+    "계약보증금을 먼저 보내 주셔야 합니다",
+    "재료를 먼저 구매해 주시면 나중에 정산해 드립니다",
+    "물품 대금을 대납 부탁드립니다",
+    "선입금 없이는 진행이 어렵습니다",
+    "걱정하지 않으셔도 됩니다. 이행보증금 50만 원 납부 바랍니다",
+    "저희 계좌로 선입금 부탁드려요",
+    "저희 학교는 선입금 해주시면 진행합니다",
+    "저희가 선입금 요청드립니다",
+    "저희가 선입금 해주시면 진행하겠습니다",
+])
+def test_owner_paying_first_locks(text: str) -> None:
+    assert "prepay_by_owner" in rule_signals(text)
+    assert is_locked(rule_signals(text))
+
+
+@pytest.mark.parametrize("text", [
+    "와인을 대신 구매해 주시면 같이 결제하겠습니다", "심장충격기를 대신 사 주세요", "대리구매 부탁드립니다",
+])
+def test_buying_goods_for_the_institution_locks(text: str) -> None:
+    assert "proxy_purchase" in rule_signals(text)
+    assert is_locked(rule_signals(text))
+
+
+@pytest.mark.parametrize("text", [
+    "예약금은 저희가 먼저 입금하겠습니다",
+    "강사료 외에 재료는 저희 학교에서 직접 구매합니다",
+    "보증금 없음",
+    "보증금은 따로 없습니다",
+    "저희가 선입금 해드리니 확인 부탁드립니다",
+    "강사료는 선입금 가능합니다",
+    "학교에서 선결제하고 영수증 부탁드려요",
+    "이행보증보험 증권 제출 부탁드립니다",
+    "계약보증금은 보증보험 증권으로 제출해 주세요",
+    "나라장터를 통해 정식 계약으로 진행합니다",
+    "재료는 저희가 대신 구매해 드립니다",
+    "공방 로고를 대신 사용해도 될까요",
+    "선입금은 어렵습니다",
+    "수업료를 선결제하고 싶습니다",
+    "선입금할 계좌를 알려 주시면 입금하겠습니다",
+    "견적서를 먼저 보내 주세요",
+    "저희 시청에서 먼저 입금 후 진행 부탁드립니다",
+])
+def test_institution_paying_first_does_not_lock(text: str) -> None:
+    assert not is_locked(rule_signals(text))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("text", [
+    "공문 보내드릴게요. 담당 주무관 홍길동 010-9999-8888, 마진 챙겨 드립니다",
+    "담당 주무관입니다. 010-9999-8888 차액은 돌려 드려요",
+])
+async def test_official_wording_with_a_mobile_and_a_margin_locks(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, text: str,
+) -> None:
+    for replies in ((), (json.dumps({**READING, "org_type": "unknown", "budget_krw": None}),)):
+        _ = fake_model(monkeypatch, *replies)
+        body = (await client.post("/outreach/extract", json={"text": text})).json()
+        assert body["fields"]["orgType"] == "public"
+        assert {"mobile_only_contact", "margin_offer"} <= set(body["signals"])
+        assert body["locked"] is True
+
+
+HEADCOUNTS = [
+    ("4학년 2개 반 각 24명", (48, 48)),
+    ("반당 24명, 총 3개 반입니다", (72, 72)),
+    ("두 팀 각각 10~12명", (20, 24)),
+    ("15명씩 4개 조로 진행", (60, 60)),
+    ("2회차 각 20명", (40, 40)),
+    ("2개 반 각 24명, 총 48명", (48, 48)),
+    ("40명 출강", (40, 40)),
+    ("30~40명 정도", (30, 40)),
+    ("하루 2회, 회당 15명", (30, 30)),
+    ("1회차 20명, 2회차 20명", None),
+    ("참여 인원 50명(교사 5명 포함)", None),
+    ("반별 24명입니다", None),
+    ("한 반에 24명 정도예요", None),
+    ("4학년 2개 반, 5학년 3개 반 각 24명", None),
+    ("4학년 3반 각 24명", None),
+    ("성인 20명, 아이 10명", None),
+    ("2개 반 24명", None),
+]
+
+
+@pytest.mark.parametrize(("text", "expected"), HEADCOUNTS)
+def test_rules_multiply_groups_or_leave_the_headcount_empty(
+    text: str, expected: tuple[int, int] | None,
+) -> None:
+    fields = from_rules(text, "unknown")
+    assert (fields.headcount, fields.headcount_max) == (expected or (None, None))
+
+
+MODEL_HEADCOUNTS = [
+    ("4학년 2개 반 각 24명", 24, (48, "low")),
+    ("4학년 2개 반 각 24명", 48, (48, "high")),
+    ("반별 24명입니다", 24, (None, "low")),
+    ("2개 반 24명", 24, (None, "low")),
+    ("성인 20명, 아이 10명", 30, (30, "low")),
+    ("40명 출강", 40, (40, "high")),
+]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("text", "answer", "expected"), MODEL_HEADCOUNTS)
+async def test_model_headcount_is_checked_against_the_groups(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, text: str, answer: int,
+    expected: tuple[int | None, str],
+) -> None:
+    reading = {**READING, "headcount_min": answer, "headcount_max": answer, "budget_krw": None}
+    _ = fake_model(monkeypatch, json.dumps(reading))
+    body = (await client.post("/outreach/extract", json={"text": text})).json()
+    assert (body["fields"]["headcount"], body["confidence"]["headcount"]) == expected
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("14:00-16:00", "14:00-16:00"),
+    ("14시~16시", "14:00-16:00"),
+    ("오후 2시부터 4시", "14:00-16:00"),
+    ("오후 2~4시", "14:00-16:00"),
+    ("오전 10시 30분부터 12시까지", "10:30-12:00"),
+    ("오전 11시~오후 1시", "11:00-13:00"),
+    ("오전 11시~1시", "11:00-13:00"),
+    ("오후 1시 반에서 3시", "13:30-15:00"),
+    ("9:00 ~ 11:30", "09:00-11:30"),
+    ("2시~4시", None),
+    ("3~4시간 수업", None),
+    ("20~24명", None),
+    ("25시~26시", None),
+    ("10:00-9:00", None),
+    ("11/29~30 14시", None),
+])
+def test_rules_read_a_written_time_range(text: str, expected: str | None) -> None:
+    assert from_rules(text, "unknown").time_range == expected
+
+
+@pytest.mark.anyio
+async def test_rule_read_time_range_is_low_confidence(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = fake_model(monkeypatch)
+    body = (await client.post("/outreach/extract", json={"text": "40명, 오후 2시부터 4시"})).json()
+    assert body["fields"]["timeRange"] == "14:00-16:00"
+    assert body["confidence"]["timeRange"] == "low"
 
 
 async def prepare(client: AsyncClient) -> None:
