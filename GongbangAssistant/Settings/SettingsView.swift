@@ -52,6 +52,14 @@ struct SettingsView: View {
                     Label { Text("공방 정보") } icon: { MenuIcon(systemName: "storefront") }
                 }
                 .accessibilityIdentifier("settings.workshop")
+                #if BUILD_B
+                NavigationLink {
+                    BK25FactCardListView()
+                } label: {
+                    Label { Text("수업 사실 카드") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
+                }
+                .accessibilityIdentifier("settings.factCards")
+                #endif
                 rows(sections["공방"] ?? [])
                 NavigationLink {
                     ChannelStatusView(channels: data.channels)
