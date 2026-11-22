@@ -4,7 +4,6 @@ Every route here is additive. Build A never calls them, and the existing inquiry
 today routes are unchanged.
 """
 
-import hashlib
 import logging
 from datetime import datetime
 from typing import Annotated, Final, Literal
@@ -16,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from b_k25_claims import number_tokens
 from b_k25_interview import is_unsure, number_value
+from b_k25_judgments import router as judgment_router
 from b_k25_prompts import (
     INTERVIEW_SAMPLING,
     FactField,
@@ -24,7 +24,9 @@ from b_k25_prompts import (
     parse_interview,
 )
 from b_k25_replies import router as reply_router
-from b_k25_tables import FactCardRow, OwnerRuleRow
+from b_k25_rules import RuleView, rule_views
+from b_k25_rules import router as rule_router
+from b_k25_tables import FactCardRow, OwnerRuleRow, card_id_for
 from bookings import ExpectedRevision
 from common import Now, Session, ShortText, require_revision
 from contracts import ApiModel, ApiRequest
@@ -34,6 +36,8 @@ from providers import chat
 LOGGER: Final = logging.getLogger("roundup.grounded")
 router = APIRouter()
 router.include_router(reply_router)
+router.include_router(judgment_router)
+router.include_router(rule_router)
 FACT_COLUMNS: Final[tuple[str, ...]] = (
     "duration_minutes", "capacity", "included_materials", "parking", "refund_policy",
 )
@@ -53,17 +57,6 @@ class FactCardSummary(ApiModel):
     rule_count: int
     revision: int
     updated_at: datetime | None
-
-
-class RuleView(ApiModel):
-    """One saved rule and the class it belongs to; no class means the whole workshop."""
-
-    id: str
-    card_id: str | None
-    class_name: str | None
-    rule_text: str
-    question_summary: str
-    created_at: datetime
 
 
 class FactCardDetail(ApiModel):
@@ -110,12 +103,6 @@ class InterviewResponse(ApiModel):
     confidence: Literal["clear", "unclear"]
 
 
-def card_id_for(class_name: str) -> str:
-    """Derive a stable card id from the class name, so a class without a card has one too."""
-    digest = hashlib.sha256(" ".join(class_name.split()).encode()).hexdigest()
-    return f"card-{digest[:16]}"
-
-
 def filled_count(row: FactCardRow) -> int:
     """Count the filled interview columns of a saved card."""
     return sum(getattr(row, name) is not None for name in FACT_COLUMNS)
@@ -129,22 +116,6 @@ async def class_names(db: AsyncSession, now: datetime) -> list[str]:
         .group_by(ClassSessionRow.title).order_by(upcoming.nulls_last(), ClassSessionRow.title),
     )
     return list(rows)
-
-
-async def rule_views(db: AsyncSession) -> list[RuleView]:
-    """Every rule the owner still uses, newest first."""
-    rows = await db.execute(
-        select(OwnerRuleRow, FactCardRow.class_name)
-        .outerjoin(FactCardRow, FactCardRow.id == OwnerRuleRow.card_id)
-        .where(OwnerRuleRow.retired_at.is_(None)).order_by(OwnerRuleRow.created_at.desc()),
-    )
-    return [
-        RuleView(
-            id=rule.id, card_id=rule.card_id, class_name=name, rule_text=rule.rule_text,
-            question_summary=rule.question_summary, created_at=rule.created_at,
-        )
-        for rule, name in rows.tuples()
-    ]
 
 
 def empty_card(class_name: str) -> FactCardDetail:

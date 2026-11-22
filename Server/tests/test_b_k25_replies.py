@@ -1,6 +1,5 @@
 """A grounded reply is written from the ledger, checked against it, and locked until it agrees."""
 
-from collections.abc import Sequence
 from typing import Final
 
 import pytest
@@ -9,12 +8,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from b_k25_engine import arm_for
-from providers import ChatMessage, Sampling
+from tests.b_k25_support import CONTROL, GROUNDED, ScriptedModel, add_inquiry, scripted
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
-GROUNDED: Final = "inquiry-weekend"
-CONTROL: Final = "inquiry-paste"
-QUESTION: Final = "토요일 주말 클래스 두 명 가능해요? 가격도 알려 주세요. 제 번호는 010-1234-5678이에요."
 PLAIN_REPLY: Final = "이서준 님, 문의 주셔서 감사해요. 확인해서 다시 알려드릴게요."
 WRONG_DRAFT: Final = "○○ 님, 토요일에 네 자리 가능해요. 예약금은 30,000원이에요."
 WRONG_CLAIMS: Final = (
@@ -28,45 +24,9 @@ RIGHT_CLAIMS: Final = (
 )
 
 
-class ScriptedModel:
-    """Answers routing, drafting, and extraction calls by what the system prompt asks for."""
-
-    def __init__(self) -> None:
-        self.route: str = '{"route":"draft"}'
-        self.drafts: list[str] = []
-        self.claims: str = "[]"
-        self.prompts: list[str] = []
-        self.routes: int = 0
-
-    async def __call__(self, messages: Sequence[ChatMessage], _sampling: Sampling) -> str:
-        self.prompts += [message.content for message in messages]
-        system = messages[0].content
-        if system.startswith("너는 공방 문의를 분류한다"):
-            self.routes += 1
-            return self.route
-        if system.startswith("아래 [초안]에서"):
-            return self.claims
-        return self.drafts.pop(0)
-
-
 @pytest.fixture
 def model(monkeypatch: pytest.MonkeyPatch) -> ScriptedModel:
-    fake = ScriptedModel()
-    monkeypatch.setattr("ai.chat", fake)
-    monkeypatch.setattr("b_k25_engine.chat", fake)
-    return fake
-
-
-async def add_inquiry(database: AsyncEngine, inquiry_id: str) -> None:
-    async with database.begin() as connection:
-        _ = await connection.execute(
-            text(
-                "INSERT INTO inquiries (id, customer, subject, question, facts, draft, status, revision,"
-                " received_at) VALUES (:id, '이서준', '주말 클래스', :question, ARRAY['안내 · 앞치마 제공'],"
-                " '', 'pending', 0, now())",
-            ),
-            {"id": inquiry_id, "question": QUESTION},
-        )
+    return scripted(monkeypatch)
 
 
 async def saved(client: AsyncClient, inquiry_id: str) -> None:

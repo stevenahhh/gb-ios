@@ -1,5 +1,6 @@
 """Tables of the grounded reply engine (K25); every one of them only adds to the existing schema."""
 
+import hashlib
 from datetime import datetime
 
 from pydantic import JsonValue
@@ -22,6 +23,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
 from models import REVISION_CHECK, Entity, TableArgs
+
+
+def card_id_for(class_name: str) -> str:
+    """Derive a stable card id from the class name, so a class without a card has one too."""
+    digest = hashlib.sha256(" ".join(class_name.split()).encode()).hexdigest()
+    return f"card-{digest[:16]}"
 
 
 class FactCardRow(Entity, Base):

@@ -243,23 +243,27 @@ def empty_card_fields(ledger: Ledger) -> list[JsonValue]:
     return missing
 
 
-async def save_draft(context: Context, reply: WrittenReply) -> None:
+def store_reply(db: AsyncSession, row: GroundingRow, context: Context, reply: WrittenReply) -> None:
     """Keep the checked draft and its claims; nothing is written to the inquiry itself."""
     evaluation = reply.evaluation
+    row.claims_json = [claim_to_json(claim) for claim in evaluation.claims]
+    row.lock_state = evaluation.lock
+    row.generated_draft = reply.draft
+    row.generated_at = context.now
+    row.extraction_ok = evaluation.extraction_ok
+    record_event(db, row, "draft", {
+        "lock": evaluation.lock, "extraction": evaluation.extraction_ok,
+        "fallback": reply.is_fallback,
+        "deferral": deferral_only(reply.draft, evaluation.claims),
+        "emptyFields": empty_card_fields(context.ledger),
+        "mismatches": sum(claim.status == "mismatched" for claim in evaluation.claims),
+    }, context.now)
+
+
+async def save_draft(context: Context, reply: WrittenReply) -> None:
+    """Store a freshly written draft in its own transaction."""
     async with transaction() as db:
-        row = await upsert_grounding(db, context.inquiry.id, context.arm)
-        row.claims_json = [claim_to_json(claim) for claim in evaluation.claims]
-        row.lock_state = evaluation.lock
-        row.generated_draft = reply.draft
-        row.generated_at = context.now
-        row.extraction_ok = evaluation.extraction_ok
-        record_event(db, row, "draft", {
-            "lock": evaluation.lock, "extraction": evaluation.extraction_ok,
-            "fallback": reply.is_fallback,
-            "deferral": deferral_only(reply.draft, evaluation.claims),
-            "emptyFields": empty_card_fields(context.ledger),
-            "mismatches": sum(claim.status == "mismatched" for claim in evaluation.claims),
-        }, context.now)
+        store_reply(db, await upsert_grounding(db, context.inquiry.id, context.arm), context, reply)
 
 
 async def save_plain_draft(context: Context, draft: str) -> None:
