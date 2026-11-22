@@ -16,9 +16,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    select,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from database import Base
 
@@ -222,6 +223,17 @@ class TaskRow(Entity, Base):
     completed_at: Mapped[datetime | None] = timestamp(nullable=True)
 
 
+class CarryOverRow(Base):
+    """Overdue work the owner put into one day's list; the work keeps its own deadline."""
+
+    __tablename__: str = "carry_overs"
+    __table_args__: TableArgs = (CheckConstraint("target IN ('task', 'shipment')"),)
+    target: Mapped[str] = mapped_column(Text, primary_key=True)
+    target_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    carried_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CalendarEventRow(Entity, Base):
     """An owner-added schedule entry not derivable from other tables."""
 
@@ -289,6 +301,11 @@ class InquiryRow(Base):
     revision: Mapped[int] = mapped_column(Integer)
     customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"))
     channel_id: Mapped[str | None] = mapped_column(ForeignKey("channels.id", ondelete="SET NULL"))
+    channel: Mapped[str | None] = column_property(
+        select(ChannelRow.name).where(ChannelRow.id == channel_id)
+        .correlate_except(ChannelRow).scalar_subquery(),
+        expire_on_flush=False,
+    )
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

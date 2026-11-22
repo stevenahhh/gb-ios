@@ -47,6 +47,23 @@ class RoundupUITestCase: XCTestCase {
         return target.exists && target.isHittable
     }
 
+    /// One choice of the 오늘 tabs: tasks, channels, delivery or suggestions.
+    @MainActor
+    func todaySegment(_ name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["today.segment.\(name)"].firstMatch
+    }
+
+    /// A row of 확인해 주실 일, which moves behind 모두 보기 when the section is full.
+    @MainActor
+    func revealAttention(_ target: XCUIElement, in app: XCUIApplication) -> Bool {
+        if scrollTo(target, in: app) { return true }
+        for _ in 0..<8 { app.swipeDown() }
+        let all = app.buttons["approvals.all"]
+        guard scrollTo(all, in: app) else { return false }
+        all.tap()
+        return scrollTo(target, in: app)
+    }
+
     @MainActor
     func keepScreenshot(of app: XCUIApplication, named name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())

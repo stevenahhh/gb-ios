@@ -82,7 +82,7 @@ final class BK06UITests: RoundupUITestCase {
         app.launchEnvironment["ROUNDUP_K06_AT"] = "\(day.string(from: .now))T18:30:00+09:00"
         app.launch()
         let late = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'k06.late.'")).firstMatch
-        XCTAssertTrue(scrollTo(late, in: app))
+        XCTAssertTrue(revealAttention(late, in: app))
         XCTAssertTrue(late.label.contains("4시간 30분 지남"), late.label)
         keepScreenshot(of: app, named: "k06-today-cards")
         late.tap()
@@ -91,7 +91,7 @@ final class BK06UITests: RoundupUITestCase {
         keepScreenshot(of: app, named: "k06-late")
         app.navigationBars.buttons.firstMatch.tap()
         let small = app.buttons["k06.underMin.session-k06-small"]
-        XCTAssertTrue(scrollTo(small, in: app))
+        XCTAssertTrue(revealAttention(small, in: app))
         small.tap()
         XCTAssertTrue(app.buttons["k06.underMin.decide"].waitForExistence(timeout: 10))
         XCTAssertTrue(element(labelled: "진행 방식", in: app).exists)

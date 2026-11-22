@@ -11,9 +11,14 @@ final class BK06Reminders: NSObject, UNUserNotificationCenterDelegate {
     var openedBookingID: String?
     private(set) var status: UNAuthorizationStatus = .authorized
 
+    /// The delegate comes with the first access, not the first load, so a tap before the cards arrive is not lost.
+    private override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
     func refresh(_ reminders: [BK06Reminder]) async {
         let center = UNUserNotificationCenter.current()
-        center.delegate = self
         status = await center.notificationSettings().authorizationStatus
         guard status == .authorized else { return }
         let old = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(Self.prefix) }

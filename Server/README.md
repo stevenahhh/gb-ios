@@ -84,6 +84,8 @@ back to `draft` and rejected recommendations back to `open`, preserving their te
 Revision `0005` adds `collector_sources`, `collector_runs`, and `collected_items`, and allows a `naver_blog`
 channel. Downgrading drops collected items but keeps inquiries and orders already mapped from them.
 
+Revision `0006` adds `carry_overs`. Downgrading drops it; tasks and shipments keep their deadlines.
+
 `seed.py` inserts missing rows with `ON CONFLICT DO NOTHING` and links seeded
 inquiries to their customers only while that link is empty. It never changes
 existing data. Dates are relative to the first seeding day in Asia/Seoul; a later
@@ -96,7 +98,8 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | Route | Purpose |
 | --- | --- |
 | `GET /health`, `GET /health/ready` | Liveness; database plus exact migration version (200 or 503) |
-| `GET /today` | Today tab, all segments |
+| `GET /today` | Today tab, all segments; a task or parcel row has `carriedOver: true` on the day it was carried |
+| `POST /today/carry-overs`, `/today/carry-overs/undo` | Put left-over work into today's list, or take it out, with `{items: [{target: "task" or "shipment", id}]}` (1-100 rows); deadlines never change; one transaction, 204; carrying needs an open task or unshipped parcel due before today (409, missing row 404), and both calls may be repeated |
 | `GET /calendar?start&end` | Days with markers and agenda, inclusive, at most 62 days |
 | `POST /calendar/events` | Add `{title, kind, detail, startsAt}`; `startsAt` needs a UTC offset |
 | `GET /operations?month=YYYY-MM` or `?start=YYYY-MM-DD&end=YYYY-MM-DD` | Monthly or inclusive custom range (up to 366 days); custom comparisons use the immediately preceding equal-length range; month and range cannot be combined |
@@ -172,7 +175,7 @@ An empty answer, or a reply that promises a booking, refund, payment, discount, 
 date missing from its facts, gets one corrective retry. If the retry fails too, the
 endpoint returns 502.
 
-Every state change takes `expectedRevision` and returns the updated object. Missing
+Every state change except the carry-overs takes `expectedRevision` and returns the updated object. Missing
 rows are 404. A stale revision or an action the current state does not allow is 409;
 invalid input is 422. Writes lock their row, and bookings lock the class so seats
 cannot be oversold. Approving an inquiry or reviewing a draft sends nothing outside

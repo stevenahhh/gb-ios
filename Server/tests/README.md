@@ -26,6 +26,8 @@ test that inspects the prompt built from database rows.
 the robots.txt refusal. `test_collector_runs.py` runs storage, mapping, and the API on PostgreSQL the same way.
 No collector test may reach a real host.
 
+`test_carry_overs.py` covers putting left-over work into today's list, taking it back, and the day it ends.
+
 `test_undo.py` covers revision-checked reversals, state restoration, and shared
 attention totals. `test_drafts.py` covers local edits, decisions, linked
 recommendations, and reopening. `test_details.py` covers the additive screen

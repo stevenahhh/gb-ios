@@ -13,16 +13,16 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         app = try launch()
 
         selectTab("오늘")
-        // 확인해 주실 일 sits above the segments, so they may start below the fold.
-        XCTAssertTrue(scrollTo(app.segmentedControls.firstMatch, in: app))
-        for segment in ["할 일", "채널", "배송", "비서 추천"] {
-            selectSegment(segment, menu: "today.segment")
+        let segments = [("tasks", "할 일"), ("channels", "채널"), ("delivery", "배송"), ("suggestions", "비서 추천")]
+        XCTAssertTrue(todaySegment("tasks", in: app).waitForExistence(timeout: 10))
+        for (name, segment) in segments {
+            todaySegment(name, in: app).tap()
             capture("today-\(segment)")
             scrollToEnd()
             capture("today-\(segment)-end")
             scrollToTop()
         }
-        selectSegment("할 일", menu: "today.segment")
+        todaySegment("tasks", in: app).tap()
 
         selectTab("캘린더")
         XCTAssertTrue(app.buttons["calendar.mode.week"].waitForExistence(timeout: 10))

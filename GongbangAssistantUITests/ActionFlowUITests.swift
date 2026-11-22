@@ -96,9 +96,8 @@ final class ActionFlowUITests: RoundupUITestCase {
     @MainActor
     func testRecommendationDraftCanBeApprovedAndUndone() throws {
         let app = try launch()
-        let segment = app.segmentedControls.buttons["비서 추천"]
-        // The segments sit below 확인해 주실 일, so scroll to them first.
-        XCTAssertTrue(scrollTo(segment, in: app))
+        let segment = todaySegment("suggestions", in: app)
+        XCTAssertTrue(segment.waitForExistence(timeout: 10))
         segment.tap()
         approveThenReopenDraft(app.buttons["draft.recommendation.recommendation-market"], in: app)
     }
@@ -123,18 +122,7 @@ final class ActionFlowUITests: RoundupUITestCase {
     func testTaskCompletionIsReflectedFromTheServer() throws {
         let app = try launch()
         let task = app.buttons["task.task-market"]
-        // After its 17:00 deadline the task joins the overdue group, whose rows past the third sit behind 모두 보기.
-        let all = app.buttons["today.overdue.all"]
-        if scrollTo(all, in: app) {
-            all.tap()
-            // The list loads its own data, so give it the same bound as other server waits.
-            if !task.waitForExistence(timeout: 10) {
-                app.navigationBars.buttons.element(boundBy: 0).tap()
-            }
-        } else {
-            // No overdue overflow: return to the top, where the task's own section starts the search.
-            for _ in 0..<8 { app.swipeDown() }
-        }
+        // Work due today stays in 할 일 after its deadline.
         XCTAssertTrue(scrollTo(task, in: app))
         XCTAssertEqual(task.value as? String, "미완료")
         task.tap()
@@ -172,10 +160,11 @@ final class ActionFlowUITests: RoundupUITestCase {
         let complete = app.buttons["approval.approve.inquiry.inquiry-clay"]
         XCTAssertTrue(scrollTo(complete, in: app))
         complete.tap()
-        // The card stays with the next step: copy the reply, open the store, or undo.
-        XCTAssertTrue(app.buttons["draft.copy"].waitForExistence(timeout: 10))
+        // The row stays with the next step: undo or open the store.
         let undo = app.buttons["approval.undo.inquiry.inquiry-clay"]
-        XCTAssertTrue(undo.exists)
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["draft.open"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["draft.copy"].exists)
         undo.tap()
         XCTAssertTrue(complete.waitForExistence(timeout: 10))
     }

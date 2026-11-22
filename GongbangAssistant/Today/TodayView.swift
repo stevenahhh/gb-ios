@@ -15,23 +15,27 @@ struct TodayView: View {
     @SceneStorage("today.segment") private var segment: TodaySegment = .tasks
     @State private var loader = Loader<TodayScreenData>()
     @State private var now = Date.now
+    @State private var visibility = AttentionVisibility.shared
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
             LoadableContent(loader: loader, retry: load) { today in
-                if today.hasNoWork && store.inquiries.isEmpty {
-                    emptyState
-                } else {
-                    list(today)
-                }
+                list(today)
+                    .todayGreeting(
+                        pendingCount: AttentionCount.value(today: today, inquiries: store.inquiries),
+                        updated: subtitle, now: now
+                    )
             }
-            // The headline is recomputed every minute and whenever the data reloads. A TimelineView
+            // Until the first load there is no count to greet with, and "0건" would be a guess.
+            .background {
+                if loader.value == nil { Color.clear.navigationTitle("오늘") }
+            }
+            // The greeting is recomputed every minute and whenever the data reloads. A TimelineView
             // around the list looped with the collapsing large title, so a minute timer drives `now`.
-            .navigationTitle(headline(now: now))
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
-            .navigationSubtitle(subtitle)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Image(.brandMark)
@@ -54,57 +58,91 @@ struct TodayView: View {
             }
             .appDestinations()
         }
+        .bk06NotificationSheet()
         .task(id: app.dataVersion) { await load() }
     }
 
     private func load() async {
+        // The greeting counts K06 rows, so they load here rather than when a lazy row appears.
+        async let k06: Void = BK06Inbox.shared.load()
         await loader.load { try await RoundupAPI.today() }
+        now = .now
         if let count = loader.value?.attentionCount { app.updateAttention(count) }
         await BK25JudgmentInbox.shared.load()
-    }
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("오늘 등록된 일이 없어요", systemImage: "checkmark.circle")
-        } description: {
-            Text(verbatim: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
-                .foregroundStyle(Color.secondaryText)
-        }
-        .accessibilityIdentifier("today.empty")
-        .refreshable { await load() }
+        await k06
     }
 
     private func list(_ today: TodayScreenData) -> some View {
-        List {
-            CardSection {
-                MetricStrip(metrics: metrics(today))
+        let isEmpty = today.hasNoWork && store.inquiries.isEmpty
+        return List {
+            if isEmpty {
+                emptyState
+            } else {
+                metricSection(today)
             }
 
-            BK06TodaySection()
+            AttentionSection(today: today)
             BK25JudgmentSection()
 
-            ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
-
-            Section {
-                Picker("보기", selection: $segment) {
-                    ForEach(TodaySegment.allCases) { segment in
-                        Text(segment.rawValue).tag(segment)
-                    }
-                }
-                .adaptivePickerStyle()
-                .accessibilityIdentifier("today.segment")
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
+            if !isEmpty {
+                segmentContent(today)
             }
-            .listSectionSeparator(.hidden)
-
-            segmentContent(today)
         }
         .cardList()
+        // Rows pass under the pinned segments; the hard edge keeps their text from reading through.
+        .scrollEdgeEffectStyle(.hard, for: .top)
+        .safeAreaBar(edge: .top, spacing: 0) {
+            if !isEmpty {
+                TodaySegmentBar(selection: $segment)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
+            }
+        }
         .refreshable {
             await load()
             await store.loadInquiries()
         }
+    }
+
+    private var emptyState: some View {
+        Section {
+            ContentUnavailableView {
+                Label("오늘 등록된 일이 없어요", systemImage: "checkmark.circle")
+            } description: {
+                Text(verbatim: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
+                    .foregroundStyle(Color.secondaryText)
+            }
+            .accessibilityIdentifier("today.empty")
+            .listRowBackground(Color.clear)
+        }
+        .listSectionSeparator(.hidden)
+    }
+
+    private func metricSection(_ today: TodayScreenData) -> some View {
+        CardSection {
+            if visibility.isHidden(AttentionHidden.metricsID) {
+                Button("숫자 다시 보기", systemImage: "eye", action: showMetrics)
+                    .accessibilityIdentifier("today.metrics.restore")
+            } else {
+                MetricStrip(metrics: metrics(today))
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("today.metrics")
+                    .listRowInsets(.vertical, 8)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("숨기기", systemImage: "eye.slash", action: hideMetrics)
+                            .tint(.gray)
+                    }
+            }
+        }
+    }
+
+    private func hideMetrics() {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { visibility.hide(AttentionHidden.metricsID) }
+        app.showToast("숫자 칸을 숨겼어요") { showMetrics() }
+    }
+
+    private func showMetrics() {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { visibility.restore(AttentionHidden.metricsID) }
     }
 
     private func metrics(_ today: TodayScreenData) -> [Metric] {
@@ -120,37 +158,28 @@ struct TodayView: View {
     private func segmentContent(_ today: TodayScreenData) -> some View {
         switch segment {
         case .tasks:
-            // Overdue rows move into one group at the top, each under its overdue mark; their own sections drop them.
-            let overdue = OverdueEntry.collect(today.tasks.groups, now: .now)
-            if !overdue.isEmpty {
+            // 확인해 주실 일 above asks about earlier days' work and holds the waiting replies, so neither repeats here.
+            let asked = Set(CarryOverQuestion.collect(today.tasks.groups, now: .now).flatMap(\.entries).map(\.id))
+            let groups = today.tasks.groups.filter { group in group.items.contains { !asked.contains($0.id) } }
+            if groups.isEmpty {
                 CardSection {
-                    ForEach(overdue.prefix(3)) { entry in
-                        TaskRow(item: entry.item, kind: entry.kind, isInOverdueGroup: true)
-                    }
-                    if overdue.count > 3 {
-                        NavigationLink("모두 보기") { OverdueListView() }
-                            .accessibilityIdentifier("today.overdue.all")
-                    }
-                } header: {
-                    SectionHeader(title: "기한 지난 일 \(overdue.count)건")
+                    Text("오늘 할 일이 없어요")
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
-            // Waiting inquiry replies live in 확인해 주실 일 above, so this tab does not repeat them.
             // Bookings keep the timeline rail: one node per class, joined by a line, with no separators.
-            ForEach(today.tasks.groups) { group in
-                let rows = group.items.filter { item in !overdue.contains { $0.item.id == item.id } }
-                if !rows.isEmpty {
-                    CardSection {
-                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, item in
-                            TaskRow(item: item, kind: group.kind,
-                                    timeline: group.kind == .booking
-                                        ? TimelinePosition(index: index, count: rows.count) : nil)
-                        }
-                    } header: {
-                        SectionHeader(title: group.title, area: group.area)
+            ForEach(groups) { group in
+                let rows = group.items.filter { !asked.contains($0.id) }
+                CardSection {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, item in
+                        TaskRow(item: item, kind: group.kind,
+                                timeline: group.kind == .booking
+                                    ? TimelinePosition(index: index, count: rows.count) : nil)
                     }
-                    .environment(\.cardSeparators, group.kind == .booking ? .hidden : .automatic)
+                } header: {
+                    SectionHeader(title: group.title, area: group.area)
                 }
+                .environment(\.cardSeparators, group.kind == .booking ? .hidden : .automatic)
             }
         case .channels:
             CardSection {
@@ -212,83 +241,11 @@ struct TodayView: View {
         }
     }
 
-    private func headline(now: Date) -> String {
-        guard let facts = loader.value?.headline else { return "오늘" }
-        var core = TodayHeadlineFacts()
-        core.overdueShipments = facts.overdueShipments
-        core.overdueTasks = facts.overdueTasks
-        core.sessions = facts.sessions.compactMap { session in
-            (try? Date(session.startsAt, strategy: .iso8601)).map {
-                TodayHeadlineFacts.Session(title: session.title, start: $0, minutes: session.minutes,
-                                           isDone: session.isDone)
-            }
-        }
-        core.pendingInquiries = facts.pendingInquiries
-        core.depositPending = facts.depositPending
-        core.pendingDrafts = facts.pendingDrafts
-        core.openTasksToday = facts.openTasksToday
-        core.tasksToday = facts.tasksToday
-        core.openShipmentsToday = facts.openShipmentsToday
-        core.shipmentsToday = facts.shipmentsToday
-        core.tomorrowClasses = facts.tomorrowClasses
-        core.weekClassesLeft = facts.weekClassesLeft
-        return TodayHeadline.make(core, now: now)
-    }
-
     private var subtitle: String {
         let date = Date.now.koreanDay()
         guard let loadedAt = loader.loadedAt else { return date }
         let style = Date.FormatStyle(date: .omitted, time: .shortened, locale: Locale(identifier: "ko_KR"),
                                      timeZone: Calendar.workshop.timeZone)
         return "\(date) · \(loadedAt.formatted(style)) 기준"
-    }
-}
-
-struct OverdueEntry: Identifiable {
-    let kind: EventKind
-    let item: TaskItem
-    var id: String { item.id }
-
-    static func collect(_ groups: [TaskGroup], now: Date) -> [OverdueEntry] {
-        groups.flatMap { group in
-            group.items.filter { $0.isDone != true && $0.due?.isOverdue(at: now) == true }
-                .map { OverdueEntry(kind: group.kind, item: $0) }
-        }
-        .sorted { ($0.item.due?.date ?? .distantPast) < ($1.item.due?.date ?? .distantPast) }
-    }
-}
-
-/// Loads its own copy of the today screen, so checks made here show up without leaving the list.
-/// Rows it has shown stay put once finished (the server drops a finished task's deadline), so a check can be undone in place.
-struct OverdueListView: View {
-    @State private var loader = Loader<TodayScreenData>()
-    @State private var shownIDs: [String] = []
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        LoadableContent(loader: loader, retry: load) { today in
-            let rows = Dictionary(today.tasks.groups.flatMap { group in
-                group.items.map { ($0.id, OverdueEntry(kind: group.kind, item: $0)) }
-            }, uniquingKeysWith: { first, _ in first })
-            let entries = shownIDs.compactMap { rows[$0] }
-            List {
-                CardSection {
-                    ForEach(entries) { TaskRow(item: $0.item, kind: $0.kind, isInOverdueGroup: true) }
-                } header: {
-                    SectionHeader(title: "기한 지난 일 \(entries.filter { $0.item.isDone != true }.count)건")
-                }
-            }
-            .cardList()
-        }
-        .navigationTitle("기한 지난 일")
-        .navigationBarTitleDisplayMode(.inline)
-        .task(id: app.dataVersion) { await load() }
-    }
-
-    private func load() async {
-        await loader.load { try await RoundupAPI.today() }
-        guard let groups = loader.value?.tasks.groups else { return }
-        let added = OverdueEntry.collect(groups, now: .now).map(\.id).filter { !shownIDs.contains($0) }
-        shownIDs.append(contentsOf: added)
     }
 }

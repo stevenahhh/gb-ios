@@ -76,6 +76,7 @@ private struct HistoryRow: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                         .lineLimit(1)
+                        .accessibilityLabel(Text(verbatim: "\(AssistantIdentity.name): \(preview)"))
                 }
             }
         }

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from carry_overs import carried_on
 from channels import channel_cards
 from common import Now, Session
 from contracts import ApiModel, Card, CardDue, EventKind, Metric, Status
@@ -46,6 +47,7 @@ class TaskItem(ApiModel):
     revision: int
     due: CardDue | None = None
     starts_at: datetime | None = None
+    carried_over: bool = False
 
 
 class TaskGroup(ApiModel):
@@ -163,7 +165,7 @@ async def session_group(db: AsyncSession, today: date) -> TaskGroup | None:
     return TaskGroup(title="예약", kind="booking", area="bookings", items=items)
 
 
-def shipment_group(cards: list[Card]) -> TaskGroup | None:
+def shipment_group(cards: list[Card], carried: frozenset[tuple[str, str]]) -> TaskGroup | None:
     """Reuse the delivery cards as compact rows."""
     if not cards:
         return None
@@ -171,13 +173,16 @@ def shipment_group(cards: list[Card]) -> TaskGroup | None:
         TaskItem(
             id=card.id, target="shipment", time=None, title=card.title,
             detail=card.lines[0], status=card.status, is_done=None, revision=card.revision, due=card.due,
+            carried_over=("shipment", card.id) in carried,
         )
         for card in cards
     ]
     return TaskGroup(title="배송", kind="delivery", area="deliveries", items=items)
 
 
-async def task_group(db: AsyncSession, today: date, *, material: bool) -> TaskGroup | None:
+async def task_group(
+    db: AsyncSession, today: date, carried: frozenset[tuple[str, str]], *, material: bool,
+) -> TaskGroup | None:
     """List tasks due by today plus those finished today."""
     end = next_day_start(today)
     rows = await db.scalars(
@@ -197,6 +202,7 @@ async def task_group(db: AsyncSession, today: date, *, material: bool) -> TaskGr
             detail=" · ".join(part for part in (row.vendor, row.detail) if part), status=None,
             is_done=row.status == "done", revision=row.revision,
             due=None if row.status == "done" else due(row.due_at, suffix="까지"),
+            carried_over=("task", row.id) in carried,
         )
         for row in rows
     ]
@@ -264,9 +270,11 @@ async def today_screen(db: Session, now: Now) -> Today:
     page = ShipmentPage("soonest", SECTION_LIMIT, 0)
     ship_today = await shipment_cards(db, list(to_send(today)), page, today)
     in_transit = await shipment_cards(db, [ShipmentRow.status == "in_transit"], page, today)
+    carried = await carried_on(db, today)
     groups = [
-        await session_group(db, today), shipment_group(ship_today),
-        await task_group(db, today, material=True), await task_group(db, today, material=False),
+        await session_group(db, today), shipment_group(ship_today, carried),
+        await task_group(db, today, carried, material=True),
+        await task_group(db, today, carried, material=False),
     ]
     suggestions = await recommendation_cards(db, now, or_(
         RecommendationRow.status == "open", RecommendationRow.acknowledged_at >= now - RECENT_WINDOW,
