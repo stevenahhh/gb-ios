@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 import Observation
 import UserNotifications
@@ -48,4 +47,3 @@ final class BK06Reminders: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 }
-#endif

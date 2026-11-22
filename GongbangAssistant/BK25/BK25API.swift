@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 import RoundupCore
 
@@ -96,4 +95,3 @@ enum BK25Approval {
         await store.loadInquiries()
     }
 }
-#endif

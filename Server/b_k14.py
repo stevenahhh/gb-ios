@@ -1,4 +1,4 @@
-"""Build B outreach quote judge (K14): cost cards, extraction, quotes, and recorded outcomes."""
+"""Outreach quote judge (K14): cost cards, extraction, quotes, and recorded outcomes."""
 
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Final, Literal

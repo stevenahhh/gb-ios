@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 
 struct BK06PolicyRow: View {
@@ -346,4 +345,3 @@ struct BK06CaseListView: View {
 
     private func load() async { await loader.load { try await RoundupAPI.k06Cases() } }
 }
-#endif

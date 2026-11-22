@@ -51,9 +51,7 @@ struct TodayView: View {
     private func load() async {
         await loader.load { try await RoundupAPI.today() }
         if let count = loader.value?.attentionCount { app.updateAttention(count) }
-        #if BUILD_B
         await BK25JudgmentInbox.shared.load()
-        #endif
     }
 
     private var emptyState: some View {
@@ -73,10 +71,8 @@ struct TodayView: View {
                 MetricStrip(metrics: metrics(today))
             }
 
-            #if BUILD_B
             BK06TodaySection()
             BK25JudgmentSection()
-            #endif
 
             ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
 

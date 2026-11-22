@@ -1,8 +1,13 @@
-#if BUILD_B
 import XCTest
 
-/// Build B's cancellation and no-show card against the local server seeded with b_k06_seed.py.
+/// The cancellation and no-show card against the local server seeded with b_k06_seed.py.
 final class BK06UITests: RoundupUITestCase {
+    override func setUpWithError() throws {
+        guard ProcessInfo.processInfo.environment["ROUNDUP_UITEST_K06"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_ROUNDUP_UITEST_K06=1 to run against a local server seeded with b_k06_seed.py")
+        }
+    }
+
     /// A tap that lands while the push still animates loses its focus, so the covered screen must be gone first.
     @MainActor
     private func waitUntilCovered(_ row: XCUIElement) {
@@ -121,4 +126,3 @@ final class BK06UITests: RoundupUITestCase {
         keepScreenshot(of: app, named: "k06-policy-saved")
     }
 }
-#endif

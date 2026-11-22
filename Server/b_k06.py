@@ -1,4 +1,4 @@
-"""Build B's cancellation and no-show card: every route of the feature behind one router."""
+"""The cancellation and no-show card: every route of the feature behind one router."""
 
 from fastapi import APIRouter
 

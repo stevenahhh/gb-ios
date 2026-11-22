@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 
 nonisolated enum OutreachSignal: String, Codable, Hashable {
@@ -294,4 +293,3 @@ enum OutreachFormat {
         return date.formatted(style)
     }
 }
-#endif

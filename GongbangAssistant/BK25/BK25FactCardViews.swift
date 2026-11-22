@@ -1,4 +1,3 @@
-#if BUILD_B
 import RoundupCore
 import SwiftUI
 
@@ -508,4 +507,3 @@ struct BK25InterviewView: View {
         }
     }
 }
-#endif

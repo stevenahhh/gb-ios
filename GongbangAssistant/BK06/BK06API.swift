@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 
 extension RoundupAPI {
@@ -132,4 +131,3 @@ extension RoundupAPI {
             decision: decision, mergeInto: mergeInto, expectedRevision: revision))
     }
 }
-#endif

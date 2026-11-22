@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 import Observation
 
@@ -100,4 +99,3 @@ final class BK25Grounding {
         checkedKinds = checked.checkedKinds
     }
 }
-#endif

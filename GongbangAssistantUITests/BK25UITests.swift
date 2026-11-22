@@ -1,6 +1,6 @@
 import XCTest
 
-/// Build B's grounded replies against a local server whose model is scripted. Skipped unless ROUNDUP_UITEST_BK25 is 1,
+/// The grounded replies against a local server whose model is scripted. Skipped unless ROUNDUP_UITEST_BK25 is 1,
 /// so the build A suite never needs this server.
 final class BK25UITests: RoundupUITestCase {
     private struct SeededJudgment: Decodable { let judgment: Judgment?; struct Judgment: Decodable { let id: String } }
@@ -8,7 +8,7 @@ final class BK25UITests: RoundupUITestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         guard ProcessInfo.processInfo.environment["ROUNDUP_UITEST_BK25"] == "1" else {
-            throw XCTSkip("Set TEST_RUNNER_ROUNDUP_UITEST_BK25=1 to run against the local build B server")
+            throw XCTSkip("Set TEST_RUNNER_ROUNDUP_UITEST_BK25=1 to run against a local server with the scripted model")
         }
     }
 
@@ -124,7 +124,9 @@ final class BK25UITests: RoundupUITestCase {
         _ = try await raiseJudgment(for: "inquiry-k25")
         let app = try launch()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "judgment.")).firstMatch
-        XCTAssertTrue(scrollTo(row, in: app), "the judgment card is missing on Today")
+        // Swiping before Today has loaded its cards would scroll past the one this test opens.
+        XCTAssertTrue(row.waitForExistence(timeout: 90), "the judgment card is missing on Today")
+        XCTAssertTrue(scrollTo(row, in: app), "the judgment card is not on screen")
         keepScreenshot(of: app, named: "bk25-today-judgment")
         row.tap()
 
@@ -143,7 +145,13 @@ final class BK25UITests: RoundupUITestCase {
         asRule.tap()
         XCTAssertTrue(show.waitForNonExistence(timeout: 90))
 
-        app.tabBars.buttons["설정"].tap()
+        // A scroll leaves the tab bar minimized to the selected tab; tapping that tab brings the others back.
+        let settings = app.tabBars.buttons["설정"]
+        if !settings.exists {
+            app.tabBars.buttons["오늘"].tap()
+        }
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
         let cards = app.buttons["settings.factCards"]
         XCTAssertTrue(cards.waitForExistence(timeout: 60))
         cards.tap()

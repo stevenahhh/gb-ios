@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 
 struct BK06Rule: Codable, Hashable {
@@ -328,4 +327,3 @@ enum BK06Format {
         return "\(minutes / (60 * 24))일 남음"
     }
 }
-#endif

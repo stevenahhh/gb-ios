@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 
 /// Which draft an inquiry gets: the existing one, or the one checked against the studio's own facts.
@@ -218,4 +217,3 @@ struct BK25InterviewValue: Decodable {
     let value: String
     let confidence: Confidence
 }
-#endif

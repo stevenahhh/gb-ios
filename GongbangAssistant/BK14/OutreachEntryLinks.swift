@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 
 /// The 운영 row that opens the outreach quotes.
@@ -30,4 +29,3 @@ struct OutreachCostLink: View {
         .accessibilityIdentifier("settings.classCosts")
     }
 }
-#endif

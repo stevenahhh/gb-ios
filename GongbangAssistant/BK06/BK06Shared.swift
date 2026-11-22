@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 import UIKit
 
@@ -93,4 +92,3 @@ struct BK06CopyableDraft: View {
         .padding(.vertical, 4)
     }
 }
-#endif

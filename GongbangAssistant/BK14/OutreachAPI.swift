@@ -1,4 +1,3 @@
-#if BUILD_B
 import Foundation
 
 /// Where a new quote starts: the id to open and when the owner began reading the inquiry.
@@ -80,4 +79,3 @@ extension RoundupAPI {
         try await send(method: "PUT", path: "settings/outreach-defaults", body: defaults)
     }
 }
-#endif

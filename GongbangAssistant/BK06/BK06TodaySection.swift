@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 import UserNotifications
 
@@ -121,4 +120,3 @@ struct BK06TodaySection: View {
 struct BK06OpenedBooking: Identifiable {
     let id: String
 }
-#endif
