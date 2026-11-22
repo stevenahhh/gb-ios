@@ -268,9 +268,10 @@ struct TaskRow: View {
     private var node: some View {
         Image(systemName: isDone ? "checkmark" : kind.symbol)
             .font(.caption2.weight(.bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(CalendarTokens.background)
             .frame(width: nodeSize, height: nodeSize)
-            .background(isDone ? AnyShapeStyle(.gray) : AnyShapeStyle(kind.color), in: .circle)
+            // Black like the calendar legend; saturated color stays reserved for meaning.
+            .background(isDone ? AnyShapeStyle(.gray) : AnyShapeStyle(CalendarTokens.label), in: .circle)
             .accessibilityHidden(true)
     }
 
