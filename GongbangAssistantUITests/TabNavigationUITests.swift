@@ -50,6 +50,11 @@ final class TabNavigationUITests: RoundupUITestCase {
 
         let packing = element(labelled: "머그컵 2종 세트", in: app)
         let delivered = element(labelled: "핸드메이드 머그컵", in: app)
+        // Before its pickup time the packing parcel sorts below the parcels in transit, off screen, so the list is
+        // narrowed to it first. That keeps the test independent of the time of day.
+        let scheduled = app.segmentedControls.buttons["발송 예정"]
+        XCTAssertTrue(scheduled.waitForExistence(timeout: 10))
+        scheduled.tap()
         XCTAssertTrue(packing.waitForExistence(timeout: 10))
 
         app.segmentedControls.buttons["완료"].tap()
