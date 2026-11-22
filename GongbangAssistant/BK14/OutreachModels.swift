@@ -181,6 +181,8 @@ struct OutreachCalculation: Decodable, Hashable {
     let maxHeadcount: Int?
     let neededTotalKrw: Int?
     let tierPrices: [Tier]
+    let outreachBasis: String
+    let onedayBasis: String
 }
 
 struct OutreachQuote: Decodable, Hashable, Identifiable {

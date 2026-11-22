@@ -81,10 +81,13 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         keepScreenshot(of: app, named: "k14-02-read-warning")
         let create = app.buttons["outreach.create"]
         XCTAssertTrue(scrollTo(create, in: app))
+        fill("outreach.travel", "90", in: app)
+        XCTAssertTrue(scrollTo(create, in: app))
         keepScreenshot(of: app, named: "k14-03-fields")
         create.tap()
         let verdict = app.staticTexts["outreach.verdict"]
         XCTAssertTrue(verdict.waitForExistence(timeout: 15) || scrollTo(verdict, in: app))
+        XCTAssertTrue(element(labelled: "왕복 이동 3시간", in: app).exists)
         keepScreenshot(of: app, named: "k14-04-detail-warning")
         app.buttons["outreach.makePDF"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["outreach.locked"].waitForExistence(timeout: 10))
@@ -99,6 +102,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         app.swipeUp()
         keepScreenshot(of: app, named: "k14-07-detail-lines")
         app.swipeUp()
+        XCTAssertTrue(scrollTo(app.buttons["outreach.copyReply"], in: app))
         keepScreenshot(of: app, named: "k14-08-detail-reply")
         app.buttons["outreach.makePDF"].tap()
         XCTAssertTrue(app.switches["outreach.checked"].waitForExistence(timeout: 10) || scrollTo(app.switches["outreach.checked"], in: app))
@@ -126,6 +130,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         let people = app.steppers["outreach.stepHeadcount"]
         XCTAssertTrue(app.staticTexts["outreach.verdict"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.descendants(matching: .any)["outreach.warning"].exists)
+        keepScreenshot(of: app, named: "k14-15-detail-first-run")
         XCTAssertTrue(scrollTo(people, in: app))
         people.buttons.element(boundBy: 1).tap()
         XCTAssertTrue(app.steppers.matching(NSPredicate(format: "label CONTAINS %@", "41")).firstMatch.waitForExistence(timeout: 10)

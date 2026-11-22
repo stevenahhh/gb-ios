@@ -102,6 +102,14 @@ struct OutreachQuoteDetailView: View {
                     Text(verbatim: quote.summary)
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: result.outreachBasis)
+                        Text(verbatim: result.onedayBasis)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondaryText)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("outreach.basis")
                 }
                 OutreachValueRow(title: "1인 순수익", value: OutreachFormat.won(result.netPerPersonOutreach))
                 OutreachValueRow(title: "원데이 1인 순수익", value: OutreachFormat.won(result.netPerPersonOneday))
@@ -220,8 +228,13 @@ struct OutreachQuoteDetailView: View {
 
     private func replySection(_ quote: OutreachQuote) -> some View {
         CardSection {
-            KoreanTextEditor(text: Binding { reply } set: { reply = $0; replyIsEdited = true })
-                .frame(minHeight: 240)
+            // The editor has no height of its own, so hidden copy of the text sizes the row at every text size.
+            // The extra lines leave room for the caret and for word wrapping that differs by a line.
+            Text(verbatim: reply + "\n\n")
+                .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
+                .fixedSize(horizontal: false, vertical: true)
+                .hidden()
+                .overlay { KoreanTextEditor(text: Binding { reply } set: { reply = $0; replyIsEdited = true }) }
                 .accessibilityLabel("회신 초안")
                 .accessibilityIdentifier("outreach.reply")
             Button("회신 복사하기") {
