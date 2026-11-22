@@ -347,9 +347,8 @@ enum RoundupAPI {
         return URLRequest(url: url)
     }
 
-    private static func get<T: Decodable>(_ path: String, query: [String: String] = [:],
-                                          decoder: JSONDecoder = JSONDecoder()) async throws -> T {
-    static func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+    static func get<T: Decodable>(_ path: String, query: [String: String] = [:],
+                                  decoder: JSONDecoder = JSONDecoder()) async throws -> T {
         let items = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         let request = try request(path, query: items)
         if ResponseCache.probe != nil { return try decode(try ResponseCache.read(request), with: decoder) }

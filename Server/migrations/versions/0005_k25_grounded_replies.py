@@ -8,7 +8,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision: Final[str] = "0005_k25"
-down_revision: Final[str | None] = "0004"
+down_revision: Final[str | None] = "k14_0005"
 branch_labels: Final[Sequence[str] | None] = None
 depends_on: Final[Sequence[str] | None] = None
 

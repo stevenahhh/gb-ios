@@ -625,9 +625,9 @@ async def test_downgrade_removes_only_the_new_tables(empty_database: AsyncEngine
         async with empty_database.connect() as connection:
             return set(await connection.run_sync(lambda sync: inspect(sync).get_table_names()))
 
-    await upgrade(empty_database, "0004")
+    await upgrade(empty_database, "0005_k06")
     before = await tables()
-    await upgrade(empty_database)
+    await upgrade(empty_database, "k14_0005")
     assert await tables() - before == {"class_costs", "outreach_defaults", "outreach_quotes"}
-    await downgrade(empty_database, "0004")
+    await downgrade(empty_database, "0005_k06")
     assert await tables() == before

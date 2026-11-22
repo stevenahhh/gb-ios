@@ -415,14 +415,14 @@ async def test_migration_adds_and_removes_only_its_own_tables(empty_database: As
             ))
             return set(rows)
 
-    await upgrade(empty_database, "0004")
+    await upgrade(empty_database, "0005")
     before = await tables()
-    await upgrade(empty_database)
+    await upgrade(empty_database, "0005_k06")
     assert await tables() - before == {
         "policy_versions", "policy_notices", "cancellation_cases", "waitlist_entries", "booking_marks",
         "session_plans",
     }
-    await downgrade(empty_database, "0004")
+    await downgrade(empty_database, "0005")
     assert await tables() == before
 
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds, signs, installs, and launches the app on a USB-connected iPhone.
-#   scripts/install-iphone.sh [DEVICE_UDID]
+#   scripts/install-iphone.sh [--b] [DEVICE_UDID]
+# --b installs 공도리 B (the build with the trial features) beside the app, under its own bundle ID.
 # Needs an Apple Account added in Xcode > Settings > Accounts and scripts/setup-iphone.sh run once.
 set -euo pipefail
 
@@ -22,6 +23,14 @@ fi
 if [[ -z "$team" ]]; then
   echo "Team을 찾지 못했습니다. Xcode > Settings > Accounts에 Apple Account를 추가하거나 scripts/setup-iphone.sh TEAM_ID를 실행하세요." >&2
   exit 1
+fi
+
+variant=()
+if [[ "${1:-}" == "--b" ]]; then
+  shift
+  derived="$root/build/device-b"
+  prefix="$(sed -n 's/^GB_BUNDLE_ID_PREFIX = //p' "$signing")"
+  variant=("GB_BUNDLE_ID_PREFIX=$prefix.b" "INFOPLIST_KEY_CFBundleDisplayName=공도리 B" 'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) BUILD_B')
 fi
 
 udid="${1:-}"
@@ -46,7 +55,7 @@ echo "Team ${team}, 기기 ${udid}에 빌드합니다."
 xcodebuild -project "$root/GongbangAssistant.xcodeproj" -scheme GongbangAssistant -configuration Debug \
   -destination "id=$udid" -derivedDataPath "$derived" \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
-  DEVELOPMENT_TEAM="$team" build -quiet
+  DEVELOPMENT_TEAM="$team" ${variant[@]+"${variant[@]}"} build -quiet
 
 app="$derived/Build/Products/Debug-iphoneos/GongbangAssistant.app"
 bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
