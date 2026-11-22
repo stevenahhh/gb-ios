@@ -1,4 +1,3 @@
-#if BUILD_B
 import RoundupCore
 import SwiftUI
 
@@ -414,4 +413,3 @@ struct OutreachClassSection: View {
         }
     }
 }
-#endif

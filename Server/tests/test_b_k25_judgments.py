@@ -7,12 +7,20 @@ from httpx2 import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.b_k25_support import CONTROL, GROUNDED, ScriptedModel, add_inquiry, scripted
+from tests.b_k25_support import (
+    GROUNDED,
+    ONCE_CONTROL,
+    ScriptedModel,
+    add_control_row,
+    add_inquiry,
+    scripted,
+)
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
 WEEKEND: Final = "주말 도자기 클래스"
 ISSUE: Final = "6인 단체, 금요일, 견적 기준?"
 ANSWER: Final = "6명부터 1인 3만 원"
+PLAIN_REPLY: Final = "이서준 님, 확인해서 다시 알려드릴게요."
 RULE: Final = '{"rule":"6명부터 1인 3만 원을 받아요.","applies_to":"주말 도자기 클래스"}'
 
 
@@ -99,6 +107,7 @@ async def test_an_answer_for_this_reply_only_saves_no_rule(
     expect_price(model)
     body = await answer(client, judgment, "once")
     assert (body["ruleId"], body["ruleText"], body["lock"]) == (None, None, "clear")
+    assert body["arm"] == "grounded"
     assert (await client.get("/owner-rules")).json() == []
     assert "[이번 문의에 대한 사장님 답]" in "\n".join(model.prompts)
     async with database.connect() as connection:
@@ -153,12 +162,17 @@ async def test_a_retired_rule_is_never_used_again(
     assert "6명부터 1인 3만 원을 받아요" not in later
 
 
-async def test_control_inquiries_never_raise_judgments(
-    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+@pytest.mark.parametrize("has_control_row", [False, True])
+async def test_the_inquiry_that_hashed_to_control_raises_a_judgment_too(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel, *, has_control_row: bool,
 ) -> None:
-    await add_inquiry(database, CONTROL)
+    await add_inquiry(database, ONCE_CONTROL)
+    if has_control_row:
+        await add_control_row(database, ONCE_CONTROL, PLAIN_REPLY)
     model.route = f'{{"route":"judgment","issue":"{ISSUE}"}}'
-    model.drafts = ["이서준 님, 확인해서 다시 알려드릴게요."]
-    body = (await client.post(f"/grounded-replies/{CONTROL}/draft")).json()
-    assert (body["arm"], body["judgment"]) == ("control", None)
-    assert (await client.get("/judgments")).json() == []
+    model.drafts = [PLAIN_REPLY]
+    body = (await client.post(f"/grounded-replies/{ONCE_CONTROL}/draft")).json()
+    assert (body["arm"], body["draft"]) == ("grounded", "")
+    assert body["judgment"]["issue"] == ISSUE
+    rows = (await client.get("/judgments")).json()
+    assert [(row["inquiryId"], row["issue"]) for row in rows] == [(ONCE_CONTROL, ISSUE)]

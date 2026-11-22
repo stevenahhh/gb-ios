@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 import UIKit
 
@@ -454,4 +453,3 @@ struct BK06UnderMinView: View {
         }
     }
 }
-#endif

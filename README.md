@@ -320,6 +320,9 @@ UI 테스트는 운영 서버를 쓰지 않습니다. 로컬 PostgreSQL에 시�
 | TabNavigationUITests | 12 | 탭 이동, 관리 화면 이동, 필터와 검색, 비서 시트, 캘린더 일정 추가 버튼, 운영 타일과 수집 고리, 설정 누락 안내 |
 | ActionFlowUITests | 12 | 버튼 동작이 서버에 저장되는지 |
 | ScreenshotTourUITests | 2 | 모든 화면과 빈 화면을 찍어 테스트 첨부물로 저장 |
+| BK06UITests | 4 | 취소·노쇼 카드. `TEST_RUNNER_ROUNDUP_UITEST_K06=1`과 `b_k06_seed.py`를 넣은 서버가 있어야 돕니다 |
+| OutreachQuoteUITests | 4 | 출강 견적. `TEST_RUNNER_ROUNDUP_UITEST_K14=1`과 수업 이름을 답하는 모델이 있어야 돕니다 |
+| BK25UITests | 5 | 근거 있는 답장. `TEST_RUNNER_ROUNDUP_UITEST_BK25=1`과 정해진 답을 주는 모델이 있어야 돕니다 |
 
 문의 처리 규칙, 오늘 탭 제목 규칙, 수집 고리가 예시와 실제 가운데 무엇을 보여 줄지 고르는 규칙은 패키지 테스트로 확인합니다. 터미널에서 `swift test --package-path Packages/RoundupCore`를 실행하면 26개가 돕니다.
 

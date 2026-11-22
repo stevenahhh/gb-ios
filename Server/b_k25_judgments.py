@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from b_k25_claims import Ledger, RuleFact
 from b_k25_engine import (
-    Arm,
     Context,
     load_context,
     record_event,
@@ -34,7 +33,7 @@ from b_k25_replies import (
     verification,
 )
 from b_k25_rules import card_for_rule, save_rule
-from b_k25_tables import JudgmentRow, card_id_for
+from b_k25_tables import GROUNDED, Arm, JudgmentRow, card_id_for
 from common import Now, Session, required_text
 from contracts import ApiModel, ApiRequest
 from database import transaction
@@ -75,7 +74,7 @@ class JudgmentAnswer(ApiModel):
     judgment_id: str
     rule_text: str | None
     rule_id: str | None
-    arm: Arm
+    arm: Arm = GROUNDED
     draft: str
     claims: list[ClaimView]
     lock: Literal["clear", "locked", "unchecked"]
@@ -196,12 +195,12 @@ async def answer_judgment(judgment_id: str, body: AnswerRequest, now: Now) -> Ju
         judgment.answer_text = answer
         judgment.rule_id = rule_id
         judgment.answered_at = now
-        row = await upsert_grounding(db, inquiry_id, context.arm)
+        row = await upsert_grounding(db, inquiry_id)
         record_event(db, row, "judgment_answered", {"scope": body.scope}, now)
         store_reply(db, row, answered, reply)
     checked = verification(reply.evaluation)
     return JudgmentAnswer(
-        judgment_id=judgment_id, rule_text=rule_text, rule_id=rule_id, arm=context.arm,
+        judgment_id=judgment_id, rule_text=rule_text, rule_id=rule_id,
         draft=reply.draft, claims=checked.claims, lock=checked.lock,
         mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
     )
@@ -228,7 +227,7 @@ async def dismiss_judgment(judgment_id: str, db: Session, now: Now) -> JudgmentV
     judgment, inquiry = await open_judgment(db, judgment_id)
     judgment.status = "dismissed"
     judgment.answered_at = now
-    row = await upsert_grounding(db, judgment.inquiry_id, "grounded")
+    row = await upsert_grounding(db, judgment.inquiry_id)
     record_event(db, row, "judgment_dismissed", {"by": "owner"}, now)
     await db.flush()
     return judgment_view(judgment, inquiry)

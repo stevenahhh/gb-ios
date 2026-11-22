@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from providers import ChatMessage, Sampling
 
 GROUNDED: Final = "inquiry-weekend"
-CONTROL: Final = "inquiry-paste"
+ONCE_CONTROL: Final = "inquiry-paste"
 QUESTION: Final = "토요일 주말 클래스 두 명 가능해요? 가격도 알려 주세요. 제 번호는 010-1234-5678이에요."
 
 
@@ -46,14 +46,26 @@ def scripted(monkeypatch: pytest.MonkeyPatch) -> ScriptedModel:
     return fake
 
 
-async def add_inquiry(database: AsyncEngine, inquiry_id: str) -> None:
-    """Insert one waiting inquiry whose arm follows from its id."""
+async def add_inquiry(database: AsyncEngine, inquiry_id: str, draft: str = "") -> None:
+    """Insert one waiting inquiry, with the reply saved for it so far."""
     async with database.begin() as connection:
         _ = await connection.execute(
             text(
                 "INSERT INTO inquiries (id, customer, subject, question, facts, draft, status, revision,"
                 " received_at) VALUES (:id, '이서준', '주말 클래스', :question, ARRAY['안내 · 앞치마 제공'],"
-                " '', 'pending', 0, now())",
+                " :draft, 'pending', 0, now())",
             ),
-            {"id": inquiry_id, "question": QUESTION},
+            {"id": inquiry_id, "question": QUESTION, "draft": draft},
+        )
+
+
+async def add_control_row(database: AsyncEngine, inquiry_id: str, draft: str) -> None:
+    """Store what an earlier release kept for a plain draft: the text, and no check."""
+    async with database.begin() as connection:
+        _ = await connection.execute(
+            text(
+                "INSERT INTO inquiry_grounding (inquiry_id, ab_arm, generated_draft, generated_at)"
+                " VALUES (:id, 'control', :draft, now())",
+            ),
+            {"id": inquiry_id, "draft": draft},
         )

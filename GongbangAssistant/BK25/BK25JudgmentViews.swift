@@ -1,4 +1,3 @@
-#if BUILD_B
 import RoundupCore
 import SwiftUI
 
@@ -254,4 +253,3 @@ struct BK25JudgmentSheet: View {
         }
     }
 }
-#endif

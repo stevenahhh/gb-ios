@@ -52,7 +52,6 @@ struct SettingsView: View {
                     Label { Text("공방 정보") } icon: { MenuIcon(systemName: "storefront") }
                 }
                 .accessibilityIdentifier("settings.workshop")
-                #if BUILD_B
                 BK06PolicyRow()
                 NavigationLink {
                     BK25FactCardListView()
@@ -60,7 +59,6 @@ struct SettingsView: View {
                     Label { Text("수업 사실 카드") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
                 }
                 .accessibilityIdentifier("settings.factCards")
-                #endif
                 rows(sections["공방"] ?? [])
                 NavigationLink {
                     ChannelStatusView(channels: data.channels)
@@ -79,9 +77,7 @@ struct SettingsView: View {
                     Label { Text("\(AssistantIdentity.name)가 한 일") } icon: { MenuIcon(systemName: "clock.arrow.circlepath") }
                 }
                 .accessibilityIdentifier("settings.activities")
-                #if BUILD_B
                 OutreachCostLink()
-                #endif
             }
 
             if let support = sections["지원"] {

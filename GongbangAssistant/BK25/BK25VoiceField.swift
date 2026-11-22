@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 
 /// One line of text that can also be dictated, shaped like the assistant's question field.
@@ -63,4 +62,3 @@ struct BK25VoiceField: View {
         }
     }
 }
-#endif

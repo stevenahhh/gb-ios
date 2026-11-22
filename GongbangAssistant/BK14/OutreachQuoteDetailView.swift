@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 
 struct OutreachQuoteDetailView: View {
@@ -374,4 +373,3 @@ struct OutreachQuoteDetailView: View {
         }
     }
 }
-#endif

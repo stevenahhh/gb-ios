@@ -1,4 +1,4 @@
-"""Add the build B outreach quote tables; no existing table changes."""
+"""Add the outreach quote tables; no existing table changes."""
 
 from collections.abc import Sequence
 from typing import Final

@@ -4,7 +4,6 @@ Facts are read in a short transaction before any model call and results are stor
 one after it, so no connection waits for the model.
 """
 
-import hashlib
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -47,14 +46,12 @@ from b_k25_prompts import (
     parse_route,
     route_messages,
 )
-from b_k25_tables import GroundedEventRow, GroundingRow, JudgmentRow
+from b_k25_tables import GROUNDED, GroundedEventRow, GroundingRow, JudgmentRow
 from database import transaction
 from models import InquiryRow
-from prompts import DRAFT_SAMPLING, Inquiry, ShopFacts
-from prompts import draft_messages as plain_draft_messages
+from prompts import DRAFT_SAMPLING, ShopFacts
 from providers import chat
 
-type Arm = Literal["control", "grounded"]
 type EventKind = Literal[
     "draft", "approved", "override", "judgment_opened", "judgment_answered", "judgment_dismissed",
 ]
@@ -71,8 +68,6 @@ class Context:
     inquiry: InquiryRow
     ledger: Ledger
     shop: ShopFacts
-    arm: Arm
-    stored: GroundingRow | None
     now: datetime
 
 
@@ -85,24 +80,15 @@ class WrittenReply:
     is_fallback: bool
 
 
-def arm_for(inquiry_id: str) -> Arm:
-    """Split inquiries in half by a stable hash, so reopening one never changes its arm."""
-    return "grounded" if hashlib.sha256(inquiry_id.encode()).digest()[0] % 2 == 0 else "control"
-
-
 async def load_context(inquiry_id: str, now: datetime) -> Context:
-    """Read the inquiry, its ledger, and its earlier check."""
+    """Read the inquiry and its ledger."""
     shop = await shop_facts()
     async with transaction() as db:
         inquiry = await db.get(InquiryRow, inquiry_id)
         if inquiry is None:
             raise HTTPException(404, "inquiry not found")
-        stored = await db.get(GroundingRow, inquiry_id)
         ledger = await load_ledger(db, inquiry, now)
-    arm: Arm = arm_for(inquiry_id)
-    if stored is not None and stored.ab_arm in {"control", "grounded"}:
-        arm = "grounded" if stored.ab_arm == "grounded" else "control"
-    return Context(inquiry, ledger, shop, arm, stored, now)
+    return Context(inquiry, ledger, shop, now)
 
 
 def unsupported_seats(text: str, sources: str) -> list[str]:
@@ -133,18 +119,6 @@ async def route_inquiry(context: Context) -> Route:
         if answer is not None:
             return answer
     return Route("draft")
-
-
-async def write_plain_draft(context: Context) -> str:
-    """Write the control arm's draft exactly as the existing draft route does."""
-    inquiry = Inquiry(
-        context.inquiry.customer, context.inquiry.subject, context.inquiry.question,
-        tuple(context.inquiry.facts),
-    )
-    basis = "\n".join([*inquiry.facts, context.shop.text])
-    question = f"{context.inquiry.subject}\n{context.inquiry.question}"
-    check = partial(reply_problems, basis=basis, question=question)
-    return await generate(plain_draft_messages(inquiry, context.shop), DRAFT_SAMPLING, check)
 
 
 def fallback_draft(context: Context) -> str:
@@ -201,31 +175,42 @@ async def write_grounded_draft(context: Context, owner_answer: str = "") -> Writ
 
 
 def check_final(draft: str, ledger: Ledger, stored: GroundingRow | None) -> Evaluation:
-    """Check the text the owner is about to approve, without asking the model again."""
-    if stored is None or stored.ab_arm != "grounded":
-        return Evaluation((), "unchecked", extraction_ok=False)
-    kept = claims_from_json(stored.claims_json)
-    return recheck(draft, ledger, kept, extraction_ok=stored.extraction_ok)
+    """Check the text the owner is about to approve, without asking the model again.
+
+    Until a draft was written here there is no extraction to agree with, so a text is unchecked at
+    best; a blank one has nothing to check.
+    """
+    kept = () if stored is None else claims_from_json(stored.claims_json)
+    extracted = stored is not None and stored.extraction_ok
+    return recheck(draft, ledger, kept, extraction_ok=extracted or not draft.strip())
 
 
-async def upsert_grounding(db: AsyncSession, inquiry_id: str, arm: Arm) -> GroundingRow:
-    """Create the row on the first attempt and lock it for the write that follows."""
+async def upsert_grounding(db: AsyncSession, inquiry_id: str) -> GroundingRow:
+    """Create the row on the first attempt and lock it for the write that follows.
+
+    An approval locks the inquiry before this row. Every other write holds the inquiry first too, so
+    a draft being stored and an approval never wait for each other.
+    """
     _ = await db.execute(
-        insert(GroundingRow).values(inquiry_id=inquiry_id, ab_arm=arm)
+        select(InquiryRow.id).where(InquiryRow.id == inquiry_id).with_for_update(read=True, key_share=True),
+    )
+    _ = await db.execute(
+        insert(GroundingRow).values(inquiry_id=inquiry_id, ab_arm=GROUNDED)
         .on_conflict_do_nothing(index_elements=[GroundingRow.inquiry_id]),
     )
     row = await db.get(GroundingRow, inquiry_id, with_for_update=True, populate_existing=True)
     if row is None:
         raise HTTPException(404, "inquiry not found")
+    row.ab_arm = GROUNDED
     return row
 
 
 def record_event(
     db: AsyncSession, row: GroundingRow, kind: EventKind, data: dict[str, JsonValue], now: datetime,
 ) -> None:
-    """Add one measured step of the A/B test, stamped with the request clock."""
+    """Add one measured step, stamped with the request clock."""
     db.add(GroundedEventRow(
-        inquiry_id=row.inquiry_id, arm=row.ab_arm, kind=kind, data=data, created_at=now,
+        inquiry_id=row.inquiry_id, arm=GROUNDED, kind=kind, data=data, created_at=now,
     ))
 
 
@@ -262,22 +247,13 @@ def store_reply(db: AsyncSession, row: GroundingRow, context: Context, reply: Wr
 async def save_draft(context: Context, reply: WrittenReply) -> None:
     """Store a freshly written draft in its own transaction."""
     async with transaction() as db:
-        store_reply(db, await upsert_grounding(db, context.inquiry.id, context.arm), context, reply)
-
-
-async def save_plain_draft(context: Context, draft: str) -> None:
-    """Keep the control arm's draft so an unedited approval can be counted; it is never locked."""
-    async with transaction() as db:
-        row = await upsert_grounding(db, context.inquiry.id, context.arm)
-        row.generated_draft = draft
-        row.generated_at = context.now
-        record_event(db, row, "draft", {"lock": "unchecked", "deferral": False}, context.now)
+        store_reply(db, await upsert_grounding(db, context.inquiry.id), context, reply)
 
 
 async def open_judgment(context: Context, issue: str) -> JudgmentRow:
     """Raise one open judgment for an inquiry, reusing the one it already has."""
     async with transaction() as db:
-        row = await upsert_grounding(db, context.inquiry.id, context.arm)
+        row = await upsert_grounding(db, context.inquiry.id)
         created = await db.scalar(
             insert(JudgmentRow).values(
                 id=f"judgment-{uuid4().hex}", inquiry_id=context.inquiry.id, issue=issue,
@@ -300,7 +276,7 @@ async def open_judgment(context: Context, issue: str) -> JudgmentRow:
 async def close_open_judgments(context: Context) -> None:
     """Retire an open judgment when the facts now answer the question."""
     async with transaction() as db:
-        row = await upsert_grounding(db, context.inquiry.id, context.arm)
+        row = await upsert_grounding(db, context.inquiry.id)
         judgment = await db.scalar(
             select(JudgmentRow).where(
                 JudgmentRow.inquiry_id == context.inquiry.id, JudgmentRow.status == "open",

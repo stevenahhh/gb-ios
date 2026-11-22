@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 import UIKit
 
@@ -225,4 +224,3 @@ private struct OutreachShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
-#endif

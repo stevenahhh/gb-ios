@@ -1,10 +1,12 @@
-#if BUILD_B
 import XCTest
 
-/// Build B only: cost cards, reading an inquiry, the verdict, and the locked export.
+/// 출강 견적: cost cards, reading an inquiry, the verdict, and the locked export.
 final class OutreachQuoteUITests: RoundupUITestCase {
-    override func setUp() {
+    override func setUpWithError() throws {
         continueAfterFailure = false
+        guard ProcessInfo.processInfo.environment["ROUNDUP_UITEST_K14"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_ROUNDUP_UITEST_K14=1 to run against a local server whose model names the class of an inquiry")
+        }
     }
 
     @MainActor
@@ -189,4 +191,3 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         keepScreenshot(of: app, named: "k14-12-empty-costs")
     }
 }
-#endif

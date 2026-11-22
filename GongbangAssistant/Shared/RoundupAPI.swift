@@ -271,13 +271,6 @@ enum RoundupAPI {
         ]))
     }
 
-    static func draft(customer: String, subject: String, question: String, facts: [String]) async throws -> String {
-        struct Body: Encodable { let customer, subject, question: String; let facts: [String] }
-        struct Reply: Decodable { let draft: String }
-        let reply: Reply = try await post("draft", Body(customer: customer, subject: subject, question: question, facts: facts))
-        return reply.draft
-    }
-
     struct ChatTurn: Encodable {
         enum Role: String, Encodable { case owner, assistant }
         let role: Role

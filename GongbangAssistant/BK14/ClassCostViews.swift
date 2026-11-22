@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 
 /// A whole-number field with its unit behind it. An empty field is nil, never zero.
@@ -306,4 +305,3 @@ struct OutreachDefaultsView: View {
         }
     }
 }
-#endif

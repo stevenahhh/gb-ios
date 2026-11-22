@@ -1,4 +1,3 @@
-#if BUILD_B
 import SwiftUI
 
 /// 근거: where each number in the reply comes from. A number that differs from the ledger locks 답변 완료 until it is
@@ -243,4 +242,3 @@ private struct SourceChip: View {
         .accessibilityLabel("근거 \(claim.sourceLabel)")
     }
 }
-#endif

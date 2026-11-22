@@ -1,4 +1,4 @@
-"""Build B tables for the outreach quote judge (K14); existing tables stay untouched."""
+"""Tables for the outreach quote judge (K14); existing tables stay untouched."""
 
 from datetime import datetime
 
