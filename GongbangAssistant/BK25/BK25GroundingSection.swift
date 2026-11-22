@@ -34,18 +34,25 @@ struct BK25GroundingSection: View {
         }
         if grounding.isGrounded {
             CardSection {
-                summary
-                    .task(id: draft) { await verifyAfterTyping() }
+                VStack(alignment: .leading, spacing: 6) {
+                    summary
+                    if !grounding.isVerifying && !grounding.checkedKinds.isEmpty {
+                        Text(verbatim: "맞춰 본 숫자: \(grounding.checkedKinds.joined(separator: ", "))")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondaryText)
+                            .accessibilityIdentifier("bk25.checkedKinds")
+                    }
+                }
+                .task(id: draft) { await verifyAfterTyping() }
                 ForEach(Array(grounding.claims.enumerated()), id: \.offset) { index, claim in
-                    ClaimRow(claim: claim) {
+                    ClaimRow(claim: claim, index: index) {
                         draft = grounding.replacing(claim, in: draft)
                     }
-                    .accessibilityIdentifier("bk25.claim.\(index)")
                 }
             } header: {
                 Text("근거")
             } footer: {
-                Text("숫자는 예약 장부와 사실 카드, 내 규칙과 하나씩 맞춰 봐요. 비서가 틀릴 수 있으니 보내기 전에 한 번 더 읽어 주세요.")
+                Text("가격, 예약금, 할인, 남은 자리, 날짜, 요일, 시각, 수업 길이, 정원과 주차·환불·재료의 숫자만 맞춰 봐요. 나머지 내용은 확인하지 않으니 보내기 전에 한 번 더 읽어 주세요.")
             }
         }
     }
@@ -94,8 +101,10 @@ struct BK25GroundingSection: View {
             switch grounding.lock {
             case .locked:
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // An identifier on the row would replace the menu's own.
                     Label("숫자 \(grounding.mismatchCount)개가 장부와 달라요", systemImage: "exclamationmark.triangle.fill")
                         .font(.headline)
+                        .accessibilityIdentifier("bk25.locked")
                     Spacer(minLength: 8)
                     // Kept behind a menu, so a reply is never sent past the check by one mistaken tap.
                     Menu {
@@ -117,14 +126,13 @@ struct BK25GroundingSection: View {
                 } message: {
                     Text("이유를 남기면 이번 답장만 그대로 보내고, 다음 초안부터는 다시 장부와 맞춰 봐요.")
                 }
-                .accessibilityIdentifier("bk25.locked")
             case .unchecked:
                 Label("숫자 확인을 하지 못했어요. 직접 읽고 보내 주세요.", systemImage: "exclamationmark.circle")
                     .font(.subheadline.weight(.semibold))
                     .accessibilityIdentifier("bk25.unchecked")
             case .clear:
-                Label(grounding.claims.isEmpty ? "확인할 숫자가 없어요" : "모든 숫자가 장부와 맞아요",
-                      systemImage: "checkmark.circle")
+                Label(grounding.checkedKinds.isEmpty ? "맞춰 볼 숫자를 찾지 못했어요" : "장부와 다른 숫자를 찾지 못했어요",
+                      systemImage: "doc.text.magnifyingglass")
                     .font(.subheadline.weight(.semibold))
                     .accessibilityIdentifier("bk25.clear")
             }
@@ -143,8 +151,22 @@ struct BK25GroundingSection: View {
     }
 }
 
+/// Under 답변 완료: why the button waits.
+struct BK25LockLine: View {
+    let grounding: BK25Grounding
+
+    var body: some View {
+        if grounding.isGrounded && grounding.lock == .locked && !grounding.isVerifying {
+            Label("숫자 \(grounding.mismatchCount)개가 장부와 달라요", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.weight(.semibold))
+                .accessibilityIdentifier("bk25.lockLine")
+        }
+    }
+}
+
 private struct ClaimRow: View {
     let claim: BK25Claim
+    let index: Int
     let fix: () -> Void
 
     private var isMismatch: Bool { claim.status == .mismatched }
@@ -174,9 +196,10 @@ private struct ClaimRow: View {
     }
 
     private var quote: some View {
-        Text("“\(claim.text)”")
+        Text("‘\(claim.text)’")
             .font(.body)
             .fontWeight(isMismatch ? .semibold : .regular)
+            .accessibilityIdentifier("bk25.claim.\(index)")
     }
 
     @ViewBuilder

@@ -16,7 +16,7 @@ enum BK25Lock: String, Decodable {
 
 /// One number or statement in a draft and where it comes from.
 struct BK25Claim: Decodable, Hashable {
-    enum Kind: String, Decodable { case price, seats, date, deposit, fact, rule }
+    enum Kind: String, Decodable { case price, seats, date, time, deposit, fact, rule }
 
     enum Source: String, Decodable {
         case ledger
@@ -62,29 +62,40 @@ struct BK25Judgment: Decodable, Identifiable, Hashable {
     let answerText: String?
 }
 
-struct BK25Draft: Decodable {
+/// What one check of a text found, and which kinds of number it compared.
+protocol BK25Checked {
+    var claims: [BK25Claim] { get }
+    var lock: BK25Lock { get }
+    var mismatchCount: Int { get }
+    var checkedKinds: [String] { get }
+}
+
+struct BK25Draft: Decodable, BK25Checked {
     let arm: BK25Arm
     let draft: String
     let claims: [BK25Claim]
     let lock: BK25Lock
     let mismatchCount: Int
+    let checkedKinds: [String]
     let judgment: BK25Judgment?
 }
 
-struct BK25ReplyState: Decodable {
+struct BK25ReplyState: Decodable, BK25Checked {
     let inquiryId: String
     let arm: BK25Arm?
     let claims: [BK25Claim]
     let lock: BK25Lock
     let mismatchCount: Int
+    let checkedKinds: [String]
     let judgment: BK25Judgment?
     let overrideReason: String?
 }
 
-struct BK25Verification: Decodable {
+struct BK25Verification: Decodable, BK25Checked {
     let claims: [BK25Claim]
     let lock: BK25Lock
     let mismatchCount: Int
+    let checkedKinds: [String]
 }
 
 /// Whether the owner's answer is reused in later replies.
@@ -100,7 +111,7 @@ struct BK25RulePreview: Decodable, Equatable {
 }
 
 /// The result of answering: the saved rule, if any, and the reply written again.
-struct BK25JudgmentAnswer: Decodable {
+struct BK25JudgmentAnswer: Decodable, BK25Checked {
     let judgmentId: String
     let ruleText: String?
     let ruleId: String?
@@ -109,6 +120,7 @@ struct BK25JudgmentAnswer: Decodable {
     let claims: [BK25Claim]
     let lock: BK25Lock
     let mismatchCount: Int
+    let checkedKinds: [String]
 }
 
 /// A sentence the owner saved for later replies.

@@ -209,7 +209,8 @@ struct BK25JudgmentSheet: View {
             // A written answer must not vanish with one swipe.
             .interactiveDismissDisabled(!isAnswerBlank)
         }
-        .presentationDetents([.medium, .large])
+        // The scope buttons come after the preview, so the sheet opens tall enough to show them without scrolling.
+        .presentationDetents([.large])
     }
 
     private func previewRule() async {

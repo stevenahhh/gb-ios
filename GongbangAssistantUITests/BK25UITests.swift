@@ -28,6 +28,9 @@ final class BK25UITests: RoundupUITestCase {
 
     @MainActor
     private func openInquiry(_ inquiryID: String, in app: XCUIApplication) {
+        // Swiping before Today has loaded its cards would scroll past the one this test opens.
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inquiry."))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 90), "Today has no reply to approve")
         let card = app.buttons["inquiry.\(inquiryID)"]
         XCTAssertTrue(scrollTo(card, in: app), "the inquiry \(inquiryID) is missing")
         tapInTheMiddle(card, in: app)
@@ -48,43 +51,68 @@ final class BK25UITests: RoundupUITestCase {
         target.tap()
     }
 
-    /// Waits until the number of matching buttons reaches the expected count, without a fixed sleep.
+    /// The evidence is below the reply and its button, so moving between them also has to go back up.
     @MainActor
-    private func waitForCount(_ expected: Int, of query: XCUIElementQuery) {
-        let predicate = NSPredicate { _, _ in query.count == expected }
-        wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 90)
+    private func scrollBackTo(_ target: XCUIElement, in app: XCUIApplication) -> Bool {
+        for _ in 0..<8 {
+            if target.waitForExistence(timeout: 2), target.isHittable { return true }
+            app.swipeDown()
+        }
+        return target.exists && target.isHittable
     }
 
+    /// Writes a reply whose three numbers differ from the ledger and waits for the line that says so.
     @MainActor
-    func testReplyIsLockedUntilItsNumbersMatchTheLedger() throws {
-        let app = try launch()
+    private func writeLockedReply(in app: XCUIApplication) {
         // The scratch server's inquiry-group carries the weekend question, so it is one of the first three cards.
         openInquiry("inquiry-group", in: app)
         let write = app.descendants(matching: .any)["inquiry.generate"].firstMatch
         XCTAssertTrue(scrollTo(write, in: app))
         write.tap()
         app.buttons["새로 쓰기"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["bk25.lockLine"].firstMatch.waitForExistence(timeout: 90),
+                      "the line under the button is missing")
+        XCTAssertTrue(scrollTo(app.buttons["bk25.more"], in: app), "the mismatch summary is missing")
+    }
 
-        let locked = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "장부와 달라요")).firstMatch
-        XCTAssertTrue(scrollTo(locked, in: app), "the mismatch summary is missing")
+    @MainActor
+    func testReplyIsLockedUntilItsNumbersMatchTheLedger() throws {
+        let app = try launch()
+        writeLockedReply(in: app)
         keepScreenshot(of: app, named: "bk25-locked-reply")
         let complete = app.buttons["inquiry.complete"]
-        XCTAssertTrue(scrollTo(complete, in: app))
+        XCTAssertTrue(scrollBackTo(complete, in: app))
         XCTAssertFalse(complete.isEnabled, "a reply with numbers that differ must not be completed")
+        XCTAssertTrue(element(labelled: "숫자 3개가 장부와 달라요", in: app).exists)
+        keepScreenshot(of: app, named: "bk25-locked-button")
 
-        let fixes = app.buttons.matching(identifier: "bk25.fix")
-        XCTAssertTrue(scrollTo(fixes.firstMatch, in: app))
-        for remaining in stride(from: 2, through: 0, by: -1) {
-            let first = fixes.firstMatch
-            XCTAssertTrue(scrollTo(first, in: app))
-            first.tap()
-            waitForCount(remaining, of: fixes)
+        for wrong in ["‘네 자리’", "‘45,000원’", "‘30,000원’"] {
+            XCTAssertTrue(scrollTo(app.staticTexts[wrong], in: app), "\(wrong) is missing")
+            let fix = app.buttons.matching(identifier: "bk25.fix").firstMatch
+            XCTAssertTrue(scrollTo(fix, in: app), "no fix is offered for \(wrong)")
+            fix.tap()
+            XCTAssertTrue(app.staticTexts[wrong].waitForNonExistence(timeout: 90), "\(wrong) was not fixed")
         }
-        let clear = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "모든 숫자가 장부와 맞아요")).firstMatch
-        XCTAssertTrue(scrollTo(clear, in: app))
+        XCTAssertTrue(scrollBackTo(app.staticTexts["장부와 다른 숫자를 찾지 못했어요"], in: app))
+        XCTAssertTrue(app.staticTexts["맞춰 본 숫자: 남은 자리, 가격, 예약금"].exists, "the compared kinds are not named")
         keepScreenshot(of: app, named: "bk25-cleared-reply")
-        XCTAssertTrue(scrollTo(complete, in: app))
+        XCTAssertTrue(scrollBackTo(complete, in: app))
         XCTAssertTrue(complete.isEnabled)
+    }
+
+    @MainActor
+    func testSendingALockedReplyNeedsAReason() throws {
+        let app = try launch()
+        writeLockedReply(in: app)
+        app.buttons["bk25.more"].tap()
+        app.buttons["이번만 그대로 보내기"].tap()
+        let reason = app.buttons["손님과 따로 정했어요"]
+        XCTAssertTrue(reason.waitForExistence(timeout: 60), "the reasons did not come up")
+        keepScreenshot(of: app, named: "bk25-override-reasons")
+        reason.tap()
+        XCTAssertTrue(reason.waitForNonExistence(timeout: 90))
+        XCTAssertTrue(scrollBackTo(element(labelled: "답변 준비됨", in: app), in: app), "the reply was not completed")
+        keepScreenshot(of: app, named: "bk25-override-done")
     }
 
     @MainActor
@@ -106,7 +134,9 @@ final class BK25UITests: RoundupUITestCase {
         let preview = app.descendants(matching: .any)["bk25.rule.preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: 90))
         keepScreenshot(of: app, named: "bk25-rule-preview")
-        app.buttons["bk25.answer.rule"].tap()
+        let asRule = app.buttons["bk25.answer.rule"]
+        XCTAssertTrue(scrollTo(asRule, in: app))
+        asRule.tap()
         XCTAssertTrue(show.waitForNonExistence(timeout: 90))
 
         app.tabBars.buttons["설정"].tap()
@@ -153,9 +183,10 @@ final class BK25UITests: RoundupUITestCase {
         app.buttons["bk25.field.submit"].tap()
         let next = app.staticTexts["2/5"]
         XCTAssertTrue(next.waitForExistence(timeout: 90))
-        for _ in 0..<4 {
-            app.buttons["bk25.interview.skip"].tap()
-        }
+        let skip = app.buttons["bk25.interview.skip"]
+        for _ in 0..<4 { skip.tap() }
+        // Swiping while the sheet still closes would scroll the saved row away.
+        XCTAssertTrue(skip.waitForNonExistence(timeout: 90))
         let saved = element(labelled: "120분", in: app)
         XCTAssertTrue(scrollTo(saved, in: app), "the spoken length is missing from the card")
         let save = app.buttons["bk25.card.save"]

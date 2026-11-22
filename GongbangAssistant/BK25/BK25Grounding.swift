@@ -10,11 +10,12 @@ final class BK25Grounding {
     private(set) var claims: [BK25Claim] = []
     private(set) var lock: BK25Lock = .unchecked
     private(set) var mismatchCount = 0
+    private(set) var checkedKinds: [String] = []
     private(set) var judgment: BK25Judgment?
     private(set) var verifiedText: String?
     private(set) var isVerifying = false
     private(set) var loadFailed = false
-    /// The reason the owner chose for sending a locked reply as it is. The next approval sends it.
+    /// The reason the owner chose for sending this locked text as it is. It ends with the approval or the next edit.
     var overrideReason: String?
 
     var isGrounded: Bool { arm == .grounded }
@@ -34,7 +35,7 @@ final class BK25Grounding {
         do {
             let state = try await BK25API.replyState(inquiryID)
             arm = state.arm
-            apply(claims: state.claims, lock: state.lock, count: state.mismatchCount)
+            show(state)
             judgment = state.judgment
             verifiedText = draft
             loadFailed = false
@@ -52,7 +53,7 @@ final class BK25Grounding {
         judgment = written.judgment
         overrideReason = nil
         guard written.judgment == nil else { return nil }
-        apply(claims: written.claims, lock: written.lock, count: written.mismatchCount)
+        show(written)
         verifiedText = written.draft
         return written.draft
     }
@@ -62,23 +63,22 @@ final class BK25Grounding {
         arm = answer.arm
         judgment = nil
         overrideReason = nil
-        apply(claims: answer.claims, lock: answer.lock, count: answer.mismatchCount)
+        show(answer)
         verifiedText = answer.draft
     }
 
     func verify(_ inquiryID: String, text: String) async {
         guard needsVerification(text) else { return }
         isVerifying = true
+        overrideReason = nil
         defer { isVerifying = false }
         do {
-            let checked = try await BK25API.verify(inquiryID, draft: text)
-            apply(claims: checked.claims, lock: checked.lock, count: checked.mismatchCount)
-            verifiedText = text
+            show(try await BK25API.verify(inquiryID, draft: text))
         } catch {
-            // The approval is checked again by the server, so a failed check here only leaves the line unchecked.
-            lock = .unchecked
-            verifiedText = text
+            // The approval is checked again by the server, so a failed check here only leaves the text unchecked.
+            show(BK25Verification(claims: [], lock: .unchecked, mismatchCount: 0, checkedKinds: []))
         }
+        verifiedText = text
     }
 
     func decide(_ inquiryID: String, draft: String, expectedRevision: Int) async throws {
@@ -93,10 +93,11 @@ final class BK25Grounding {
         return text.replacingCharacters(in: range, with: replacement)
     }
 
-    private func apply(claims: [BK25Claim], lock: BK25Lock, count: Int) {
-        self.claims = claims
-        self.lock = lock
-        mismatchCount = count
+    private func show(_ checked: some BK25Checked) {
+        claims = checked.claims
+        lock = checked.lock
+        mismatchCount = checked.mismatchCount
+        checkedKinds = checked.checkedKinds
     }
 }
 #endif

@@ -128,6 +128,9 @@ struct InquiryDetailView: View {
                     HStack(spacing: 8) { replyActions(inquiry) }
                     VStack(spacing: 8) { replyActions(inquiry) }
                 }
+                #if BUILD_B
+                BK25LockLine(grounding: grounding)
+                #endif
                 // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
                 if inquiry.status == .approved && draft == inquiry.draft {
                     DraftShareActions(share: .inquiry, text: inquiry.draft)
