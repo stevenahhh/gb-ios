@@ -1,0 +1,17 @@
+[Unit]
+Description=Roundup channel collectors
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gongbang
+Group=gongbang
+WorkingDirectory=/opt/gongbang/current
+EnvironmentFile=/opt/gongbang/server.env
+ExecStart=/opt/gongbang/current/.venv/bin/python -m collectors run --source all
+TimeoutStartSec=900
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
