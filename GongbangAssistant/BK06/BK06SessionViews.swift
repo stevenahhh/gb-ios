@@ -339,7 +339,7 @@ struct BK06RefillView: View {
         CardSection("제안할 순서") {
             ForEach(Array(refill.targets.enumerated()), id: \.element.id) { index, item in
                 Button { chosen = item.id } label: {
-                    HStack {
+                    HStack(spacing: 10) {
                         BK06ValueRow(label: "\(index + 1). \(item.name) 님", value: item.sourceText)
                         if item.id == target.id {
                             Image(systemName: "checkmark").accessibilityLabel("선택함")

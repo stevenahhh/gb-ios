@@ -269,8 +269,13 @@ struct BK06QuoteView: View {
                     .disabled(isWriting || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         } header: {
-            Label { Text("비서가 쓴 답변") } icon: { AssistantFace(size: .card) }
-                .foregroundStyle(Color.assistantAccent)
+            // The assistant's label is kept for text it really wrote.
+            if isWriting || usedFixedText {
+                Text("답장 초안")
+            } else {
+                Label { Text("비서가 쓴 답변") } icon: { AssistantFace(size: .card) }
+                    .foregroundStyle(Color.assistantAccent)
+            }
         } footer: {
             Text("복사한 글은 쓰시는 채널에서 직접 보내 주세요.")
         }
@@ -298,7 +303,7 @@ struct BK06QuoteView: View {
     }
 
     private func showUndo(_ caseID: String) {
-        app.showToast("‘\(booking.customerName) 님’ 예약을 취소로 바꿨어요") {
+        app.showToast("‘\(booking.customerName) 님’ 취소했어요") {
             guard await app.run(id: "k06.undo", { try await RoundupAPI.k06UndoDecision(caseID: caseID) }) else { return }
             result = nil
             isApproved = false
