@@ -84,7 +84,9 @@ back to `draft` and rejected recommendations back to `open`, preserving their te
 Revision `0005` adds `collector_sources`, `collector_runs`, and `collected_items`, and allows a `naver_blog`
 channel. Downgrading drops collected items but keeps inquiries and orders already mapped from them.
 
-Revision `0006_agent`은 비서 테이블 여섯 개를 추가하고 다른 테이블은 바꾸지 않습니다. 설정 행도 하나 넣으므로 새로 배포하면 `auto` 방식으로 시작합니다. 되돌리면 비서 테이블과 그 안의 기록을 지웁니다.
+Revision `0006_agent`은 비서 테이블 여섯 개를 추가하고 다른 테이블은 바꾸지 않습니다. 설정 행도 하나 넣으므로 새로 배포한 비서는 꺼진 채(`off`)로 시작합니다. 되돌리면 비서 테이블과 그 안의 기록을 지웁니다.
+
+Revision `0007_connections`는 사장님이 저장한 공개 계정과 링크를 담는 `connections` 테이블을 추가합니다. 되돌리면 이 테이블과 저장한 값을 지웁니다.
 
 `seed.py` inserts missing rows with `ON CONFLICT DO NOTHING` and links seeded
 inquiries to their customers only while that link is empty. It never changes
@@ -137,6 +139,7 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `PATCH /inquiries/{id}/draft`, `POST /inquiries/{id}/decision` | Existing inquiry contract |
 | `POST /inquiries/{id}/undo-completion` | Return a completed reply to waiting with `{expectedRevision}`; the text stays |
 | `GET /assistant/activities` | The assistant's work from the last seven days, newest first: reply drafts, post drafts, and missed pickups, each with the facts it used |
+| `GET /connections`, `PUT`/`DELETE /connections/{service}` | Public handles and https links the owner saved: `{items: [{service, value, state, updatedAt, revision}]}`; `PUT {value, expectedRevision}`, `DELETE {expectedRevision}`; `state` is `saved` or `none` and never means connected; revision `0` saves the first value; 409 stale revision, 422 wrong host or a value that looks like a secret, with Korean `detail` |
 | `GET /collectors/status` | `{"sources": [{id, name, state, last_collected_at, collected_today, message}], "updated_at"}` for Instagram, Smart Store, blog, booking, and talk-talk; `state` is `collecting`, `idle`, `needs_connection`, or `error` |
 | `GET /collectors/items?source&limit&offset` | Stored items, newest first, without their raw JSON |
 | `POST /collectors/{source}/run` | Collect now; 409 while that source is already collecting |

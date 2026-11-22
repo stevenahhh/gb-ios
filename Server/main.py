@@ -28,6 +28,7 @@ from bookings import router as booking_router
 from channels import router as channel_router
 from collectors.routes import router as collector_router
 from common import Session
+from connections import router as connection_router
 from database import database_lifespan, schema_is_current
 from details import router as detail_router
 from drafts import router as draft_router
@@ -68,7 +69,7 @@ for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
     detail_router, draft_router, undo_router, ai_router, activity_router, speech_router,
-    collector_router, k14_router, grounded_router, agent_invoice_router, agent_router,
+    collector_router, k14_router, grounded_router, agent_invoice_router, agent_router, connection_router,
 ):
     app.include_router(router)
 

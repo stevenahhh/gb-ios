@@ -12,6 +12,7 @@ struct RootTabView: View {
     @SceneStorage("root.tab") private var selection: AppTab = .today
     @State private var isAssistantPresented = false
     @State private var isLiveVoicePresented = false
+    @State private var onboarding = OnboardingState.shared
     @State private var wasInBackground = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(InquiryStore.self) private var store
@@ -58,9 +59,15 @@ struct RootTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { app.accessorySlot = $0 }
         }
+        .tutorialOverlay(selection: $selection)
         .sheet(isPresented: $isAssistantPresented) {
             AssistantSheet()
         }
+        .fullScreenCover(isPresented: $onboarding.isPresented) {
+            OnboardingFlow()
+        }
+        // A tour the owner started but did not finish comes back at the next launch.
+        .task { if onboarding.isTutorialActive { TutorialState.shared.start() } }
         // Spoken turns join the same saved chat the sheet shows, so the owner can read them back later.
         .fullScreenCover(isPresented: $isLiveVoicePresented) {
             AssistantLiveView(

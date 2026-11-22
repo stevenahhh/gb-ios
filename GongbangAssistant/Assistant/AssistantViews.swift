@@ -33,6 +33,7 @@ struct AssistantAccessory: View {
             .accessibilityLabel("말로 물어보기")
             .accessibilityIdentifier("assistant.voice")
         }
+        .tutorialAnchor(.assistantBar)
     }
 }
 

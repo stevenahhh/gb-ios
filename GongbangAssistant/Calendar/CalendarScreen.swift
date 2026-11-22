@@ -57,6 +57,7 @@ struct CalendarScreen: View {
                         isAddingEvent = true
                     }
                     .accessibilityIdentifier("calendar.add")
+                    .tutorialAnchor(.calendarAddToolbar)
                 }
             }
             .sheet(isPresented: $isAddingEvent) {
@@ -161,6 +162,7 @@ struct CalendarContent: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isDayLoaded && !schedule.entries.isEmpty {
                 DayAddBar(add: add)
+                    .tutorialAnchor(.calendarAdd)
                     .transition(.opacity)
             }
         }

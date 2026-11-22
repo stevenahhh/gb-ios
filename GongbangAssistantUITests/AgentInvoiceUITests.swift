@@ -136,6 +136,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         app.launchEnvironment["ROUNDUP_API_URL"] = stubURL.absoluteString
         app.launchEnvironment["ROUNDUP_API_KEY"] = try XCTUnwrap(ProcessInfo.processInfo.environment["ROUNDUP_UITEST_API_KEY"])
         if let file { app.launchEnvironment["ROUNDUP_UITEST_INVOICE_FILE"] = file.path }
+        app.skipOnboarding()
         app.launch()
         return app
     }
@@ -823,6 +824,7 @@ final class AgentInvoiceServerUITests: RoundupUITestCase {
         app.launchEnvironment["ROUNDUP_API_URL"] = try XCTUnwrap(environment["ROUNDUP_UITEST_API_URL"])
         app.launchEnvironment["ROUNDUP_API_KEY"] = try XCTUnwrap(environment["ROUNDUP_UITEST_API_KEY"])
         app.launchEnvironment["ROUNDUP_UITEST_INVOICE_FILE"] = file.path
+        app.skipOnboarding()
         app.launch()
 
         let accessory = app.buttons["assistant.accessory"]

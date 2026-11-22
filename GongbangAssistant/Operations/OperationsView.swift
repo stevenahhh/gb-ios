@@ -113,6 +113,7 @@ struct OperationsView: View {
                     }
                 }
                 .accessibilityIdentifier("operations.remaining")
+                .tutorialAnchor(.remainingWork)
             }
         } header: {
             ViewThatFits(in: .horizontal) {

@@ -55,6 +55,7 @@ class AgentFlowCase: RoundupUITestCase {
         let app = XCUIApplication()
         app.launchEnvironment["ROUNDUP_API_URL"] = server.absoluteString
         app.launchEnvironment["ROUNDUP_API_KEY"] = apiKey
+        app.skipOnboarding()
         app.launchArguments += arguments
         app.launch()
         XCTAssertTrue(app.buttons["assistant.accessory"].waitForExistence(timeout: 60), "the assistant bar is missing")

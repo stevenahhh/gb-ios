@@ -14,6 +14,7 @@ class RoundupUITestCase: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["ROUNDUP_API_URL"] = try apiURL ?? environment("ROUNDUP_UITEST_API_URL")
         app.launchEnvironment["ROUNDUP_API_KEY"] = try environment("ROUNDUP_UITEST_API_KEY")
+        app.skipOnboarding()
         app.launch()
         return app
     }
@@ -53,5 +54,12 @@ class RoundupUITestCase: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+extension XCUIApplication {
+    /// Starts on 오늘 instead of the first-launch flow.
+    func skipOnboarding() {
+        launchArguments += ["-onboarding.done", "YES", "-tutorial.done", "YES"]
     }
 }

@@ -118,6 +118,7 @@ final class AgentUITests: RoundupUITestCase {
         app.launchEnvironment["ROUNDUP_API_URL"] = stubURL.absoluteString
         app.launchEnvironment["ROUNDUP_API_KEY"] = try XCTUnwrap(ProcessInfo.processInfo.environment["ROUNDUP_UITEST_API_KEY"])
         app.launchEnvironment.merge(environment) { _, added in added }
+        app.skipOnboarding()
         app.launchArguments += arguments
         app.launch()
         return app

@@ -210,6 +210,7 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testMissingServerAddressExplainsConfiguration() throws {
         let app = XCUIApplication()
         app.launchEnvironment["ROUNDUP_API_URL"] = ""
+        app.skipOnboarding()
         app.launch()
         XCTAssertTrue(element(labelled: "서버 주소가 설정되지 않았어요", in: app).waitForExistence(timeout: 10))
     }

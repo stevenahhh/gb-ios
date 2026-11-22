@@ -61,7 +61,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.factCards")
                 rows(sections["공방"] ?? [])
                 NavigationLink {
-                    ChannelStatusView(channels: data.channels)
+                    ConnectionsView()
                 } label: {
                     Label { Text("채널 연결") } icon: { MenuIcon(systemName: "link") }
                 }
@@ -80,6 +80,17 @@ struct SettingsView: View {
                 OutreachCostLink()
             }
 
+            CardSection {
+                CurrentPlanRow()
+                Button {
+                    OnboardingState.shared.restart()
+                } label: {
+                    Label { Text("처음 안내 다시 보기") } icon: { MenuIcon(systemName: "arrow.counterclockwise") }
+                }
+                .tint(.primary)
+                .accessibilityIdentifier("settings.onboarding")
+            }
+
             if let support = sections["지원"] {
                 CardSection { rows(support) }
             }
@@ -96,24 +107,6 @@ struct SettingsView: View {
                 Label { Text(item.title) } icon: { MenuIcon(systemName: item.symbol) }
             }
         }
-    }
-}
-
-struct ChannelStatusView: View {
-    let channels: [WorkItem]
-
-    var body: some View {
-        List {
-            CardSection {
-                ForEach(channels) { WorkCard(item: $0) }
-            } header: {
-                if channels.allChannelsUnconnected { UnconnectedChannelsNote() }
-            }
-            .environment(\.hidesCardStatus, channels.allChannelsUnconnected)
-        }
-        .cardList()
-        .navigationTitle("채널 연결")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
