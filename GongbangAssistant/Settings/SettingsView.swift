@@ -70,6 +70,9 @@ struct SettingsView: View {
                     Label { Text("\(AssistantIdentity.name)가 한 일") } icon: { MenuIcon(systemName: "clock.arrow.circlepath") }
                 }
                 .accessibilityIdentifier("settings.activities")
+                #if BUILD_B
+                OutreachCostLink()
+                #endif
             }
 
             if let support = sections["지원"] {
