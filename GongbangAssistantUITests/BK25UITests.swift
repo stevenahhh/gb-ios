@@ -94,7 +94,11 @@ final class BK25UITests: RoundupUITestCase {
             XCTAssertTrue(app.staticTexts[wrong].waitForNonExistence(timeout: 90), "\(wrong) was not fixed")
         }
         XCTAssertTrue(scrollBackTo(app.staticTexts["장부와 다른 숫자를 찾지 못했어요"], in: app))
-        XCTAssertTrue(app.staticTexts["맞춰 본 숫자: 남은 자리, 가격, 예약금"].exists, "the compared kinds are not named")
+        let kinds = app.descendants(matching: .any)["bk25.checkedKinds"].firstMatch
+        XCTAssertTrue(kinds.waitForExistence(timeout: 60), "the compared kinds are not named")
+        for kind in ["남은 자리", "가격", "예약금"] {
+            XCTAssertTrue(kinds.label.contains(kind), "\(kind) is not named in \(kinds.label)")
+        }
         keepScreenshot(of: app, named: "bk25-cleared-reply")
         XCTAssertTrue(scrollBackTo(complete, in: app))
         XCTAssertTrue(complete.isEnabled)
