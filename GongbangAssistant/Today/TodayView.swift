@@ -70,6 +70,9 @@ struct TodayView: View {
                 MetricStrip(metrics: metrics(today))
             }
 
+            #if BUILD_B
+            BK06TodaySection()
+            #endif
             ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
 
             Section {

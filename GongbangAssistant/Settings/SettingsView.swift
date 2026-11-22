@@ -52,6 +52,9 @@ struct SettingsView: View {
                     Label { Text("공방 정보") } icon: { MenuIcon(systemName: "storefront") }
                 }
                 .accessibilityIdentifier("settings.workshop")
+                #if BUILD_B
+                BK06PolicyRow()
+                #endif
                 rows(sections["공방"] ?? [])
                 NavigationLink {
                     ChannelStatusView(channels: data.channels)
