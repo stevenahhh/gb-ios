@@ -153,7 +153,8 @@ async def list_policies(db: Session) -> list[PolicyVersion]:
         select(PolicyVersionRow).where(PolicyVersionRow.workshop_id == WORKSHOP_ID)
         .order_by(PolicyVersionRow.version.desc()),
     ))
-    return [version_view(row, before) for row, before in zip(rows, [*rows[1:], None], strict=True)]
+    earlier = {row.version + 1: row for row in rows}
+    return [version_view(row, earlier.get(row.version)) for row in rows]
 
 
 @router.get("/policy/versions/{version}")

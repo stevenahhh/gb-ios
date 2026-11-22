@@ -193,6 +193,8 @@ async def test_extract_uses_valid_model_output(client: AsyncClient, monkeypatch:
 
 @pytest.mark.postgres
 async def test_versions_grow_and_never_change(database: AsyncEngine, client: AsyncClient) -> None:
+    empty = await client.get("/policy/versions")
+    assert (empty.status_code, empty.json()) == (200, [])
     first: Body = {"rules": [{"daysBefore": 0, "refundPercent": 0}], "sourceText": "당일 환불 불가"}
     second: Body = {"rules": [{"daysBefore": 0, "refundPercent": 50}], "sourceText": "당일 50%"}
     assert (await client.post("/policy/versions", json=first)).json()["version"] == 1
