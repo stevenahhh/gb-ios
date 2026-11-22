@@ -50,6 +50,11 @@ final class TabNavigationUITests: RoundupUITestCase {
 
         let packing = element(labelled: "머그컵 2종 세트", in: app)
         let delivered = element(labelled: "핸드메이드 머그컵", in: app)
+        // Before its pickup time the packing parcel sorts below the parcels in transit, off screen, so the list is
+        // narrowed to it first. That keeps the test independent of the time of day.
+        let scheduled = app.segmentedControls.buttons["발송 예정"]
+        XCTAssertTrue(scheduled.waitForExistence(timeout: 10))
+        scheduled.tap()
         XCTAssertTrue(packing.waitForExistence(timeout: 10))
 
         app.segmentedControls.buttons["완료"].tap()
@@ -136,6 +141,53 @@ final class TabNavigationUITests: RoundupUITestCase {
         app.buttons["form.save"].tap()
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         XCTAssertTrue(scrollTo(element(labelled: "공방 대청소", in: app), in: app))
+    }
+
+    @MainActor
+    func testDayWithEventsOffersAddWithoutScrolling() throws {
+        let app = try launch()
+        app.tabBars.buttons["캘린더"].tap()
+        // Today has seeded classes and tasks, so the pinned button shows in place of the empty-day one.
+        let add = app.buttons["calendar.day.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(add.isHittable, "일정 추가 must be in reach before any scrolling")
+        XCTAssertFalse(app.buttons["calendar.empty.add"].exists)
+        XCTAssertTrue(app.buttons["calendar.add"].exists, "the toolbar plus stays")
+        keepScreenshot(of: app, named: "calendar-day-add")
+
+        add.tap()
+        let title = app.textFields["event.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        title.typeText("가마 청소")
+        app.buttons["form.save"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(element(labelled: "가마 청소", in: app), in: app))
+    }
+
+    @MainActor
+    func testOperationsShowsLiveCollectionInPlaceOfTheRate() throws {
+        let app = try launch()
+        app.tabBars.buttons["운영"].tap()
+        XCTAssertTrue(app.navigationBars["운영"].waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(app.staticTexts["operations.collection.title"], in: app), "실시간 수집 현황 is missing")
+        XCTAssertFalse(element(labelled: "처리율", in: app).exists)
+
+        let sources = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "operations.collection.source."))
+        let first = sources.firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10), "the card shows no source")
+        let value = first.value as? String ?? ""
+        let start = Date()
+        keepScreenshot(of: app, named: "collection-motion-0s")
+        // A server without collector routes gets sample rows, tagged as such, and they move without a touch.
+        if app.descendants(matching: .any)["operations.collection.sample"].exists {
+            XCTAssertEqual(sources.count, 4)
+            wait(for: [expectation(for: NSPredicate(format: "value != %@", value), evaluatedWith: first)], timeout: 10)
+        }
+        // Motion is what this pair of captures shows, so the second one waits until two real seconds have passed.
+        Thread.sleep(until: start.addingTimeInterval(2))
+        keepScreenshot(of: app, named: "collection-motion-2s")
     }
 
     @MainActor

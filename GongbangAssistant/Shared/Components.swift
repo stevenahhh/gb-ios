@@ -186,7 +186,7 @@ struct TaskRow: View {
     let item: TaskItem
     let kind: EventKind
     var timeline: TimelinePosition?
-    /// Inside the overdue group the red title already says so; rows show a gray "어제 16:00 · 포장 대기".
+    /// Inside the overdue group a row shows a gray "어제 16:00 · 포장 대기" under its overdue mark.
     var isInOverdueGroup = false
     @State private var requestedDone: Bool?
     @Environment(AppModel.self) private var app
@@ -338,9 +338,10 @@ struct TaskRow: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: item.title)
-                    .font(.body.weight(.medium))
                     .strikethrough(isDone)
                     .foregroundStyle(isDone ? Color.secondaryText : Color.primary)
+                    .overdueMark(for: isDone ? nil : item.due)
+                    .font(.body.weight(.medium))
                 PhraseText(text: item.detail)
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
@@ -618,6 +619,7 @@ struct WorkCardContent: View {
                 : AnyLayout(HStackLayout(alignment: .center))
             header {
                 Text(verbatim: item.title)
+                    .overdueMark(for: item.due)
                     .font(.headline)
                 if !dynamicTypeSize.isAccessibilitySize {
                     Spacer(minLength: 8)

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 extension Color {
-    /// The app's only red. It marks "기한 지남", its clock, and the calendar's missed node, nothing else.
+    /// The app's only red. It colors `OverdueMark`, the clock on an item past its deadline, and nothing else.
     static let overdueRed = Color(uiColor: UIColor { @Sendable traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 1, green: 0x6B / 255, blue: 0x60 / 255, alpha: 1)
@@ -22,7 +22,7 @@ struct CardDue: Decodable, Hashable {
     func isOverdue(at now: Date) -> Bool { date.map { $0 < now } ?? false }
 }
 
-/// The one place that turns a date into 오늘, 어제, N일 뒤, or a month-day.
+/// The one place that turns a date into 오늘, 어제, N일 뒤, or a month-day, and a past moment into N초 전.
 enum RelativeDayFormatter {
     static func day(_ date: Date, now: Date, calendar: Calendar = .workshop) -> String {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
@@ -40,6 +40,18 @@ enum RelativeDayFormatter {
         }
     }
 
+    /// "방금", "12초 전", "3분 전", "2시간 전", then the day.
+    static func elapsed(since date: Date, now: Date, calendar: Calendar = .workshop) -> String {
+        let seconds = Int(now.timeIntervalSince(date))
+        switch seconds {
+        case ..<1: return "방금"
+        case ..<60: return "\(seconds)초 전"
+        case ..<3600: return "\(seconds / 60)분 전"
+        case ..<86_400: return "\(seconds / 3600)시간 전"
+        default: return day(date, now: now, calendar: calendar)
+        }
+    }
+
     /// "어제 16:00"
     static func moment(_ date: Date, now: Date, calendar: Calendar = .workshop) -> String {
         let parts = calendar.dateComponents([.hour, .minute, .second], from: date)
@@ -48,7 +60,44 @@ enum RelativeDayFormatter {
     }
 }
 
-/// A deadline line: a plain clock before it is due, "기한 지남" in red once it passes.
+/// The one overdue marker: a red clock with no words, at the top-left of the item. VoiceOver reads 기한 지남.
+struct OverdueMark: View {
+    var body: some View {
+        Image(systemName: "clock.fill")
+            .foregroundStyle(Color.overdueRed)
+            .accessibilityLabel("기한 지남")
+    }
+}
+
+/// `OverdueMark` for a deadline: nothing until it passes, then the mark. It checks again every minute.
+struct DueMark: View {
+    let due: CardDue?
+    /// Space after the mark. It belongs to the mark, so a title it leads stays put while the mark is absent.
+    var gap: CGFloat = 0
+
+    var body: some View {
+        TimelineView(.everyMinute) { context in
+            if due?.isOverdue(at: context.date) == true {
+                OverdueMark()
+                    .padding(.trailing, gap)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Leads an item's title with the overdue mark once `due` has passed. Set the font after this call, so the mark
+    /// takes the title's size and grows with Dynamic Type.
+    func overdueMark(for due: CardDue?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            DueMark(due: due, gap: 5)
+            self
+        }
+    }
+}
+
+/// A deadline line: a plain clock and the moment before it is due. Once it passes the line turns gray and loses its
+/// clock, because the item's `OverdueMark` says so.
 struct DueLabel: View {
     let due: CardDue
     var font: Font = .subheadline
@@ -62,26 +111,23 @@ struct DueLabel: View {
     @ViewBuilder
     private func content(now: Date) -> some View {
         if let date = due.date {
-            let moment = RelativeDayFormatter.moment(date, now: now)
-            // An HStack, not a Label: List would move a Label's icon into its leading icon column.
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                if due.isOverdue(at: now) {
-                    Image(systemName: "clock")
-                        .foregroundStyle(Color.overdueRed)
-                        .accessibilityHidden(true)
-                    let rest = [moment, due.missed].compactMap { $0 }.joined(separator: " ")
-                    Text("\(Text("기한 지남").foregroundStyle(Color.overdueRed).fontWeight(.semibold)) · \(rest)")
-                        .foregroundStyle(Color.secondaryText)
-                } else {
+            let lead = "\(due.prefix.map { "\($0) " } ?? "")\(RelativeDayFormatter.moment(date, now: now))"
+            if due.isOverdue(at: now) {
+                Text("\(lead)\(due.missed.map { " \($0)" } ?? due.suffix)")
+                    .font(font)
+                    .foregroundStyle(Color.secondaryText)
+            } else {
+                // An HStack, not a Label: List would move a Label's icon into its leading icon column.
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Image(systemName: "clock")
                         .foregroundStyle(Color.secondaryText)
                         .accessibilityHidden(true)
-                    Text("\(due.prefix.map { "\($0) " } ?? "")\(moment)\(due.suffix)")
+                    Text("\(lead)\(due.suffix)")
                         .foregroundStyle(.primary)
                 }
+                .font(font)
+                .accessibilityElement(children: .combine)
             }
-            .font(font)
-            .accessibilityElement(children: .combine)
         }
     }
 }

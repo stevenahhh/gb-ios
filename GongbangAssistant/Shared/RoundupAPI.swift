@@ -59,6 +59,19 @@ enum RoundupAPI {
         try await get("operations", query: period?.query ?? [:])
     }
 
+    /// The collector routes spell their keys in snake_case and send moments as ISO 8601 text. This decoder reads
+    /// both into the camelCase `Date` fields the other models use.
+    private static let collectorDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    static func collectorStatus() async throws -> CollectorStatus {
+        try await get("collectors/status", decoder: collectorDecoder)
+    }
+
     static func calendar(start: Date, end: Date) async throws -> CalendarRange {
         try await get("calendar", query: ["start": start.dayKey, "end": end.dayKey])
     }
@@ -334,12 +347,13 @@ enum RoundupAPI {
         return URLRequest(url: url)
     }
 
-    private static func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+    private static func get<T: Decodable>(_ path: String, query: [String: String] = [:],
+                                          decoder: JSONDecoder = JSONDecoder()) async throws -> T {
         let items = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         let request = try request(path, query: items)
-        if ResponseCache.probe != nil { return try decode(try ResponseCache.read(request)) }
+        if ResponseCache.probe != nil { return try decode(try ResponseCache.read(request), with: decoder) }
         let data = try await sendRaw(request, idempotent: true)
-        let value: T = try decode(data)
+        let value: T = try decode(data, with: decoder)
         ResponseCache.store(data, for: request)
         return value
     }
@@ -356,9 +370,9 @@ enum RoundupAPI {
         return try decode(try await sendRaw(request))
     }
 
-    private static func decode<T: Decodable>(_ data: Data) throws -> T {
+    private static func decode<T: Decodable>(_ data: Data, with decoder: JSONDecoder = JSONDecoder()) throws -> T {
         do {
-            return try JSONDecoder().decode(T.self, from: data)
+            return try decoder.decode(T.self, from: data)
         } catch {
             throw RoundupAPIError(message: "서버 응답을 읽지 못했어요. 앱을 최신 버전으로 업데이트해 주세요.")
         }

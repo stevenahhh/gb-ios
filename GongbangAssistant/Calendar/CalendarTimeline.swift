@@ -22,7 +22,7 @@ enum CalendarEventKind: Hashable {
 }
 
 enum CalendarEventState: Hashable {
-    /// `missed` is an unfinished task whose time has passed; it is the only state drawn in red.
+    /// `missed` is an unfinished task whose time has passed; the overdue mark takes its node's place.
     case done, next, upcoming, missed
 }
 
@@ -154,7 +154,7 @@ enum DayRelation {
 }
 
 /// Tasks end only when checked and are `missed` once their time passes; parcels the server marks
-/// unsent stay open and show 기한 지남. Only today has a next row and a time line.
+/// unsent stay open and turn overdue. Only today has a next row and a time line.
 struct TimelinePlan {
     struct Row: Identifiable {
         let entry: TimelineEntry
@@ -227,19 +227,13 @@ enum TimelineText {
         return minute == 0 ? "\(period) \(twelve)시" : "\(period) \(twelve)시 \(minute)분"
     }
 
-    /// Kind, subject, and range; the status word is added by the row so 지남 can be red.
+    /// Kind, subject, and range, then 완료 or 끝남 on a finished row. An overdue row says so with its node, not here.
     static func meta(_ row: TimelinePlan.Row) -> String {
         var parts = [row.entry.kind.label]
         if !row.entry.subject.isEmpty { parts.append(row.entry.subject) }
         if let range = range(row.entry) { parts.append(range) }
         if row.state == .done { parts.append(row.entry.kind == .task ? "완료" : "끝남") }
         return parts.joined(separator: " · ")
-    }
-
-    /// Red status words: 지남 for a missed task, 기한 지남 for an unsent parcel.
-    static func overdueWord(_ row: TimelinePlan.Row) -> String? {
-        if row.state == .missed { return "지남" }
-        return row.isOverdue ? "기한 지남" : nil
     }
 
     /// 진행 중 · N분 남음, N분 후, 1시간 20분 후, then a clock time beyond two hours.
@@ -267,7 +261,9 @@ enum TimelineText {
 
 struct DaySection: View {
     let date: Date
-    let day: CalendarDay?
+    /// Every row the server sent for the day, including its orders and all-day facts.
+    let itemCount: Int
+    let schedule: DaySchedule
     /// Parcels whose pickup was on an earlier day; shown only on today, never carried into past days.
     let overdueShipments: [AgendaItem]
     let now: Date
@@ -289,7 +285,6 @@ struct DaySection: View {
     }
 
     var body: some View {
-        let schedule = DaySchedule(items: day?.items ?? [])
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Self.title(date))
@@ -297,7 +292,7 @@ struct DaySection: View {
                     .foregroundStyle(CalendarTokens.label)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                Text(relation == .today ? "오늘" : isLoading ? "" : "일정 \(day?.items.count ?? 0)건")
+                Text(relation == .today ? "오늘" : isLoading ? "" : "일정 \(itemCount)건")
                     .font(.subheadline)
                     .foregroundStyle(CalendarTokens.secondary)
             }
@@ -338,11 +333,7 @@ struct DaySection: View {
                 .font(.callout)
                 .foregroundStyle(CalendarTokens.secondary)
                 .multilineTextAlignment(.center)
-            Button("일정 추가", action: add)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(CalendarTokens.label)
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("calendar.empty.add")
+            AddEventButton(identifier: "calendar.empty.add", action: add)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
@@ -352,6 +343,48 @@ struct DaySection: View {
         let calendar = Calendar.workshop
         let weekday = ["일", "월", "화", "수", "목", "금", "토"][calendar.component(.weekday, from: date) - 1]
         return "\(calendar.component(.day, from: date))일 \(weekday)요일"
+    }
+}
+
+/// The day's own 일정 추가, a capsule on the calendar's fill like the 오늘 pill: under the message on a day with no
+/// timeline, and in `DayAddBar` on a day that has one.
+struct AddEventButton: View {
+    let identifier: String
+    var fillsWidth = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .accessibilityHidden(true)
+                Text("일정 추가")
+            }
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(CalendarTokens.label)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
+            .background(CalendarTokens.fill, in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(PressDimStyle())
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// 일정 추가 for a day that has a timeline. It sits in the bottom safe area, so it is in reach without scrolling
+/// and the last row ends above it.
+struct DayAddBar: View {
+    let add: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(CalendarTokens.separator).frame(height: 1)
+            AddEventButton(identifier: "calendar.day.add", fillsWidth: true, action: add)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+        }
+        .background(CalendarTokens.background)
     }
 }
 
@@ -394,13 +427,11 @@ struct PinnedSummaryCard: View {
 
     private var overdueRow: some View {
         HStack(spacing: 10) {
-            Image(systemName: "clock")
+            OverdueMark()
                 .font(.subheadline)
-                .foregroundStyle(Color.overdueRed)
                 .frame(width: 20)
-                .accessibilityHidden(true)
-            Text("\(Text("기한 지남").foregroundStyle(Color.overdueRed).fontWeight(.semibold)) · 못 보낸 택배 \(overdue.count)건")
-                .font(.subheadline)
+            Text("못 보낸 택배 \(overdue.count)건")
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(CalendarTokens.label)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 1)
             Spacer(minLength: 4)
@@ -617,7 +648,7 @@ struct TimelineRow: View {
     }
 
     private var node: some View {
-        TimelineNode(kind: entry.kind, state: state, durationMinutes: entry.minutes)
+        TimelineNode(kind: entry.kind, state: state, isOverdue: shown.isOverdue, durationMinutes: entry.minutes)
             .padding(.top, TimelineMetrics.nodeCenter - nodeSize / 2)
             .accessibilityHidden(true)
     }
@@ -633,7 +664,7 @@ struct TimelineRow: View {
                 .strikethrough(state == .done && entry.ownerItem != nil, color: CalendarTokens.secondary)
                 .foregroundStyle(state == .done ? CalendarTokens.secondary : CalendarTokens.label)
                 .lineLimit(2)
-            metaText
+            Text(TimelineText.meta(shown))
                 .font(.subheadline)
                 .foregroundStyle(CalendarTokens.secondary)
                 .lineLimit(2)
@@ -660,11 +691,6 @@ struct TimelineRow: View {
         case nil:
             text.rowAccessibility(spoken, id: entry.id)
         }
-    }
-
-    private var metaText: Text {
-        guard let word = TimelineText.overdueWord(shown) else { return Text(TimelineText.meta(shown)) }
-        return Text("\(TimelineText.meta(shown)) · \(Text(word).foregroundStyle(Color.overdueRed).fontWeight(.semibold))")
     }
 
     private var titleFont: Font {
@@ -704,14 +730,18 @@ private extension View {
 struct TimelineNode: View {
     let kind: CalendarEventKind
     let state: CalendarEventState
+    /// A parcel past its pickup. Like a missed task it shows the overdue mark in place of its kind's shape.
+    var isOverdue = false
     let durationMinutes: Int?
+    @ScaledMetric(relativeTo: .callout) private var markSize = 16
 
     var body: some View {
         VStack(spacing: 0) {
-            if state == .missed {
-                Circle()
-                    .stroke(Color.overdueRed, style: StrokeStyle(lineWidth: 2, dash: [3, 2]))
-                    .frame(width: 13, height: 13)
+            if state == .missed || isOverdue {
+                // The mark grows with the text up to the node column, and its backing keeps the rail out of the clock.
+                OverdueMark()
+                    .font(.system(size: min(markSize, TimelineMetrics.nodeColumn - 4)))
+                    .background(CalendarTokens.background, in: .circle)
                     .frame(width: 14, height: 14)
             } else if state == .next {
                 NodeShape(kind: kind, isDone: false, size: 16, lineWidth: 2.5)
@@ -811,7 +841,7 @@ struct TimelineLegend: View {
             .font(.subheadline)
             .foregroundStyle(CalendarTokens.secondary)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("범례: 채운 원 예약, 사각형 배송, 빈 원 할 일, 회색 체크 끝남, 빨간 점선 원 지남")
+            .accessibilityLabel("범례: 채운 원 예약, 사각형 배송, 빈 원 할 일, 회색 체크 끝남, 빨간 시계 기한 지남")
         }
     }
 
@@ -826,10 +856,9 @@ struct TimelineLegend: View {
             Text("끝남")
         }
         HStack(spacing: 5) {
-            Circle()
-                .stroke(Color.overdueRed, style: StrokeStyle(lineWidth: 1.5, dash: [2, 1.5]))
-                .frame(width: Self.markSize, height: Self.markSize)
-            Text("지남").foregroundStyle(Color.overdueRed)
+            OverdueMark()
+                .font(.system(size: Self.markSize + 1))
+            Text("지남")
         }
     }
 
