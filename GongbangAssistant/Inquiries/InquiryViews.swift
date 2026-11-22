@@ -128,6 +128,11 @@ struct InquiryDetailView: View {
                 // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
                 if inquiry.status == .approved && draft == inquiry.draft {
                     DraftShareActions(share: .inquiry, text: inquiry.draft)
+                    Button("답변 완료 되돌리기", systemImage: "arrow.uturn.backward") { undoCompletion(inquiry) }
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity)
+                        .disabled(store.isInquiryBusy)
+                        .accessibilityIdentifier("inquiry.undoCompletion")
                 }
             } header: {
                 Text("답변 작성")
@@ -138,11 +143,13 @@ struct InquiryDetailView: View {
             BK25GroundingSection(grounding: grounding, inquiryID: id, draft: $draft, approve: complete,
                                  showDraft: show(generated:))
 
-            CardSection("답변 근거", footer: "공방에 등록해 둔 안내만 근거로 비서가 써요.") {
+            CardSection("비서가 참고한 공방 안내", footer: "공방에 등록해 둔 안내만 근거로 비서가 써요.") {
                 ForEach(inquiry.facts, id: \.self) { Text($0) }
             }
         }
         .cardList()
+        // Keeps 답변 복사하기, which appears at the end after completion, clear of the assistant bar.
+        .contentMargins(.bottom, 96, for: .scrollContent)
         // The keyboard would otherwise cover 답변 완료, which sits between the editor and the check below it.
         .scrollDismissesKeyboard(.immediately)
         .sensoryFeedback(.success, trigger: completionCount)
@@ -262,6 +269,23 @@ struct InquiryDetailView: View {
                 loadEditorFromStore()
                 errorMessage = nil
                 completionCount += 1
+                app.dataDidChange()
+                if let inquiry = store.inquiry(id: id), inquiry.status == .approved {
+                    app.showToast("답변을 완료했어요", seconds: 6) { undoCompletion(inquiry) }
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// The same undo as the 오늘 card, so a completion made here can be taken back here.
+    private func undoCompletion(_ inquiry: Inquiry) {
+        Task {
+            do {
+                try await store.undoCompletion(id: inquiry.id, expectedRevision: inquiry.revision)
+                loadEditorFromStore()
+                errorMessage = nil
                 app.dataDidChange()
             } catch {
                 errorMessage = error.localizedDescription
