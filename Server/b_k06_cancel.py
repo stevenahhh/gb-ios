@@ -19,6 +19,7 @@ from b_k06_logic import (
     Quote,
     ReplyFacts,
     Rule,
+    blocking,
     category_of,
     compute,
     edited_characters,
@@ -48,7 +49,9 @@ RECENT = timedelta(days=7)
 PRECEDENTS = 2
 CASES = 100
 type Arm = Literal["card", "control"]
-type Warn = Literal["no_notice", "no_policy", "undecided_rule", "material_unknown", "naver_booking"]
+type Warn = Literal[
+    "no_notice", "no_policy", "undecided_rule", "unread_rule", "material_unknown", "naver_booking",
+]
 type BookingParts = tuple[BookingRow, ClassSessionRow, CustomerRow]
 
 
@@ -113,6 +116,7 @@ class QuoteView(ApiModel):
     matched_label: str | None
     precedents: list[Precedent]
     warnings: list[Warn]
+    unread: list[str]
 
 
 class DecisionRequest(ApiRequest):
@@ -286,6 +290,7 @@ class Basis(ApiModel):
     version: int | None
     noticed_on: date | None
     warnings: list[Warn]
+    unread: list[str]
 
 
 async def calculate(
@@ -305,15 +310,19 @@ async def calculate(
     quote = compute(
         policy_of(row).rules if row else (), session.starts_at, now, Payment(paid_won(booking), material),
     )
-    if row is not None and quote.refund is None:
-        unknown = quote.rule is not None and quote.rule.refund_percent is not None
+    unread = [line for line in policy_of(row).unread if blocking(line)] if row else []
+    if unread:
+        warnings.append("unread_rule")
+        quote = Quote(quote.days_left, quote.rule, None)
+    elif row is not None and quote.refund is None:
+        unknown = quote.rule is not None and quote.rule.deduct_material and material is None
         warnings.append("material_unknown" if unknown else "undecided_rule")
     channel = await db.get(ChannelRow, booking.channel_id) if booking.channel_id else None
     if channel is not None and channel.kind == "naver_booking":
         warnings.append("naver_booking")
     return quote, Basis(
         version_id=row.id if row else None, version=row.version if row else None,
-        noticed_on=noticed[1] if noticed else None, warnings=warnings,
+        noticed_on=noticed[1] if noticed else None, warnings=warnings, unread=unread,
     )
 
 
@@ -331,6 +340,7 @@ async def quote(body: QuoteRequest, db: Session, now: Now) -> QuoteView:
         days_left=result.days_left, paid=paid_won(booking), refund=result.refund, matched_rule=result.rule,
         matched_label=rule_label(result.rule) if result.rule else None,
         precedents=await precedents(db, body.reason_category), warnings=basis.warnings,
+        unread=basis.unread,
     )
 
 

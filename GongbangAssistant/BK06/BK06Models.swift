@@ -101,6 +101,7 @@ enum BK06Warning: String, Decodable {
     case noNotice = "no_notice"
     case noPolicy = "no_policy"
     case undecidedRule = "undecided_rule"
+    case unreadRule = "unread_rule"
     case materialUnknown = "material_unknown"
     case naverBooking = "naver_booking"
 
@@ -109,6 +110,7 @@ enum BK06Warning: String, Decodable {
         case .noNotice: "이 손님에게 안내한 규정 기록이 없어요. 지금 규정으로 계산했어요."
         case .noPolicy: "규정을 먼저 정해 두면 금액을 계산해 드려요."
         case .undecidedRule: "규정에 정하지 않은 조건이에요. 사장님이 판단해 주세요."
+        case .unreadRule: "규정에 아직 확인하지 않은 문장이 있어 금액을 정하지 않았어요. 문장을 확인한 뒤 다시 저장해 주세요."
         case .materialUnknown: "재료비가 적혀 있지 않아 공제 금액을 계산하지 못했어요."
         case .naverBooking: "네이버 예약으로 들어온 예약이에요. 네이버에 설정한 환불 기준을 먼저 확인해 주세요."
         }
@@ -129,6 +131,7 @@ struct BK06Quote: Decodable {
     let matchedLabel: String?
     let precedents: [BK06Precedent]
     let warnings: [BK06Warning]
+    let unread: [String]
 }
 
 struct BK06DecisionResult: Decodable {

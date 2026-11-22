@@ -160,6 +160,14 @@ struct BK06QuoteView: View {
             ForEach(quote.warnings, id: \.self) { warning in
                 if warning == .noPolicy {
                     NavigationLink { BK06PolicyView() } label: { Text(verbatim: warning.text) }
+                } else if warning == .unreadRule {
+                    NavigationLink { BK06PolicyView() } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(verbatim: warning.text)
+                            ForEach(quote.unread, id: \.self) { BK06PendingLabel(text: $0) }
+                        }
+                    }
+                    .accessibilityIdentifier("k06.unread")
                 } else {
                     Label { Text(verbatim: warning.text) } icon: { Image(systemName: "info.circle") }
                         .font(.subheadline)

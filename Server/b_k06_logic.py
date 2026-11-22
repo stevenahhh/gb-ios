@@ -4,7 +4,9 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from itertools import pairwise
 from typing import Annotated, ClassVar, Final, Literal
+from unicodedata import normalize
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -94,11 +96,19 @@ def matched_rule(rules: Iterable[Rule], left: int) -> Rule | None:
     return next((rule for rule in ordered if left >= rule.days_before), None)
 
 
+def overreaches(rule: Rule, tiers: Sequence[Rule], left: int) -> bool:
+    """Tell when only a late tier exists, so it must not speak for an earlier cancellation."""
+    earliest = max(tier.days_before for tier in tiers)
+    speaks_late = rule.refund_percent != FULL and (rule.days_before == 0 or rule.refund_percent == 0)
+    return rule.days_before == earliest and left > rule.days_before and speaks_late
+
+
 def compute(rules: Iterable[Rule], starts_at: datetime, at: datetime, payment: Payment) -> Quote:
     """Apply the owner's tiers in whole won; a missing cost or tier is left to the owner."""
     left = days_left(starts_at, at)
-    rule = matched_rule(rules, left)
-    if rule is None or rule.refund_percent is None:
+    tiers = tuple(rules)
+    rule = matched_rule(tiers, left)
+    if rule is None or rule.refund_percent is None or overreaches(rule, tiers, left):
         return Quote(left, rule, None)
     refund = payment.paid * rule.refund_percent // FULL
     if rule.deduct_material and refund > 0:
@@ -108,89 +118,233 @@ def compute(rules: Iterable[Rule], starts_at: datetime, at: datetime, payment: P
     return Quote(left, rule, refund)
 
 
-# Reading an owner's rule text without a model.
+# Reading an owner's rule text. A sentence becomes a number only when all of it fits a known plain form;
+# anything else is undecided or unread, because a wrong refund costs more than a question.
 
-CLAUSE: Final = re.compile(r"[.\n,;]+|(?<=고)\s+(?=당일|전날|\d+일)")
-DAYS: Final = re.compile(r"(\d{1,3})\s*일\s*전")
-PERCENT: Final = re.compile(r"(\d{1,3})\s*(?:%|퍼센트|프로)")
+DAY_WORDS: Final = {
+    "당일": 0, "전날": 1, "전일": 1, "하루전": 1, "이틀전": 2, "사흘전": 3, "나흘전": 4, "닷새전": 5,
+    "열흘전": 10,
+    "일주일전": 7, "한주전": 7, "두주전": 14, "세주전": 21, "네주전": 28,
+}
+DAY: Final = (
+    r"(?:당일|전날|전일|(?:하루|이틀|사흘|나흘|닷새|열흘|일주일|(?:한|두|세|네)\s*주)\s*전"
+    r"|\d{1,3}\s*(?:일|주일?)\s*전)"
+)
+DAY_PATTERN: Final = re.compile(DAY)
+PERCENT: Final = re.compile(r"(?<![\d.])(\d{1,3})\s*(?:%|퍼센트|프로)")
 MINUTES: Final = re.compile(r"(\d{1,3})\s*분")
-NO_REFUND: Final = re.compile(r"환불\s*(?:은|이)?\s*(?:불가|없|안\s*[돼되]|어렵)|불가")
-HALF: Final = re.compile(r"반액|절반")
-DEDUCT: Final = re.compile(r"재료비.*(?:공제|제외|빼|차감)")
-CARRY: Final = re.compile(r"이월|옮길|옮겨|변경\s*가능")
+REFUSED: Final = r"환불\s*(?:은|이|도)?\s*(?:불가능?|없|안\s*[돼되됩]|되지\s*않)"
+PLAIN_TEXT: Final = (
+    rf"(?:(?:수업|클래스|체험|예약일?)\s*(?:시작\s*)?)?(?P<day>{DAY})\s*(?P<until>까지)?(?:는|은|에는|에)?\s*"
+    r"(?:취소\s*(?:는|시|시에는|하면|하시면|하실\s*경우)?)?\s*"
+    r"(?:"
+    r"(?P<percent>\d{1,3})\s*(?:%|퍼센트|프로)\s*(?:를|을)?\s*(?P<refund>환불)?"
+    r"|(?P<material>재료비(?:를)?\s*(?:공제|제외|차감)\s*(?:후|하고)?\s*)?"
+    r"(?P<full>전액)\s*(?:을\s*)?환불"
+    r"|(?P<half>반액|절반)\s*(?:을\s*)?환불"
+    r"|(?P<none>환불\s*(?:은|이|도)?\s*"
+    r"(?:불가능?|없음|없어요|없습니다|안\s*돼요|안\s*됩니다|되지\s*않(?:아요|습니다)))"
+    r")\s*(?:이고|이며|되고|하고|돼요|됩니다|가능(?:해요|합니다)?|해\s*드려요|해\s*드립니다"
+    r"|해요|합니다|이에요|예요|입니다)?"
+)
+PLAIN: Final = re.compile(PLAIN_TEXT)
+FEE: Final = re.compile(r"공제|차감|위약금|수수료|취소료|제외|빼|떼")
+DOUBTFUL_TEXT: Final = (
+    r"공제|차감|위약금|수수료|취소료|제외|빼|떼|부터|이후|이내|이하|이상|최대|최소|안에|내에|내로|미만|초과|지나|넘"
+    r"|영업일|평일|근무일|주말|공휴|시간|변경|이월|연기|단[,\s]|다만|예외|협의|상황|사유|정규|단체"
+    r"|회원|수강권|또는"
+    r"|[~()\d]\s*원|[~()]|않|못|어렵|어려|\d\s*에서"
+)
+DOUBTFUL: Final = re.compile(DOUBTFUL_TEXT)
+MONEY_TEXT: Final = (
+    r"환불|취소|재료비|위약금|수수료|공제|차감|돌려|전액|반액|절반|영업일|평일|근무일|예외|제외|협의|%"
+    r"|\d\s*(?:만|천)?\s*원"
+)
+MONEY: Final = re.compile(MONEY_TEXT)
+EXCEPTION: Final = re.compile(r"^(?:단|다만|그러나|하지만|그런데)(?=[\s,])|^(?:단|다만)(?=[가-힣])")
+CHANGE: Final = re.compile(r"변경|이월|연기|보강|옮")
+JOINED: Final = re.compile(rf"(?<=[고며])\s+(?={DAY})")
 
 
 def squashed(text: str) -> str:
     """Compare wording without whitespace differences."""
-    return re.sub(r"\s+", "", text)
+    return re.sub(r"\s+", "", normalize("NFKC", text))
 
 
-def day_of(clause: str) -> int | None:
-    """Read how many days before class a clause speaks about."""
-    if match := DAYS.search(clause):
-        return int(match.group(1))
-    named = {"일주일 전": 7, "일주일전": 7, "전날": 1, "하루 전": 1, "당일": 0}
-    return next((days for word, days in named.items() if word in clause), None)
+def clauses(source: str) -> list[str]:
+    """Split at sentence ends and commas, but never inside a number or a bracket."""
+    text = normalize("NFKC", source)
+    parts: list[str] = [""]
+    depth = 0
+    for index, char in enumerate(text):
+        depth = max(depth + (char == "(") - (char == ")"), 0)
+        around = text[index - 1:index] + text[index + 1:index + 2]
+        inside_number = char in ".," and len(around) > 1 and around.isdigit()
+        if char in "\n;" or (char in ".,!" and depth == 0 and not inside_number):
+            parts.append("")
+        else:
+            parts[-1] += char
+    joined = [piece for part in parts for piece in JOINED.split(part)]
+    return [piece.strip()[:MAX_NOTE] for piece in joined if piece.strip()]
 
 
-def percent_of(clause: str) -> int | None:
-    """Read a refund share; a refusal wins over 전액."""
-    if match := PERCENT.search(clause):
-        value = int(match.group(1))
-        return value if value <= FULL else None
-    if NO_REFUND.search(clause):
-        return 0
-    if HALF.search(clause):
-        return 50
-    return FULL if "전액" in clause else None
+def days_of(clause: str) -> list[int]:
+    """List every day count a clause names."""
+    days: list[int] = []
+    for match in DAY_PATTERN.finditer(clause):
+        word = squashed(match.expand(r"\g<0>"))
+        named = DAY_WORDS.get(word)
+        if named is None:
+            number = int(re.sub(r"\D", "", word))
+            named = number * 7 if "주" in word else number
+        days.append(named)
+    return [day for day in dict.fromkeys(days) if day <= MAX_DAYS]
 
 
-def parse_policy(text: str) -> ExtractedPolicy:
-    """Read the plain clauses of a rule text; anything unclear goes to unread."""
-    rules: list[Rule] = []
-    unread: list[str] = []
-    late: LateRule | None = None
-    for part in CLAUSE.split(text):
-        clause = part.strip()[:MAX_NOTE]
-        if not clause:
-            continue
-        minutes = MINUTES.search(clause)
-        if minutes and ("지각" in clause or "노쇼" in clause or "늦" in clause):
-            value = int(minutes.group(1))
-            if late is None and 1 <= value <= MAX_LATE:
-                late = LateRule(late_minutes=value, note=clause)
-            continue
-        days, percent = day_of(clause), percent_of(clause)
-        if days is None and percent is None and not re.search(r"환불|취소|이월|재료비", clause):
-            continue
-        if days is None or percent is None or days > MAX_DAYS:
-            unread.append(clause)
-            continue
-        rules.append(Rule(
-            days_before=days, refund_percent=percent, deduct_material=bool(DEDUCT.search(clause)),
-            carry_over_allowed=bool(CARRY.search(clause)), note=clause,
-        ))
-    return ExtractedPolicy(rules=rules, late=late, unread=unread)
+def blocking(line: str) -> bool:
+    """Tell whether an unread line may change a refund; a rule only about changing dates does not."""
+    return MONEY.search(line) is not None or EXCEPTION.search(line) is not None or (
+        bool(days_of(line)) and CHANGE.search(line) is None
+    )
+
+
+def plain_rule(clause: str, *, fees: bool) -> Rule | None:
+    """Read a clause only when every word of it fits; fees marks text where a bare percent may be a fee."""
+    match = PLAIN.fullmatch(clause)
+    days = days_of(clause)
+    if match is None or len(days) != 1:
+        return None
+    found = match.groupdict()
+    if found["percent"] is not None:
+        percent = int(found["percent"])
+        if percent > FULL or (fees and found["refund"] is None):
+            return None
+    else:
+        percent = FULL if found["full"] else 50 if found["half"] else 0
+    if found["none"] and found["until"] and days[0] > 0:
+        return None
+    return Rule(
+        days_before=days[0], refund_percent=percent, note=clause,
+        deduct_material=found["material"] is not None,
+    )
+
+
+def late_of(clause: str) -> LateRule | None:
+    """Read a no-show threshold."""
+    minutes = [int(match.expand(r"\1")) for match in MINUTES.finditer(clause)]
+    if len(minutes) != 1 or not re.search(r"지각|노쇼|늦", clause) or not 1 <= minutes[0] <= MAX_LATE:
+        return None
+    return LateRule(late_minutes=minutes[0], note=clause)
+
+
+def shares_of(clause: str) -> set[int]:
+    """List every refund share a clause could mean."""
+    shares = {int(match.expand(r"\1")) for match in PERCENT.finditer(clause)}
+    if "전액" in clause:
+        shares.add(FULL)
+    if re.search(r"반액|절반|반만", clause):
+        shares.add(50)
+    if re.search(REFUSED, clause):
+        shares.add(0)
+    return shares
+
+
+def supported(rule: Rule, clause: str) -> bool:
+    """Accept a model's row only when its whole sentence names that one day and that one share."""
+    return (
+        rule.refund_percent is not None and DOUBTFUL.search(clause) is None
+        and days_of(clause) == [rule.days_before] and shares_of(clause) == {rule.refund_percent}
+        and not rule.deduct_material
+    )
+
+
+class Reading:
+    """Rows and unread lines gathered clause by clause; any contradiction makes a day undecided."""
+
+    def __init__(self) -> None:
+        """Start with nothing read."""
+        self.rules: dict[int, Rule] = {}
+        self.unread: list[str] = []
+        self.late: LateRule | None = None
+
+    def settle(self, rule: Rule) -> None:
+        """Add a decided row unless the same day already says something else."""
+        known = self.rules.get(rule.days_before)
+        if known is None:
+            self.rules[rule.days_before] = rule
+        elif (known.refund_percent, known.deduct_material) != (rule.refund_percent, rule.deduct_material):
+            self.doubt(rule.note or day_label(rule.days_before), [rule.days_before])
+
+    def doubt(self, line: str, days: Iterable[int]) -> None:
+        """Keep a line for the owner and take back any number its days had."""
+        self.unread.append(line)
+        for day in days:
+            self.rules[day] = Rule(days_before=day, note=line[:MAX_NOTE])
+
+    def read(self, clause: str, rows: Sequence[Rule], *, fees: bool) -> None:
+        """Read one clause with whatever a model said about it."""
+        late = late_of(clause)
+        if late is not None and not re.search(r"환불|취소|%", clause):
+            if self.late is None:
+                self.late = late
+            elif self.late.late_minutes != late.late_minutes:
+                self.unread.append(clause)
+            return
+        own = plain_rule(clause, fees=fees)
+        numbered = [row for row in rows if row.refund_percent is not None]
+        if own is not None and all(
+            (row.days_before, row.refund_percent) == (own.days_before, own.refund_percent) for row in numbered
+        ):
+            self.settle(own)
+        elif own is None and len(numbered) == 1 and not fees and supported(numbered[0], clause):
+            self.settle(numbered[0])
+        elif blocking(clause):
+            self.doubt(clause, [*days_of(clause), *(row.days_before for row in numbered)])
+        elif days_of(clause) or CHANGE.search(clause):
+            self.unread.append(clause)
+
+    def finish(self) -> Policy:
+        """Order the tiers; a later cancellation that refunds more than an earlier one is a misreading."""
+        ordered = sorted(self.rules.values(), key=lambda rule: rule.days_before, reverse=True)
+        decided = [rule for rule in ordered if rule.refund_percent is not None]
+        for earlier, later in pairwise(decided):
+            if (later.refund_percent or 0) > (earlier.refund_percent or 0):
+                for rule in (earlier, later):
+                    self.doubt(rule.note or day_label(rule.days_before), [rule.days_before])
+        ordered = sorted(self.rules.values(), key=lambda rule: rule.days_before, reverse=True)
+        return Policy(tuple(ordered), self.late, tuple(dict.fromkeys(self.unread)))
 
 
 def checked_policy(raw: ExtractedPolicy, source: str) -> Policy:
-    """Keep only rows quoting the source, one per day; unread day conditions become undecided rows."""
-    original = squashed(source)
-    rules: dict[int, Rule] = {}
-    unread = list(raw.unread)
-    for rule in raw.rules:
-        quoted = bool(rule.note.strip()) and squashed(rule.note) in original
-        if quoted and rule.days_before not in rules:
-            rules[rule.days_before] = rule
-        else:
-            unread.append(rule.note.strip() or f"{day_label(rule.days_before)} 조건")
-    for phrase in unread:
-        days = day_of(phrase)
-        if days is not None and days not in rules:
-            rules[days] = Rule(days_before=days, note=phrase[:MAX_NOTE])
-    late = raw.late if raw.late and squashed(raw.late.note) in original else None
-    ordered = tuple(sorted(rules.values(), key=lambda rule: rule.days_before, reverse=True))
-    return Policy(ordered, late, tuple(dict.fromkeys(unread)))
+    """Read every sentence of the source; the model may add a row only where its own sentence supports it."""
+    reading = Reading()
+    parts = clauses(source)
+    fees = any(FEE.search(part) and "재료비" not in part for part in parts)
+    used: set[int] = set()
+    for part in parts:
+        quoted = [
+            (index, row) for index, row in enumerate(raw.rules)
+            if squashed(row.note) and squashed(row.note) in squashed(part)
+        ]
+        used.update(index for index, _ in quoted)
+        reading.read(part, [row for _, row in quoted], fees=fees)
+    for index, row in enumerate(raw.rules):
+        if index not in used:
+            reading.doubt(row.note.strip() or f"{day_label(row.days_before)} 환불 조건", [row.days_before])
+    known = {squashed(part) for part in parts}
+    for line in raw.unread:
+        if not any(squashed(line) in part for part in known):
+            days = days_of(line) if blocking(line) else []
+            reading.unread.append(line)
+            for day in days:
+                _ = reading.rules.setdefault(day, Rule(days_before=day, note=line[:MAX_NOTE]))
+    return reading.finish()
+
+
+def parse_policy(text: str) -> ExtractedPolicy:
+    """Read a rule text without a model."""
+    policy = checked_policy(ExtractedPolicy(), text)
+    return ExtractedPolicy(rules=list(policy.rules), late=policy.late, unread=list(policy.unread))
 
 
 def policy_problems(text: str) -> list[str]:

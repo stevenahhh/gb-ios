@@ -92,6 +92,11 @@ struct BK06PolicyTable: View {
         } header: {
             Text(verbatim: title)
         }
+        if !version.unread.isEmpty {
+            CardSection("확인할 문장") {
+                ForEach(version.unread, id: \.self) { BK06PendingLabel(text: $0) }
+            }
+        }
         CardSection("지각 기준") {
             if let late = version.late {
                 BK06ValueRow(label: "\(late.lateMinutes)분 넘으면", value: "노쇼")
@@ -186,8 +191,18 @@ struct BK06PolicyEditor: View {
             Text("행을 누르면 고칠 수 있어요. 정하지 않은 조건은 계산하지 않고 사장님께 여쭤 봐요.")
         }
         if !unread.isEmpty {
-            CardSection("읽지 못한 문장") {
-                ForEach(unread, id: \.self) { BK06PendingLabel(text: $0) }
+            CardSection {
+                ForEach(unread, id: \.self) { line in
+                    VStack(alignment: .leading, spacing: 8) {
+                        BK06PendingLabel(text: line)
+                        Button("표에 반영했어요") { unread.removeAll { $0 == line } }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            } header: {
+                Text("확인할 문장")
+            } footer: {
+                Text("환불이나 취소에 관한 문장이 남아 있으면 금액을 정하지 않아요. 위 표를 고친 뒤 눌러 주세요.")
             }
         }
         CardSection("지각 기준") {

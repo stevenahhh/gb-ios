@@ -20,7 +20,6 @@ from b_k06_logic import (
     fallback_reply,
     kind_of,
     message_problems,
-    parse_policy,
     policy_problems,
     reply_check,
     without_identity,
@@ -85,7 +84,7 @@ async def read_policy(text: str) -> tuple[Policy, Source]:
     """Turn the owner's rule text into tiers that quote it."""
     output = await written(POLICY_SYSTEM, f"안내문:\n{text}", JSON_SAMPLING, policy_problems)
     if output is None:
-        return checked_policy(parse_policy(text), text), "rules"
+        return checked_policy(ExtractedPolicy(), text), "rules"
     return checked_policy(ExtractedPolicy.model_validate_json(output), text), "model"
 
 

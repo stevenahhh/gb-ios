@@ -114,9 +114,9 @@ def test_rows_that_do_not_quote_the_source_are_unread() -> None:
     )
     policy = checked_policy(raw, TEXT)
     assert [(rule.days_before, rule.refund_percent) for rule in policy.rules] == [
-        (7, None), (3, 100), (0, None),
+        (7, None), (3, None), (2, 50), (0, None),
     ]
-    assert policy.late is None
+    assert policy.late == LateRule(late_minutes=15, note="15분 넘게 늦으면 노쇼 처리")
 
 
 @pytest.mark.parametrize(
@@ -188,7 +188,9 @@ async def test_extract_uses_valid_model_output(client: AsyncClient, monkeypatch:
     _ = fake_chat(monkeypatch, json.dumps({"rules": [rule], "unread": ["하루 전 취소"]}))
     body = (await client.post("/policy/extract", json={"text": TEXT})).json()
     assert body["source"] == "model"
-    assert [(row["daysBefore"], row["refundPercent"]) for row in body["rules"]] == [(2, 50), (1, None)]
+    assert [(row["daysBefore"], row["refundPercent"]) for row in body["rules"]] == [
+        (3, 100), (2, 50), (1, None), (0, 0),
+    ]
 
 
 @pytest.mark.postgres
@@ -422,3 +424,25 @@ async def test_migration_adds_and_removes_only_its_own_tables(empty_database: As
     }
     await downgrade(empty_database, "0004")
     assert await tables() == before
+
+
+@pytest.mark.postgres
+async def test_an_unread_refund_clause_blocks_the_by_rule_amount(
+    examples: AsyncEngine, client: AsyncClient,
+) -> None:
+    line = "하루 전은 상황에 따라 환불"
+    body: Body = {
+        "rules": [{"daysBefore": 0, "refundPercent": 0}], "unread": [line, "당일 변경 불가"],
+        "sourceText": "당일 환불 불가, 하루 전은 상황에 따라 환불, 당일 변경 불가",
+    }
+    assert (await client.post("/policy/versions", json=body)).json()["unread"] == [line, "당일 변경 불가"]
+    ask: Body = {"bookingId": "booking-k06-small"}
+    quote = (await client.post("/cancellations/quote", json=ask)).json()
+    assert (quote["refund"], quote["unread"]) == (None, [line])
+    assert "unread_rule" in quote["warnings"]
+    decision: Body = {"decision": "by_rule", "expectedRevision": 0}
+    assert (await client.post("/cancellations/booking-k06-small/decision", json=decision)).status_code == 422
+    resolved = {**body, "unread": ["당일 변경 불가"]}
+    assert (await client.post("/policy/versions", json=resolved)).status_code == 201
+    quote = (await client.post("/cancellations/quote", json=ask)).json()
+    assert (quote["unread"], "unread_rule" in quote["warnings"]) == ([], False)
