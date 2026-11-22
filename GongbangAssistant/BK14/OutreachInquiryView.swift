@@ -13,6 +13,8 @@ struct OutreachForm {
     var distanceKm: Int?
     /// Names of the fields still holding the assistant's reading.
     var read: Set<String> = []
+    /// Names of the fields whose value was read without confidence.
+    var unsure: Set<String> = []
 
     init() {}
 
@@ -25,6 +27,7 @@ struct OutreachForm {
         headcount = source.headcount
         signals = extraction.signals
         read = Set(extraction.confidence.filter { $0.value == .high }.keys)
+        unsure = Set(extraction.confidence.filter { $0.value == .low }.keys)
     }
 
     /// What the owner confirmed as the total travel time one way.
@@ -257,7 +260,7 @@ struct OutreachWarningCard: View {
 /// A field that says whether the assistant read it or the owner still has to check it.
 private struct FieldNote: View {
     let isRead: Bool
-    let isEmpty: Bool
+    let needsCheck: Bool
 
     var body: some View {
         if isRead {
@@ -267,7 +270,7 @@ private struct FieldNote: View {
             }
             .font(.subheadline)
             .foregroundStyle(Color.secondaryText)
-        } else if isEmpty {
+        } else if needsCheck {
             Text("확인 필요")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
@@ -313,7 +316,7 @@ struct OutreachFieldsSection: View {
     private func row<Content: View>(_ name: String, isEmpty: Bool, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             content()
-            FieldNote(isRead: form.read.contains(name), isEmpty: isEmpty)
+            FieldNote(isRead: form.read.contains(name), needsCheck: isEmpty || form.unsure.contains(name))
         }
     }
 
@@ -324,6 +327,7 @@ struct OutreachFieldsSection: View {
         } set: {
             form[keyPath: path] = $0
             form.read.remove(name)
+            form.unsure.remove(name)
         }
     }
 

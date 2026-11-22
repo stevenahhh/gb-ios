@@ -162,6 +162,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         read("읽기 실패 시험 문의 30명", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["outreach.readFailed"].waitForExistence(timeout: 15))
         XCTAssertEqual(app.textFields["outreach.headcount"].value as? String, "30")
+        XCTAssertTrue(element(labelled: "확인 필요", in: app).exists)
         keepScreenshot(of: app, named: "k14-10-read-failed")
     }
 
