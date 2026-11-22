@@ -11,10 +11,18 @@ dependencies = [
     "anyio>=4",
     "alembic>=1.14",
     "tzdata>=2025.1",
+    "defusedxml>=0.7.1",
+    "bcrypt>=4.2",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.14", "basedpyright>=1.30", "httpx2>=0.27"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.14",
+    "basedpyright>=1.30",
+    "httpx2>=0.27",
+    "types-defusedxml>=0.7.0.20260504",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -39,4 +47,4 @@ ignore = ["D203", "D213", "CPY001"]
 
 [tool.basedpyright]
 typeCheckingMode = "all"
-include = ["*.py", "migrations/env.py"]
+include = ["*.py", "collectors", "migrations/env.py"]
