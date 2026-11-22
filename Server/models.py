@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime
 
+from pydantic import JsonValue
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -85,7 +86,7 @@ class ChannelRow(Entity, Base):
 
     __tablename__: str = "channels"
     __table_args__: TableArgs = (
-        CheckConstraint("kind IN ('instagram', 'naver_store', 'naver_booking')"),
+        CheckConstraint("kind IN ('instagram', 'naver_store', 'naver_booking', 'naver_blog')"),
         CheckConstraint("connection IN ('not_connected', 'connected')"),
         CheckConstraint(REVISION_CHECK),
     )
@@ -293,3 +294,67 @@ class InquiryRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=utc_now,
     )
+
+
+class CollectorSourceRow(Base):
+    """One external source: owner-visible setup values and its last known state, never credentials."""
+
+    __tablename__: str = "collector_sources"
+    __table_args__: TableArgs = (
+        CheckConstraint("state IN ('collecting', 'idle', 'needs_connection', 'error')"),
+    )
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    config: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, server_default="{}")
+    state: Mapped[str] = mapped_column(Text)
+    message: Mapped[str | None] = mapped_column(Text)
+    last_run_at: Mapped[datetime | None] = timestamp(nullable=True)
+    last_collected_at: Mapped[datetime | None] = timestamp(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=utc_now,
+    )
+
+
+class CollectorRunRow(Base):
+    """One collection attempt; the error is a short code without response text."""
+
+    __tablename__: str = "collector_runs"
+    __table_args__: TableArgs = (
+        CheckConstraint("status IN ('running', 'succeeded', 'failed')"),
+        CheckConstraint("collected >= 0 AND inserted >= 0 AND mapped >= 0"),
+        Index("ix_collector_runs_source_started", "source_id", "started_at"),
+    )
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("collector_sources.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(Text)
+    started_at: Mapped[datetime] = timestamp()
+    finished_at: Mapped[datetime | None] = timestamp(nullable=True)
+    collected: Mapped[int] = mapped_column(Integer, server_default="0")
+    inserted: Mapped[int] = mapped_column(Integer, server_default="0")
+    mapped: Mapped[int] = mapped_column(Integer, server_default="0")
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class CollectedItemRow(Base):
+    """One external item, stored once per source; mapped means the business tables reflect it."""
+
+    __tablename__: str = "collected_items"
+    __table_args__: TableArgs = (
+        UniqueConstraint("source_id", "external_id"),
+        CheckConstraint("kind IN ('post', 'comment', 'insight', 'order', 'inquiry')"),
+        Index("ix_collected_items_source_collected", "source_id", "collected_at"),
+        Index("ix_collected_items_unmapped", "source_id", "mapped"),
+    )
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("collector_sources.id", ondelete="RESTRICT"))
+    external_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+    author: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = timestamp(nullable=True)
+    raw: Mapped[dict[str, JsonValue]] = mapped_column(JSONB)
+    mapped: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    collected_at: Mapped[datetime] = timestamp()
+    updated_at: Mapped[datetime] = timestamp()
