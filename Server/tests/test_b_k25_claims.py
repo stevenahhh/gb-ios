@@ -16,20 +16,17 @@ from b_k25_claims import (
     ModelClaim,
     RuleFact,
     SessionFact,
-    amount_spans,
     check_numbers,
     claim_to_json,
     claims_from_json,
-    days_named,
     deferral_only,
     evaluate,
-    number_tokens,
     parse_model_claims,
     recheck,
-    seat_spans,
     support_of,
 )
 from b_k25_interview import is_unsure, number_value
+from b_k25_numbers import amount_spans, days_named, number_tokens, seat_spans
 from display import SEOUL
 
 TODAY = date(2026, 11, 18)
@@ -160,8 +157,8 @@ def test_unasked_price_locks_even_when_the_rule_supports_it() -> None:
 
 def test_customer_amount_supports_a_price_only_when_no_price_is_known() -> None:
     quiet = ledger(cards=(), question="예산은 1인 3만 원이에요.", asked="예산은 1인 3만 원이에요.")
-    assert check_numbers("1인 30,000원이면 괜찮아요.", quiet)[0].source == "customer"
-    known = claim("1인 30,000원이면 괜찮아요.")
+    assert check_numbers("예산은 1인 30,000원이라고 말씀하셨네요.", quiet)[0].source == "customer"
+    known = claim("예산은 1인 30,000원이라고 말씀하셨네요.")
     assert known.ledger_value == "38,000원"
 
 
@@ -221,9 +218,10 @@ def test_recheck_keeps_statements_that_remain_and_reads_numbers_again() -> None:
     draft = "주차 안내는 아래에 있어요. 1인 35,000원이에요."
     locked = recheck(draft, ledger(), kept, extraction_ok=True)
     assert (locked.lock, [item.text for item in locked.claims]) == ("locked", ["35,000원", "주차 안내"])
-    corrected = recheck("주차 안내는 아래에 있어요. 1인 38,000원이에요.", ledger(), kept, extraction_ok=True)
-    assert corrected.lock == "clear"
-    assert recheck(draft, ledger(), kept, extraction_ok=False).lock == "unchecked"
+    fixed = "주차 안내는 아래에 있어요. 1인 38,000원이에요."
+    assert recheck(fixed, ledger(), kept, extraction_ok=True).lock == "clear"
+    assert recheck(fixed, ledger(), kept, extraction_ok=False).lock == "unchecked"
+    assert recheck(draft, ledger(), kept, extraction_ok=False).lock == "locked"
 
 
 def test_claims_round_trip_through_json() -> None:

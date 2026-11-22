@@ -40,7 +40,7 @@ MAX_REASON_CHARS: Final = 200
 class ClaimView(ApiModel):
     """One number or statement of a draft and what supports it."""
 
-    kind: Literal["price", "seats", "date", "deposit", "fact", "rule"]
+    kind: Literal["price", "seats", "date", "time", "deposit", "fact", "rule"]
     text: str
     value: str
     source: Literal["ledger", "price_list", "fact_card", "owner_rule", "customer", "none"]
@@ -73,6 +73,7 @@ class GroundedDraft(ApiModel):
     claims: list[ClaimView]
     lock: Lock
     mismatch_count: int
+    checked_kinds: list[str]
     judgment: JudgmentView | None = None
 
 
@@ -84,16 +85,18 @@ class ReplyState(ApiModel):
     claims: list[ClaimView]
     lock: Lock
     mismatch_count: int
+    checked_kinds: list[str]
     judgment: JudgmentView | None
     override_reason: str | None
 
 
 class Verification(ApiModel):
-    """The check of a text the owner is editing."""
+    """The check of a text the owner is editing, and which kinds of number it compared."""
 
     claims: list[ClaimView]
     lock: Lock
     mismatch_count: int
+    checked_kinds: list[str]
 
 
 class VerifyRequest(ApiRequest):
@@ -167,7 +170,7 @@ def verification(evaluation: Evaluation) -> Verification:
     """Shape a check for the app."""
     return Verification(
         claims=[claim_view(claim) for claim in evaluation.claims], lock=evaluation.lock,
-        mismatch_count=mismatches(evaluation.claims),
+        mismatch_count=mismatches(evaluation.claims), checked_kinds=list(evaluation.checked),
     )
 
 
@@ -221,17 +224,19 @@ async def reply_state(inquiry_id: str, db: Session, now: Now) -> ReplyState:
         raise HTTPException(404, "inquiry not found")
     stored = await db.get(GroundingRow, inquiry_id)
     judgment = await open_judgment_view(db, inquiry)
-    if stored is None or stored.generated_draft is None:
-        return ReplyState(
-            inquiry_id=inquiry_id, arm=None if stored is None else arm_of(stored), claims=[],
-            lock="unchecked", mismatch_count=0, judgment=judgment,
-            override_reason=None if stored is None else stored.override_reason,
-        )
-    evaluation = check_final(inquiry.draft, await load_ledger(db, inquiry, now), stored)
-    checked = verification(evaluation)
+    checked = verification(check_final(inquiry.draft, await load_ledger(db, inquiry, now), stored))
     return ReplyState(
-        inquiry_id=inquiry_id, arm=arm_of(stored), claims=checked.claims, lock=checked.lock,
-        mismatch_count=checked.mismatch_count, judgment=judgment, override_reason=stored.override_reason,
+        inquiry_id=inquiry_id, arm=None if stored is None else arm_of(stored), claims=checked.claims,
+        lock=checked.lock, mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
+        judgment=judgment, override_reason=None if stored is None else stored.override_reason,
+    )
+
+
+def unwritten(arm: Arm, draft: str = "", judgment: JudgmentView | None = None) -> GroundedDraft:
+    """Answer without a check: the control arm's draft, or a question handed to the owner."""
+    return GroundedDraft(
+        arm=arm, draft=draft, claims=[], lock="unchecked", mismatch_count=0, checked_kinds=[],
+        judgment=judgment,
     )
 
 
@@ -251,21 +256,18 @@ async def write_draft(inquiry_id: str, now: Now) -> GroundedDraft:
     if context.arm == "control":
         plain = await write_plain_draft(context)
         await save_plain_draft(context, plain)
-        return GroundedDraft(arm="control", draft=plain, claims=[], lock="unchecked", mismatch_count=0)
+        return unwritten("control", draft=plain)
     route = await route_inquiry(context)
     if route.kind == "judgment":
         judgment = await open_judgment(context, route.issue)
-        return GroundedDraft(
-            arm="grounded", draft="", claims=[], lock="unchecked", mismatch_count=0,
-            judgment=judgment_view(judgment, context.inquiry),
-        )
+        return unwritten("grounded", judgment=judgment_view(judgment, context.inquiry))
     reply = await write_grounded_draft(context)
     await save_draft(context, reply)
     await close_open_judgments(context)
     checked = verification(reply.evaluation)
     return GroundedDraft(
         arm="grounded", draft=reply.draft, claims=checked.claims, lock=checked.lock,
-        mismatch_count=checked.mismatch_count,
+        mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
     )
 
 

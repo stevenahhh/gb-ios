@@ -13,9 +13,9 @@ from pydantic import Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from b_k25_claims import number_tokens
 from b_k25_interview import is_unsure, number_value
 from b_k25_judgments import router as judgment_router
+from b_k25_numbers import number_tokens
 from b_k25_prompts import (
     INTERVIEW_SAMPLING,
     FactField,

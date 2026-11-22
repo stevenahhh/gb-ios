@@ -9,7 +9,7 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from b_k25_claims import Ledger, RuleFact, number_tokens
+from b_k25_claims import Ledger, RuleFact
 from b_k25_engine import (
     Arm,
     Context,
@@ -19,6 +19,7 @@ from b_k25_engine import (
     upsert_grounding,
     write_grounded_draft,
 )
+from b_k25_numbers import number_tokens
 from b_k25_prompts import (
     RULE_SAMPLING,
     RuleSuggestion,
@@ -30,7 +31,6 @@ from b_k25_replies import (
     ClaimView,
     JudgmentView,
     judgment_view,
-    mismatches,
     verification,
 )
 from b_k25_rules import card_for_rule, save_rule
@@ -80,6 +80,7 @@ class JudgmentAnswer(ApiModel):
     claims: list[ClaimView]
     lock: Literal["clear", "locked", "unchecked"]
     mismatch_count: int
+    checked_kinds: list[str]
 
 
 def class_of_question(ledger: Ledger) -> str | None:
@@ -202,7 +203,7 @@ async def answer_judgment(judgment_id: str, body: AnswerRequest, now: Now) -> Ju
     return JudgmentAnswer(
         judgment_id=judgment_id, rule_text=rule_text, rule_id=rule_id, arm=context.arm,
         draft=reply.draft, claims=checked.claims, lock=checked.lock,
-        mismatch_count=mismatches(reply.evaluation.claims),
+        mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
     )
 
 

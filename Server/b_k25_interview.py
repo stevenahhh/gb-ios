@@ -3,42 +3,19 @@
 import re
 from typing import Final
 
-from b_k25_claims import NATIVE_COUNTS
+from b_k25_numbers import NATIVE, whole_number
 from b_k25_prompts import FactField
 
-NUMBER: Final = rf"\d+(?:\.\d+)?|{'|'.join(NATIVE_COUNTS)}|[일이삼사오육칠팔구십백]+"
+NUMBER: Final = rf"\d+(?:\.\d+)?|{NATIVE}|[일이삼사오육칠팔구십백]+"
 HOURS: Final = re.compile(
     rf"(?P<h>{NUMBER})\s*시간(?:\s*(?P<half>반)|\s*(?P<m>{NUMBER})\s*분)?",
 )
 MINUTES: Final = re.compile(rf"(?<![가-힣\d])(?P<m>{NUMBER})\s*분")
 PEOPLE: Final = re.compile(rf"(?P<n>{NUMBER})\s*(?:명|분|인|사람)")
 BARE_PEOPLE: Final = re.compile(r"\d{1,3}")
-SINO: Final[dict[str, int]] = {
-    "일": 1, "이": 2, "삼": 3, "사": 4, "오": 5, "육": 6, "칠": 7, "팔": 8, "구": 9,
-}
 UNSURE: Final = re.compile(r"^(?:음+|어+|글쎄요?|잘?\s*모르겠어요|모르겠습니다|몰라요|모름)[\s.…!?]*$")
 MAX_MINUTES: Final = 1440
 MAX_PEOPLE: Final = 1000
-
-
-def sino(text: str) -> int:
-    """Read Sino-Korean numbers up to 999, such as 구십 or 백이십."""
-    total = current = 0
-    for letter in text:
-        if letter in SINO:
-            current = SINO[letter]
-        elif letter == "십":
-            total, current = total + (current or 1) * 10, 0
-        elif letter == "백":
-            total, current = total + (current or 1) * 100, 0
-    return total + current
-
-
-def whole_number(text: str) -> int:
-    """Read 3, 세, or 삼 as a whole number."""
-    if text.isdigit():
-        return int(text)
-    return NATIVE_COUNTS.get(text) or sino(text)
 
 
 def parse_minutes(answer: str) -> int | None:

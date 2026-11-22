@@ -23,6 +23,8 @@ RIGHT_CLAIMS: Final = (
     '{"kind":"deposit","text":"예약금은 25,000원","value":"25000"}]'
 )
 
+UNUSABLE_CLAIMS: Final = "죄송하지만 JSON을 만들 수 없어요."
+
 
 @pytest.fixture
 def model(monkeypatch: pytest.MonkeyPatch) -> ScriptedModel:
@@ -155,17 +157,62 @@ async def test_a_stale_revision_or_blank_draft_is_refused(
     assert blank.status_code == 422
 
 
-async def test_extraction_failure_leaves_the_lock_open_and_says_so(
+async def test_a_known_mismatch_locks_even_when_the_extraction_failed(
     database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
 ) -> None:
     await add_inquiry(database, GROUNDED)
-    model.drafts, model.claims = [WRONG_DRAFT], "죄송하지만 JSON을 만들 수 없어요."
+    model.drafts, model.claims = [WRONG_DRAFT], UNUSABLE_CLAIMS
     body = (await client.post(f"/grounded-replies/{GROUNDED}/draft")).json()
-    assert (body["lock"], body["mismatchCount"]) == ("unchecked", 2)
+    assert (body["lock"], body["mismatchCount"]) == ("locked", 2)
+    decision = {"decision": "approve", "draft": body["draft"], "expectedRevision": 0}
+    blocked = await client.post(f"/grounded-replies/{GROUNDED}/decision", json=decision)
+    assert blocked.status_code == 409
+    passed = await client.post(f"/grounded-replies/{GROUNDED}/decision", json={
+        **decision, "overrideReason": "손님과 따로 정했어요",
+    })
+    assert passed.status_code == 200
+
+
+async def test_extraction_failure_without_a_mismatch_stays_open_and_unchecked(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    model.drafts, model.claims = [RIGHT_DRAFT], UNUSABLE_CLAIMS
+    body = (await client.post(f"/grounded-replies/{GROUNDED}/draft")).json()
+    assert (body["lock"], body["mismatchCount"]) == ("unchecked", 0)
     approved = await client.post(f"/grounded-replies/{GROUNDED}/decision", json={
         "decision": "approve", "draft": body["draft"], "expectedRevision": 0,
     })
     assert approved.status_code == 200
+
+
+async def test_the_state_locks_a_hand_written_reply_the_server_would_refuse(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    model.route = '{"route":"judgment","issue":"6인 단체, 금요일, 견적 기준?"}'
+    _ = await client.post(f"/grounded-replies/{GROUNDED}/draft")
+    wrong = "예약금은 30,000원이에요."
+    edited = await client.patch(f"/inquiries/{GROUNDED}/draft", json={"draft": wrong, "expectedRevision": 0})
+    assert edited.status_code == 200
+    state = (await client.get(f"/grounded-replies/{GROUNDED}")).json()
+    assert (state["lock"], state["mismatchCount"], state["checkedKinds"]) == ("locked", 1, ["예약금"])
+    refused = await client.post(f"/grounded-replies/{GROUNDED}/decision", json={
+        "decision": "approve", "draft": wrong, "expectedRevision": 1,
+    })
+    assert refused.status_code == 409
+
+
+async def test_the_answer_says_which_kinds_of_number_were_compared(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    model.drafts, model.claims = [RIGHT_DRAFT], RIGHT_CLAIMS
+    written = (await client.post(f"/grounded-replies/{GROUNDED}/draft")).json()
+    assert written["checkedKinds"] == ["남은 자리", "예약금"]
+    thanks = {"draft": "문의 주셔서 감사해요."}
+    verified = (await client.post(f"/grounded-replies/{GROUNDED}/verify", json=thanks)).json()
+    assert (verified["checkedKinds"], verified["claims"]) == ([], [])
 
 
 async def test_unusable_model_drafts_fall_back_to_the_ledger(

@@ -28,15 +28,14 @@ from b_k25_claims import (
     SessionFact,
     claim_to_json,
     claims_from_json,
-    days_named,
     deferral_only,
     evaluate,
     mentions,
     parse_model_claims,
     recheck,
-    seat_spans,
 )
 from b_k25_ledger import load_ledger
+from b_k25_numbers import days_named, seat_spans
 from b_k25_prompts import (
     EXTRACT_SAMPLING,
     NAME_PLACEHOLDER,
