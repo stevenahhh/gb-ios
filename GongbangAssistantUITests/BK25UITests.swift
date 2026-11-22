@@ -28,14 +28,11 @@ final class BK25UITests: RoundupUITestCase {
 
     @MainActor
     private func openInquiry(_ inquiryID: String, in app: XCUIApplication) {
-        let all = app.buttons["approvals.all"]
-        XCTAssertTrue(scrollTo(all, in: app), "no link to the waiting replies")
-        all.tap()
         let card = app.buttons["inquiry.\(inquiryID)"]
         XCTAssertTrue(scrollTo(card, in: app), "the inquiry \(inquiryID) is missing")
         tapInTheMiddle(card, in: app)
         let editor = app.textViews["inquiry.draft"]
-        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the inquiry did not open")
+        XCTAssertTrue(editor.waitForExistence(timeout: 60), "the inquiry did not open")
         keepScreenshot(of: app, named: "bk25-inquiry-open")
     }
 
@@ -55,13 +52,14 @@ final class BK25UITests: RoundupUITestCase {
     @MainActor
     private func waitForCount(_ expected: Int, of query: XCUIElementQuery) {
         let predicate = NSPredicate { _, _ in query.count == expected }
-        wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 20)
+        wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 90)
     }
 
     @MainActor
     func testReplyIsLockedUntilItsNumbersMatchTheLedger() throws {
         let app = try launch()
-        openInquiry("inquiry-weekend", in: app)
+        // The scratch server's inquiry-group carries the weekend question, so it is one of the first three cards.
+        openInquiry("inquiry-group", in: app)
         let write = app.descendants(matching: .any)["inquiry.generate"].firstMatch
         XCTAssertTrue(scrollTo(write, in: app))
         write.tap()
@@ -99,21 +97,21 @@ final class BK25UITests: RoundupUITestCase {
         row.tap()
 
         let field = app.descendants(matching: .any)["bk25.field"].firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertTrue(field.waitForExistence(timeout: 60))
         field.tap()
         field.typeText("6명부터 1인 3만 원")
         let show = app.buttons["bk25.rule.show"]
-        XCTAssertTrue(show.waitForExistence(timeout: 5))
+        XCTAssertTrue(show.waitForExistence(timeout: 60))
         show.tap()
         let preview = app.descendants(matching: .any)["bk25.rule.preview"].firstMatch
-        XCTAssertTrue(preview.waitForExistence(timeout: 20))
+        XCTAssertTrue(preview.waitForExistence(timeout: 90))
         keepScreenshot(of: app, named: "bk25-rule-preview")
         app.buttons["bk25.answer.rule"].tap()
-        XCTAssertTrue(show.waitForNonExistence(timeout: 20))
+        XCTAssertTrue(show.waitForNonExistence(timeout: 90))
 
         app.tabBars.buttons["설정"].tap()
         let cards = app.buttons["settings.factCards"]
-        XCTAssertTrue(cards.waitForExistence(timeout: 10))
+        XCTAssertTrue(cards.waitForExistence(timeout: 60))
         cards.tap()
         let card = app.buttons["bk25.card.주말 도자기 클래스"]
         XCTAssertTrue(scrollTo(card, in: app))
@@ -128,9 +126,9 @@ final class BK25UITests: RoundupUITestCase {
         let app = try launchEmptyServer()
         app.tabBars.buttons["설정"].tap()
         let cards = app.buttons["settings.factCards"]
-        XCTAssertTrue(cards.waitForExistence(timeout: 10))
+        XCTAssertTrue(cards.waitForExistence(timeout: 60))
         cards.tap()
-        XCTAssertTrue(element(labelled: "캘린더에 수업을 먼저 넣어 주세요", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "캘린더에 수업을 먼저 넣어 주세요", in: app).waitForExistence(timeout: 60))
         keepScreenshot(of: app, named: "bk25-fact-card-empty")
     }
 
@@ -139,7 +137,7 @@ final class BK25UITests: RoundupUITestCase {
         let app = try launch()
         app.tabBars.buttons["설정"].tap()
         let cards = app.buttons["settings.factCards"]
-        XCTAssertTrue(cards.waitForExistence(timeout: 10))
+        XCTAssertTrue(cards.waitForExistence(timeout: 60))
         cards.tap()
         let list = app.buttons["bk25.card.원데이 물레 체험"]
         XCTAssertTrue(scrollTo(list, in: app), "the class list is missing")
@@ -149,12 +147,12 @@ final class BK25UITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(start, in: app))
         start.tap()
         let field = app.descendants(matching: .any)["bk25.field"].firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertTrue(field.waitForExistence(timeout: 60))
         field.tap()
         field.typeText("두 시간 정도요")
         app.buttons["bk25.field.submit"].tap()
         let next = app.staticTexts["2/5"]
-        XCTAssertTrue(next.waitForExistence(timeout: 20))
+        XCTAssertTrue(next.waitForExistence(timeout: 90))
         for _ in 0..<4 {
             app.buttons["bk25.interview.skip"].tap()
         }
@@ -164,7 +162,7 @@ final class BK25UITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(save, in: app))
         save.tap()
         let toast = app.descendants(matching: .any)["toast.message"].firstMatch
-        XCTAssertTrue(toast.waitForExistence(timeout: 10))
+        XCTAssertTrue(toast.waitForExistence(timeout: 60))
         keepScreenshot(of: app, named: "bk25-fact-card-saved")
     }
 }

@@ -47,17 +47,6 @@ struct BK25GroundingSection: View {
             } footer: {
                 Text("숫자는 예약 장부와 사실 카드, 내 규칙과 하나씩 맞춰 봐요. 비서가 틀릴 수 있으니 보내기 전에 한 번 더 읽어 주세요.")
             }
-            .confirmationDialog("장부와 다른 그대로 보낼까요?", isPresented: $isAskingReason, titleVisibility: .visible) {
-                ForEach(Self.overrideReasons, id: \.self) { reason in
-                    Button(reason) {
-                        grounding.overrideReason = reason
-                        approve()
-                    }
-                }
-                Button("취소", role: .cancel) {}
-            } message: {
-                Text("이유를 남기면 이번 답장만 그대로 보내고, 다음 초안부터는 다시 장부와 맞춰 봐요.")
-            }
         }
     }
 
@@ -79,16 +68,16 @@ struct BK25GroundingSection: View {
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                     .accessibilityIdentifier("bk25.judgment.answer")
+                    .sheet(isPresented: $isAnswering) {
+                        BK25JudgmentSheet(judgment: judgment) { answer in
+                            grounding.apply(answer)
+                            if !answer.draft.isEmpty { showDraft(answer.draft) }
+                        }
+                    }
             }
             .padding(.vertical, 4)
         } header: {
             Text("판단 필요")
-        }
-        .sheet(isPresented: $isAnswering) {
-            BK25JudgmentSheet(judgment: judgment) { answer in
-                grounding.apply(answer)
-                if !answer.draft.isEmpty { showDraft(answer.draft) }
-            }
         }
     }
 
@@ -116,6 +105,17 @@ struct BK25GroundingSection: View {
                             .accessibilityLabel("더 보기")
                     }
                     .accessibilityIdentifier("bk25.more")
+                }
+                .confirmationDialog("장부와 다른 그대로 보낼까요?", isPresented: $isAskingReason, titleVisibility: .visible) {
+                    ForEach(Self.overrideReasons, id: \.self) { reason in
+                        Button(reason) {
+                            grounding.overrideReason = reason
+                            approve()
+                        }
+                    }
+                    Button("취소", role: .cancel) {}
+                } message: {
+                    Text("이유를 남기면 이번 답장만 그대로 보내고, 다음 초안부터는 다시 장부와 맞춰 봐요.")
                 }
                 .accessibilityIdentifier("bk25.locked")
             case .unchecked:
