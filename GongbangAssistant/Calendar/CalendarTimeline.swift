@@ -346,7 +346,8 @@ struct DaySection: View {
     }
 }
 
-/// The day's own 일정 추가: under the message on a day with no timeline, and in `DayAddBar` on a day that has one.
+/// The day's own 일정 추가, a capsule on the calendar's fill like the 오늘 pill: under the message on a day with no
+/// timeline, and in `DayAddBar` on a day that has one.
 struct AddEventButton: View {
     let identifier: String
     var fillsWidth = false
@@ -354,18 +355,25 @@ struct AddEventButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text("일정 추가")
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(CalendarTokens.label)
-                .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
-                .contentShape(.rect)
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .accessibilityHidden(true)
+                Text("일정 추가")
+            }
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(CalendarTokens.label)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
+            .background(CalendarTokens.fill, in: .capsule)
+            .contentShape(.capsule)
         }
+        .buttonStyle(PressDimStyle())
         .accessibilityIdentifier(identifier)
     }
 }
 
 /// 일정 추가 for a day that has a timeline. It sits in the bottom safe area, so it is in reach without scrolling
-/// and the last row ends above it. The whole bar is the button.
+/// and the last row ends above it.
 struct DayAddBar: View {
     let add: () -> Void
 
@@ -373,6 +381,8 @@ struct DayAddBar: View {
         VStack(spacing: 0) {
             Rectangle().fill(CalendarTokens.separator).frame(height: 1)
             AddEventButton(identifier: "calendar.day.add", fillsWidth: true, action: add)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
         }
         .background(CalendarTokens.background)
     }
