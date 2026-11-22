@@ -16,8 +16,8 @@ struct BK06CancellationView: View {
     var body: some View {
         List {
             CardSection {
-                KoreanTextEditor(text: $message)
-                    .frame(minHeight: 96)
+                TextField("손님이 보낸 글을 붙여넣어 주세요", text: $message, axis: .vertical)
+                    .lineLimit(4...12)
                     .accessibilityLabel("손님 메시지")
                     .accessibilityIdentifier("k06.message")
                 PasteButton(payloadType: String.self) { values in

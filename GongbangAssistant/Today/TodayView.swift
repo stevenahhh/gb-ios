@@ -70,10 +70,10 @@ struct TodayView: View {
                 MetricStrip(metrics: metrics(today))
             }
 
-            ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
             #if BUILD_B
             BK06TodaySection()
             #endif
+            ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
 
             Section {
                 Picker("보기", selection: $segment) {

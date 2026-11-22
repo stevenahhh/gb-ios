@@ -76,8 +76,9 @@ extension RoundupAPI {
     static func k06Cards() async throws -> BK06Cards {
         #if DEBUG
         // Demos and screenshots move only this read's clock, for example to 15 minutes after a class starts.
-        if let at = ProcessInfo.processInfo.environment["ROUNDUP_K06_AT"], !at.isEmpty {
-            return try await get("k06/cards", query: ["at": at])
+        // Sent in UTC, because a query leaves the "+" of an offset unescaped and the server reads it as a space.
+        if let at = ProcessInfo.processInfo.environment["ROUNDUP_K06_AT"].flatMap(BK06Format.date) {
+            return try await get("k06/cards", query: ["at": at.ISO8601Format()])
         }
         #endif
         return try await get("k06/cards")

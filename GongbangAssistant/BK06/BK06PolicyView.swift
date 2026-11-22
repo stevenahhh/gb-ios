@@ -37,7 +37,6 @@ struct BK06PolicyView: View {
                     BK06PrimaryButton(title: "규정 말하기", identifier: "k06.policy.start") { isEditing = true }
                         .fixedSize()
                 }
-                .accessibilityIdentifier("k06.policy.empty")
             }
         }
         .navigationTitle("취소·환불 규정")
@@ -142,8 +141,8 @@ struct BK06PolicyEditor: View {
     var body: some View {
         List {
             CardSection {
-                KoreanTextEditor(text: $text)
-                    .frame(minHeight: 120)
+                TextField("3일 전까지 전액 환불, 당일 환불 불가처럼 적어 주세요", text: $text, axis: .vertical)
+                    .lineLimit(5...14)
                     .accessibilityLabel("규정 문장")
                     .accessibilityIdentifier("k06.policy.text")
             } header: {
