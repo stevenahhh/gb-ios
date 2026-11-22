@@ -6,7 +6,7 @@ from typing import Final
 
 CLAUSE: Final = re.compile(r"[.!?\n,]+")
 # Nouns that already mean paying ahead; without any verb they still count.
-STRONG_PAY: Final = re.compile(r"선입금|선결제|선납(?!품)|대납(?!품)")
+STRONG_PAY: Final = re.compile(r"선\s*입금|선\s*결제|선납(?!품)|대납(?!품)")
 # These also appear in ordinary procurement text, so they count only when the owner is asked to act.
 WEAK_PAY: Final = re.compile(
     (
@@ -16,7 +16,20 @@ WEAK_PAY: Final = re.compile(
         r"(?=\s*[을를]?\s*(?:해|하|부탁|후|주|바랍|바라|요청))"
     ),
 )
-PROXY: Final = re.compile(r"대리\s*구매|대신\s*(?:구매|구입|주문|사\s*(?:주|달))")
+# "대신 사용", "대신 사진" and similar nouns are not buying; every other form of 사다 is.
+PROXY: Final = re.compile(
+    (
+        r"대리\s*구매|대신\s*(?:구매|구입|주문|결제|지불|송금|입금|납부|"
+        r"사(?![용진람장과무업회전고인실정항]))"
+    ),
+)
+# The workshop named as the one who pays first; with 께 or no particle the verb still decides.
+OWNER_NAMED: Final = re.compile(
+    r"(?:공방|사장님|선생님|강사님)[^.\n]{0,10}(?:먼저|선)\s*(?:입금|결제|송금|구매)",
+)
+OWNER_PAYS: Final = re.compile(
+    r"(?:공방|사장님|선생님|강사님)(?:이|가|께서|에서|측에서)\s*[^.\n]{0,10}?(?:먼저|미리|선)\s*(?:입금|결제|송금|구매)",
+)
 DESIGNATED: Final = re.compile(r"지정(?:한|된|해\s*드린)?\s*(?:업체|거래처)")
 PAYER: Final = re.compile(
     (
@@ -24,7 +37,12 @@ PAYER: Final = re.compile(
         r"(?:에서|가|이)\s*(?:먼저|미리|전액|직접)?\s*$"
     ),
 )
-DEMAND: Final = re.compile(r"\s*[을를은]?\s*(?:요청|부탁|요구|받|해?\s*주(?:시|셔|세|십))")
+DEMAND: Final = re.compile(
+    (
+        r"\s*[을를은]?\s*(?:다가?|서)?\s*(?:해|하여)?\s*"
+        r"(?:요청|부탁|요구|받|바랍|바라|주(?:시|실|셔|세|십)|하(?:시|실|셔|세|십)|이?\s*가능(?:한가|하신|하실))"
+    ),
+)
 NEGATED: Final = re.compile(
     (
         r"[은는이가도]?\s*(?:전혀|따로|별도로?)?\s*(?:없(?!이|으면)|없이(?!.{0,15}(?:어렵|불가|안|못))|"
@@ -35,11 +53,18 @@ INSURED: Final = re.compile(r".{0,12}(?:보증보험|증권|지급각서|면제)
 ASKS_ACCOUNT: Final = re.compile(r"\s*(?:할|용)?\s*계좌\s*(?:번호)?[를은]?\s*(?:알려|보내)\s*주")
 OWNER_ACTS: Final = re.compile(
     (
-        r"주시|주셔|주세|주십|(?<!원)하셔|(?<!원)하시|하세|하십|내셔|내시|두시|부탁|바랍|바라|요청|요구|필요|"
+        r"주시|주실|주셔|주세|주십|(?<!원)하셔|(?<!원)하시|하세|하십|내셔|내시|두시|부탁|바랍|바라|요청|요구|필요|"
         r"가능하신|가능하실"
     ),
 )
-PAYER_ACTS: Final = re.compile(r"드리|드릴|드립|드려|하겠|할게|할께|가능|받으시|되나|될까|싶")
+# Only the verb of the payment itself names the payer; a promise later in the sentence does not.
+PAYER_ACTS: Final = re.compile(
+    (
+        r"\s*[을를은는도]?\s*(?:으로|로)?\s*(?:먼저|미리|바로|전액)?\s*"
+        r"(?:해|하|진행|처리|지급|진행해|처리해|지급해)?\s*"
+        r"(?:드리|드릴|드립|드려|하?겠|할게|할께|가능(?:합|해요|하며|하고)|받으시|하?고\s*싶)"
+    ),
+)
 
 KOREAN_COUNTS: Final = {
     "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10,
@@ -94,18 +119,17 @@ def asks_owner(clause: str, match: re.Match[str], *, by_default: bool) -> bool:
         return False
     if PAYER.search(before) and not DEMAND.match(after):
         return False
-    owner, payer = OWNER_ACTS.search(after), PAYER_ACTS.search(after)
-    if owner is not None:
-        return payer is None or owner.start() <= payer.start()
-    return by_default and payer is None
+    if PAYER_ACTS.match(after):
+        return False
+    return by_default or OWNER_ACTS.search(after) is not None
 
 
 def owner_pays_first(text: str) -> bool:
     """Find a demand that the workshop pays before it is paid."""
-    return any(
+    return OWNER_PAYS.search(text) is not None or any(
         asks_owner(clause, match, by_default=by_default)
         for clause in CLAUSE.split(text)
-        for pattern, by_default in ((STRONG_PAY, True), (WEAK_PAY, False))
+        for pattern, by_default in ((STRONG_PAY, True), (OWNER_NAMED, True), (WEAK_PAY, False))
         for match in pattern.finditer(clause)
     )
 
