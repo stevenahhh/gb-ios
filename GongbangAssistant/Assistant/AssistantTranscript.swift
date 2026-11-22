@@ -90,6 +90,7 @@ struct AssistantTranscript: View {
         case .owner:
             Text(turn.text)
                 .textSelection(.enabled)
+                .accessibilityLabel(Text(verbatim: "나: \(turn.text)"))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(.tint.opacity(0.15), in: .inner)

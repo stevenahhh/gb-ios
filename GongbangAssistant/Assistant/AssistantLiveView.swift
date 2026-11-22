@@ -139,6 +139,7 @@ struct AssistantLiveView: View {
             .lineLimit(5)
             .truncationMode(.head)
             .contentTransition(.opacity)
+            .accessibilityLabel(Text(verbatim: text.isEmpty ? "" : "나: \(text)"))
             .accessibilityIdentifier("assistant.live.heard")
     }
 
@@ -154,7 +155,7 @@ struct AssistantLiveView: View {
             .font(.title2.weight(.medium))
             .lineLimit(6)
             .animation(.easeOut(duration: 0.15), value: caption)
-            .accessibilityLabel(caption.sentence)
+            .accessibilityLabel(Text(verbatim: "\(AssistantIdentity.name): \(caption.sentence)"))
             .accessibilityIdentifier("assistant.live.answer")
     }
 
@@ -411,6 +412,7 @@ private struct LiveTranscript: View {
                     .padding(.vertical, 10)
                     .background(.tint.opacity(0.15), in: .inner)
                     .textSelection(.enabled)
+                    .accessibilityLabel(Text(verbatim: "나: \(turn.text)"))
             }
         case .assistant:
             let text = Self.rendered(turn.text)
