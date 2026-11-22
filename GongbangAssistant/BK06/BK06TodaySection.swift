@@ -61,8 +61,12 @@ struct BK06TodaySection: View {
             NavigationLink { BK06RefillView(sessionID: card.sessionId) } label: {
                 if card.expired {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(verbatim: card.classTitle).font(.headline)
-                        Label("지남", systemImage: "clock").font(.subheadline).foregroundStyle(Color.overdueRed)
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            OverdueMark()
+                            Text(verbatim: card.classTitle)
+                        }
+                        .font(.headline)
+                        PhraseText(text: BK06Format.when(card.startsAt)).font(.subheadline).foregroundStyle(Color.secondaryText)
                     }
                 } else {
                     row("빈자리 \(card.openSeats)개", "\(card.classTitle) · \(BK06Format.when(card.startsAt))",
