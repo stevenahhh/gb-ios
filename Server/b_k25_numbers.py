@@ -317,6 +317,15 @@ class DateSpan(Span):
 
 
 @dataclass(frozen=True, slots=True)
+class WeekdaySpan(Span):
+    """A weekday without a written date, and the week when the text names one."""
+
+    weekday: str = ""
+    when: str = ""
+    denied: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class TimeSpan(Span):
     """A time of day as every minute of the day it can mean; 2시 can be two of them."""
 
@@ -349,6 +358,7 @@ class Reading:
 
     amounts: tuple[AmountSpan, ...]
     dates: tuple[DateSpan, ...]
+    weekdays: tuple[WeekdaySpan, ...]
     times: tuple[TimeSpan, ...]
     seats: tuple[NumberSpan, ...]
     capacities: tuple[NumberSpan, ...]
@@ -357,7 +367,7 @@ class Reading:
 
     @property
     def spans(self) -> tuple[Span, ...]:
-        """Return all of them, whatever their kind."""
+        """Return all of them but weekdays, which also stand in sentences that are not about a class."""
         return (
             *self.amounts, *self.dates, *self.times, *self.seats, *self.capacities, *self.lengths,
             *self.topics,
@@ -561,22 +571,31 @@ def resolve_day(span: DateSpan, today: date) -> date | None:
     )
 
 
-def weekday_day(match: re.Match[str], today: date) -> date:
+def weekday_spans(text: str) -> list[WeekdaySpan]:
+    """Find weekdays that do not stand beside a written date."""
+    dates = date_spans(text)
+    return [
+        WeekdaySpan(
+            match.start(), match.end(), match.group(), match["day"], match["when"] or "",
+            denied=is_denied(text, match.start(), match.end()),
+        )
+        for match in WEEKDAY.finditer(text)
+        if not any(span.start <= match.start() < span.end for span in dates)
+    ]
+
+
+def weekday_day(span: WeekdaySpan, today: date) -> date:
     """Read a weekday as its next day, or as next week's when the text says 다음 주."""
-    index = WEEKDAYS.index(match["day"])
-    if (match["when"] or "").startswith("다음"):
+    index = WEEKDAYS.index(span.weekday)
+    if span.when.startswith("다음"):
         return today + timedelta(days=7 - today.weekday() + index)
     return today + timedelta(days=(index - today.weekday()) % 7)
 
 
 def day_expressions(text: str, today: date) -> list[tuple[int, date]]:
     """List the days a text names and where; a weekday beside its date is part of that date."""
-    dates = date_spans(text)
-    found = [(span.start, day) for span in dates if (day := resolve_day(span, today)) is not None]
-    found += [
-        (match.start(), weekday_day(match, today)) for match in WEEKDAY.finditer(text)
-        if not any(span.start <= match.start() < span.end for span in dates)
-    ]
+    found = [(span.start, day) for span in date_spans(text) if (day := resolve_day(span, today)) is not None]
+    found += [(span.start, weekday_day(span, today)) for span in weekday_spans(text)]
     return sorted(found)
 
 
@@ -801,8 +820,8 @@ def read(text: str) -> Reading:
     topics = [span for span in topic_spans(text) if not overlaps(span, [*amounts, *dates, *times])]
     lengths = [span for span in length_spans(text) if not overlaps(span, [*times, *topics])]
     return Reading(
-        tuple(amounts), tuple(dates), tuple(times), tuple(seat_spans(text)), tuple(capacity_spans(text)),
-        tuple(lengths), tuple(topics),
+        tuple(amounts), tuple(dates), tuple(weekday_spans(text)), tuple(times), tuple(seat_spans(text)),
+        tuple(capacity_spans(text)), tuple(lengths), tuple(topics),
     )
 
 
