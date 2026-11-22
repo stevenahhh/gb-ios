@@ -56,6 +56,8 @@ struct OperationsView: View {
                 }
             }
 
+            CollectionStatusSection()
+
             periodSection(data)
 
             CardSection("전체 업무 관리") {
@@ -101,32 +103,18 @@ struct OperationsView: View {
     private func periodSection(_ data: OperationsData) -> some View {
         let period = data.period
         return CardSection {
-            HStack(spacing: 16) {
-                gauge(period)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(period.month.key == "custom" ? "선택 기간 처리율" : "\(period.month.title) 처리율")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondaryText)
-                    Text("\(period.total)건 중 \(period.handled)건 처리")
-                        .font(.title3.weight(.semibold))
-                        .monospacedDigit()
-                    if period.total > period.handled {
-                        NavigationLink(value: RemainingWorkRoute()) {
-                            Text("남은 \(period.total - period.handled)건 보기 ›")
-                                .font(.subheadline.weight(.semibold))
-                                .frame(minHeight: 44, alignment: .leading)
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        .navigationLinkIndicatorVisibility(.hidden)
-                        .accessibilityIdentifier("operations.remaining")
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, 4)
             summaryGrid(period)
                 .padding(.vertical, 4)
+            if period.total > period.handled {
+                NavigationLink(value: RemainingWorkRoute()) {
+                    LabeledContent("남은 일") {
+                        Text("\(period.total - period.handled)건")
+                            .monospacedDigit()
+                            .foregroundStyle(Color.secondaryText)
+                    }
+                }
+                .accessibilityIdentifier("operations.remaining")
+            }
         } header: {
             ViewThatFits(in: .horizontal) {
                 HStack {
@@ -139,8 +127,6 @@ struct OperationsView: View {
                     periodButton(period)
                 }
             }
-        } footer: {
-            Text("처리율은 이 기간의 예약·주문·배송·문의 \(period.total)건 중 처리를 마친 \(period.handled)건의 비율이에요.")
         }
     }
 
@@ -269,26 +255,6 @@ struct OperationsView: View {
         }
     }
 
-    private func gauge(_ period: OperationsData.Period) -> some View {
-        ZStack {
-            Circle()
-                .stroke(Color.ringTrack, lineWidth: 8)
-            Circle()
-                .trim(from: 0, to: Double(period.ratePercent ?? 0) / 100)
-                .stroke(CalendarTokens.label, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.snappy, value: period.ratePercent)
-            Text(period.rateDisplay)
-                .font(.system(size: 19, weight: .bold))
-                .monospacedDigit()
-                .minimumScaleFactor(0.6)
-        }
-        .frame(width: 76, height: 76)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(period.month.title) 처리율")
-        .accessibilityValue(period.rateDisplay)
-    }
-
     private func summaryGrid(_ period: OperationsData.Period) -> some View {
         let columns = stride(from: 0, to: period.metrics.count, by: 2).map {
             Array(period.metrics[$0..<min($0 + 2, period.metrics.count)])
@@ -357,7 +323,7 @@ struct OpportunitiesView: View {
     }
 }
 
-/// The period card's "남은 N건 보기". It goes through the stack's path like the tiles and the area rows it opens,
+/// The period card's "남은 일" row. It goes through the stack's path like the tiles and the area rows it opens,
 /// so back always returns one level.
 private struct RemainingWorkRoute: Hashable {}
 

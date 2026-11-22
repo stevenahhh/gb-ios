@@ -7,8 +7,8 @@ extension Color {
     static let pendingOrange = dynamic(light: 0xE8820C, dark: 0xFF9F2E)
     /// Secondary text at 4.5:1 or better on white and on the dark card; lighter grays are for icons and rules only.
     static let secondaryText = dynamic(light: 0x636366, dark: 0xAEAEB2)
-    /// The unfilled part of a progress ring.
-    static let ringTrack = dynamic(light: 0xE5E5EA, dark: 0x3A3A3C)
+    /// The unfilled part of a progress bar.
+    static let progressTrack = dynamic(light: 0xE5E5EA, dark: 0x3A3A3C)
     /// Assistant only: the label on what it wrote and the live voice orb. Its face is the brand mark.
     static let assistantAccent = dynamic(light: 0xA84A2A, dark: 0xE08A66)
 

@@ -22,7 +22,7 @@ struct CardDue: Decodable, Hashable {
     func isOverdue(at now: Date) -> Bool { date.map { $0 < now } ?? false }
 }
 
-/// The one place that turns a date into 오늘, 어제, N일 뒤, or a month-day.
+/// The one place that turns a date into 오늘, 어제, N일 뒤, or a month-day, and a past moment into N초 전.
 enum RelativeDayFormatter {
     static func day(_ date: Date, now: Date, calendar: Calendar = .workshop) -> String {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
@@ -37,6 +37,18 @@ enum RelativeDayFormatter {
             let parts = calendar.dateComponents([.month, .day, .weekday], from: date)
             let weekday = ["일", "월", "화", "수", "목", "금", "토"][(parts.weekday ?? 1) - 1]
             return "\(parts.month ?? 0)월 \(parts.day ?? 0)일 (\(weekday))"
+        }
+    }
+
+    /// "방금", "12초 전", "3분 전", "2시간 전", then the day.
+    static func elapsed(since date: Date, now: Date, calendar: Calendar = .workshop) -> String {
+        let seconds = Int(now.timeIntervalSince(date))
+        switch seconds {
+        case ..<1: return "방금"
+        case ..<60: return "\(seconds)초 전"
+        case ..<3600: return "\(seconds / 60)분 전"
+        case ..<86_400: return "\(seconds / 3600)시간 전"
+        default: return day(date, now: now, calendar: calendar)
         }
     }
 
