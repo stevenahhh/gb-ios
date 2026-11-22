@@ -170,15 +170,11 @@ struct InquiryDetailView: View {
         } label: {
             Group {
                 if isGenerating {
-                    GeneratingIndicator(label: "쓰는 중이에요", showsFace: false)
+                    GeneratingIndicator(label: "쓰는 중이에요")
                 } else {
-                    HStack(spacing: 6) {
-                        AssistantFace(size: .card)
-                            .accessibilityHidden(true)
-                        Text("비서로 다시 쓰기")
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
+                    Text("비서로 다시 쓰기")
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
             .font(.subheadline.weight(.semibold))

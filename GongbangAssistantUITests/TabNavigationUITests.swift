@@ -72,8 +72,12 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testAssistantIsReachableFromEveryTab() throws {
         let app = try launch()
 
+        let brand = app.images["today.brand"]
+        XCTAssertTrue(brand.waitForExistence(timeout: 5))
+        XCTAssertLessThan(brand.frame.midX, app.frame.midX)
         let accessory = app.buttons["assistant.accessory"]
         XCTAssertTrue(accessory.waitForExistence(timeout: 5))
+        XCTAssertEqual(accessory.label, "채팅하기")
 
         app.tabBars.buttons["캘린더"].tap()
         XCTAssertTrue(app.navigationBars["캘린더"].waitForExistence(timeout: 5))

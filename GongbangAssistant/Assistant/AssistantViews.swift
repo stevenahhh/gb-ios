@@ -8,10 +8,8 @@ struct AssistantAccessory: View {
         HStack(spacing: 0) {
             Button(action: openText) {
                 HStack(spacing: 10) {
-                    AssistantFace(size: .composer)
-                        .accessibilityHidden(true)
-                    Text("\(AssistantIdentity.name)에게 맡기기")
-                        .foregroundStyle(Color.secondaryText)
+                    Text("채팅하기")
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
@@ -20,7 +18,7 @@ struct AssistantAccessory: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(AssistantIdentity.name)에게 맡기기")
+            .accessibilityLabel("채팅하기")
             .accessibilityIdentifier("assistant.accessory")
 
             Button(action: openVoice) {
@@ -126,7 +124,6 @@ struct AssistantSheet: View {
     private var welcome: some View {
         // Top-aligned so the suggestions sit above the composer when the sheet opens at half height.
         VStack(alignment: .leading, spacing: 10) {
-            AssistantFace(size: .sheet)
             Text("무엇을 맡기실래요?")
                 .font(.title3.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)

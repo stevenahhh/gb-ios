@@ -413,13 +413,11 @@ private struct LiveTranscript: View {
                     .textSelection(.enabled)
             }
         case .assistant:
+            let text = Self.rendered(turn.text)
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    AssistantFace(size: .card)
-                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
-                    Text(Self.rendered(turn.text))
-                        .textSelection(.enabled)
-                }
+                Text(text)
+                    .textSelection(.enabled)
+                    .accessibilityLabel(Text("\(AssistantIdentity.name): \(Text(text))"))
                 ForEach(turn.items) { item in
                     WorkCard(item: item, isPrimary: false)
                         .padding(12)

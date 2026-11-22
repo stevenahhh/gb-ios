@@ -263,12 +263,9 @@ private struct FieldNote: View {
 
     var body: some View {
         if isRead {
-            HStack(spacing: 6) {
-                AssistantFace(size: .card)
-                Text("\(AssistantIdentity.name)가 읽은 값")
-            }
-            .font(.subheadline)
-            .foregroundStyle(Color.secondaryText)
+            Text("\(AssistantIdentity.name)가 읽은 값")
+                .font(.subheadline)
+                .foregroundStyle(Color.secondaryText)
         } else if needsCheck {
             Text("확인 필요")
                 .font(.subheadline)

@@ -149,7 +149,7 @@ struct BK25JudgmentSheet: View {
                         }
                         .padding(.vertical, 4)
                     } else if isWorking {
-                        GeneratingIndicator(label: "답을 규칙으로 다듬는 중이에요", showsFace: false)
+                        GeneratingIndicator(label: "답을 규칙으로 다듬는 중이에요")
                     } else {
                         Button("규칙 문장으로 보기") { Task { await previewRule() } }
                             .buttonStyle(.bordered)
