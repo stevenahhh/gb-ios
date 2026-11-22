@@ -14,6 +14,7 @@ class RoundupUITestCase: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["ROUNDUP_API_URL"] = try apiURL ?? environment("ROUNDUP_UITEST_API_URL")
         app.launchEnvironment["ROUNDUP_API_KEY"] = try environment("ROUNDUP_UITEST_API_KEY")
+        app.skipOnboarding()
         app.launch()
         return app
     }
@@ -26,6 +27,13 @@ class RoundupUITestCase: XCTestCase {
     @MainActor
     func element(labelled text: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    /// Pulls the page down to refresh it, across most of the screen because a swipe on one row is too short.
+    @MainActor
+    func pullDown(_ app: XCUIApplication) {
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
+        top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)), withVelocity: 500, thenHoldForDuration: 0.2)
     }
 
     @MainActor
@@ -44,6 +52,8 @@ class RoundupUITestCase: XCTestCase {
             if target.waitForExistence(timeout: 2), target.isHittable { return true }
             app.swipeUp()
         }
+        // A swipe can carry a target that was just below the screen past the top, so the way back is searched too.
+        for _ in 0..<8 where !(target.exists && target.isHittable) { app.swipeDown() }
         return target.exists && target.isHittable
     }
 
@@ -53,5 +63,21 @@ class RoundupUITestCase: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+extension XCTestCase {
+    /// `XCUIDevice.appearance` never reaches the app on the iOS 27.2 simulator and then hangs the runner, so the dark
+    /// tests run on a simulator that is dark before the app starts: `xcrun simctl ui <device> appearance dark`.
+    func requireDarkSimulator() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["ROUNDUP_UITEST_DARK"] == "1", "Set TEST_RUNNER_ROUNDUP_UITEST_DARK=1 on a dark simulator")
+    }
+}
+
+extension XCUIApplication {
+    /// Starts on 오늘 instead of the first-launch flow.
+    func skipOnboarding() {
+        launchArguments += ["-onboarding.done", "YES", "-tutorial.done", "YES"]
     }
 }

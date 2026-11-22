@@ -52,7 +52,7 @@ def test_robots_rules(text: str, path: str, *, allowed: bool) -> None:
 
 async def test_disallowing_robots_refuses_before_the_feed_is_requested() -> None:
     net = FakeNetwork({"/robots.txt": reply(text="User-agent: *\nDisallow: /"), FEED_PATH: reply(text=FEED)})
-    with pytest.raises(NeedsConnectionError, match="정책"):
+    with pytest.raises(NeedsConnectionError, match="막아 둬서"):
         _ = await collect_blog(net)
     assert net.paths == ["/robots.txt"]
 

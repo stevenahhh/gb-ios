@@ -48,10 +48,10 @@ class ParcelState(NamedTuple):
 
 PARCEL_STATES: Final = {
     "packing": ParcelState(
-        Status(text="포장 대기", tone="attention"), CardAction(code="pack", label="포장 완료하기"),
+        Status(text="포장 전", tone="attention"), CardAction(code="pack", label="포장 완료하기"),
     ),
     "invoice_pending": ParcelState(
-        Status(text="송장 대기", tone="attention"), CardAction(code="registerInvoice", label="송장 등록하기"),
+        Status(text="송장 넣기 전", tone="attention"), CardAction(code="registerInvoice", label="송장 넣기"),
     ),
     "in_transit": ParcelState(
         Status(text="배송 중", tone="progress"), CardAction(code="markDelivered", label="배송 완료 확인"),
@@ -116,7 +116,7 @@ def order_card(record: OrderRecord) -> Card:
     """Present one order and the action its state allows."""
     order, customer, channel, shipment = record
     shipment_status = shipment.status if shipment else None
-    source = channel.name if channel else "직접 주문"
+    source = channel.name if channel else "직접 받은 주문"
     lines = [
         f"#{order.order_number} · {month_day(local(order.ordered_at).date())} 주문 · {source}",
         f"{masked(customer.name)} · {order.quantity}개 · {won(order.amount_won)}",
@@ -184,9 +184,9 @@ async def list_orders(
     counts = await load_counts(db, now.date())
     return Page(
         metrics=[
-            metric("orders", "전체 주문", counts.orders),
-            metric("paid", "처리 대기", counts.paid_orders),
-            money_metric("monthRevenue", "이번 달 매출", counts.revenue_this_month),
+            metric("orders", "모든 주문", counts.orders),
+            metric("paid", "확인 전 주문", counts.paid_orders),
+            money_metric("monthRevenue", "이번 달 판매액", counts.revenue_this_month),
         ],
         items=[order_card(record) for record in records.tuples()],
         total=total, limit=paging.limit, offset=paging.offset, has_more=paging.has_more(total),

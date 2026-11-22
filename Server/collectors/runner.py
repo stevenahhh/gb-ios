@@ -44,7 +44,7 @@ class Outcome:
 
 def failure_message(name: str) -> str:
     """Tell the owner a run failed without upstream detail."""
-    return f"{name} 자료를 가져오지 못했어요. 다음 수집 때 다시 시도해요."
+    return f"{name} 쪽 새 소식을 못 받아왔어요. 다음번에 다시 받아 올게요."
 
 
 async def store_items(

@@ -12,15 +12,12 @@ struct RootTabView: View {
     @SceneStorage("root.tab") private var selection: AppTab = .today
     @State private var isAssistantPresented = false
     @State private var isLiveVoicePresented = false
+    @State private var onboarding = OnboardingState.shared
     @State private var wasInBackground = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(InquiryStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(\.scenePhase) private var scenePhase
-
-    private var failureIsPresented: Binding<Bool> {
-        Binding(get: { app.failureMessage != nil }, set: { if !$0 { app.failureMessage = nil } })
-    }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -58,27 +55,36 @@ struct RootTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { app.accessorySlot = $0 }
         }
+        .tutorialOverlay(selection: $selection)
         .sheet(isPresented: $isAssistantPresented) {
             AssistantSheet()
+                .failureAlert()
         }
+        .fullScreenCover(isPresented: $onboarding.isPresented) {
+            OnboardingFlow()
+        }
+        // A tour the owner started but did not finish comes back at the next launch.
+        .task { if onboarding.isTutorialActive { TutorialState.shared.start() } }
         // Spoken turns join the same saved chat the sheet shows, so the owner can read them back later.
         .fullScreenCover(isPresented: $isLiveVoicePresented) {
             AssistantLiveView(
                 history: { ConversationStore.shared.currentAPIHistory },
                 onTurn: { turn in
                     ConversationStore.shared.recordLiveTurn(
-                        role: turn.role == .owner ? .owner : .assistant, text: turn.text, items: turn.items
+                        role: turn.role == .owner ? .owner : .assistant, text: turn.text, items: turn.items,
+                        agent: turn.agent
                     )
                 }
             )
         }
         // Over the assistant bar's own slot, so the notice never hides the row that just changed.
         // The overlay spans the window, so it takes touches only while a toast is on screen.
-        .overlay { ToastHost().allowsHitTesting(app.toast != nil) }
+        // While the first-launch cover is up, it draws the toast itself.
+        .overlay { if !onboarding.isPresented { ToastHost().allowsHitTesting(app.toast != nil) } }
         // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
         // Inquiries load on every tab, so their recovery is the app's "back online" moment.
         .onChange(of: store.inquiryLoadError == nil) { wasOK, isOK in
-            if isOK && !wasOK { app.showToast("다시 연결됐어요", seconds: 2) }
+            if isOK && !wasOK { app.showToast("연결이 돌아왔어요", seconds: 2) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             app.dataDidChange()
@@ -100,10 +106,7 @@ struct RootTabView: View {
             }
         }
         .sensoryFeedback(.success, trigger: app.successCount)
-        .alert("처리하지 못했어요", isPresented: failureIsPresented) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(app.failureMessage ?? "")
-        }
+        // An alert here would close a sheet or cover this view presents, so each of those shows its own.
+        .failureAlert(isActive: !isAssistantPresented && !isLiveVoicePresented)
     }
 }

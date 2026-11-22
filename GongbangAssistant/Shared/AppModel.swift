@@ -21,7 +21,7 @@ final class AppModel {
 
     init() {
         ServerConnection.shared.onRecovered = { [weak self] in
-            self?.showToast("다시 연결됐어요", seconds: 2)
+            self?.showToast("연결이 돌아왔어요", seconds: 2)
         }
     }
 
@@ -141,7 +141,7 @@ struct LoadableContent<Value, Content: View>: View {
                 LoadErrorView(message: message) { Task { await retry() } }
             } else {
                 // A load that finishes within a moment shows no spinner at all.
-                ProgressView("불러오는 중이에요")
+                ProgressView("불러오고 있어요")
                     .opacity(showsSpinner ? 1 : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("screen.loading")
@@ -164,13 +164,13 @@ struct ReconnectingView: View {
     var body: some View {
         ContentUnavailableView {
             Label {
-                Text(connection.hasNetworkPath ? "다시 연결하는 중" : "인터넷 연결을 기다리는 중")
+                Text(connection.hasNetworkPath ? "연결 다시 시도하는 중" : "인터넷이 다시 잡히길 기다려요")
             } icon: {
                 ProgressView()
                     .controlSize(.large)
             }
         } description: {
-            Text(verbatim: "서버에 연결하지 못했어요. 연결되면 자동으로 불러와요.")
+            Text(verbatim: "지금 연결이 안 돼요. 다시 이어지면 알아서 불러올게요.")
                 .foregroundStyle(Color.secondaryText)
         } actions: {
             Button("지금 다시 시도") { Task { await retry() } }
@@ -178,6 +178,8 @@ struct ReconnectingView: View {
                 .controlSize(.large)
                 .accessibilityIdentifier("screen.retry")
         }
+        // Without its own container, this identifier would replace the retry button's.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.reconnecting")
         .autoReconnect(screenFailures: screenFailures, retry: retry)
     }
@@ -245,12 +247,12 @@ struct ConnectionNotice: View {
 
     private var message: Text {
         if !isFailing() && store.requiresInquiryReload {
-            return Text("저장 결과를 확인해야 해요")
+            return Text("저장이 잘 됐는지 살펴봐 주세요")
         }
         let lead = if isReconnecting {
-            Text(connection.hasNetworkPath ? "다시 연결하는 중" : "인터넷 연결을 기다리는 중")
+            Text(connection.hasNetworkPath ? "연결 다시 시도하는 중" : "인터넷이 다시 잡히길 기다려요")
         } else {
-            Text(isStillOffline ? "아직 연결이 안 돼요" : "연결이 끊겼어요")
+            Text(isStillOffline ? "연결을 아직 못 했어요" : "연결이 끊겼어요")
         }
         return Text("\(lead) \(Text("· 마지막 정보예요").foregroundStyle(Color.secondaryText))")
     }
@@ -264,7 +266,30 @@ struct ConnectionNotice: View {
         isStillOffline = isFailing()
         // When inquiries recover, the root view already says so.
         if !isStillOffline && !inquiriesWereFailing {
-            app.showToast("다시 연결됐어요", seconds: 2)
+            app.showToast("연결이 돌아왔어요", seconds: 2)
+        }
+    }
+}
+
+extension View {
+    /// Says why the last write failed. Only the topmost screen may be active: an alert of the view underneath
+    /// closes what is over it.
+    func failureAlert(isActive: Bool = true) -> some View {
+        modifier(FailureAlert(isActive: isActive))
+    }
+}
+
+private struct FailureAlert: ViewModifier {
+    let isActive: Bool
+    @Environment(AppModel.self) private var app
+
+    func body(content: Content) -> some View {
+        content.alert("이번엔 마무리하지 못했어요", isPresented: Binding(
+            get: { isActive && app.failureMessage != nil }, set: { if !$0 { app.failureMessage = nil } }
+        )) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(app.failureMessage ?? "")
         }
     }
 }

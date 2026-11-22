@@ -55,7 +55,7 @@ See [.env.example](.env.example). Keep real values out of version control.
 | `DATABASE_SCHEMA` | no | Lowercase schema placed on the connection `search_path` |
 | `ROUNDUP_API_KEY` | yes | Shared `X-Roundup-Key` value, compared in constant time |
 | `ROUNDUP_LOG_LEVEL` | no | Application log level, default `INFO` |
-| `CLOVA_STUDIO_API_KEY` | for `/draft`, `/ask`, `/rewrite` | HyperCLOVA X |
+| `CLOVA_STUDIO_API_KEY` | for `/draft`, `/ask`, `/rewrite`, `/agent/run`, the agent worker | HyperCLOVA X |
 | `NCP_CSR_CLIENT_ID`, `NCP_CSR_CLIENT_SECRET` | for `/stt` | Speech recognition; also used by `/tts` when the TTS pair is unset |
 | `NCP_TTS_CLIENT_ID`, `NCP_TTS_CLIENT_SECRET` | no | CLOVA Voice Premium for `/tts` when it runs on its own NAVER API app |
 | `TTS_SPEAKER` | no | CLOVA Voice Premium speaker, default `vyuna` |
@@ -83,6 +83,10 @@ back to `draft` and rejected recommendations back to `open`, preserving their te
 
 Revision `0005` adds `collector_sources`, `collector_runs`, and `collected_items`, and allows a `naver_blog`
 channel. Downgrading drops collected items but keeps inquiries and orders already mapped from them.
+
+Revision `0006_agent`은 비서 테이블 여섯 개를 추가하고 다른 테이블은 바꾸지 않습니다. 설정 행도 하나 넣으므로 새로 배포한 비서는 꺼진 채(`off`)로 시작합니다. 되돌리면 비서 테이블과 그 안의 기록을 지웁니다.
+
+Revision `0007_connections`는 사장님이 저장한 공개 계정과 링크를 담는 `connections` 테이블을 추가합니다. 되돌리면 이 테이블과 저장한 값을 지웁니다.
 
 `seed.py` inserts missing rows with `ON CONFLICT DO NOTHING` and links seeded
 inquiries to their customers only while that link is empty. It never changes
@@ -135,6 +139,7 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `PATCH /inquiries/{id}/draft`, `POST /inquiries/{id}/decision` | Existing inquiry contract |
 | `POST /inquiries/{id}/undo-completion` | Return a completed reply to waiting with `{expectedRevision}`; the text stays |
 | `GET /assistant/activities` | The assistant's work from the last seven days, newest first: reply drafts, post drafts, and missed pickups, each with the facts it used |
+| `GET /connections`, `PUT`/`DELETE /connections/{service}` | Public handles and https links the owner saved: `{items: [{service, value, state, updatedAt, revision}]}`; `PUT {value, expectedRevision}`, `DELETE {expectedRevision}`; `state` is `saved` or `none` and never means connected; revision `0` saves the first value; 409 stale revision, 422 wrong host or a value that looks like a secret, with Korean `detail` |
 | `GET /collectors/status` | `{"sources": [{id, name, state, last_collected_at, collected_today, message}], "updated_at"}` for Instagram, Smart Store, blog, booking, and talk-talk; `state` is `collecting`, `idle`, `needs_connection`, or `error` |
 | `GET /collectors/items?source&limit&offset` | Stored items, newest first, without their raw JSON |
 | `POST /collectors/{source}/run` | Collect now; 409 while that source is already collecting |
@@ -143,6 +148,17 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `GET /settings/class-costs`, `PUT /settings/class-costs/{classId}`, `PUT /settings/outreach-defaults` | K14: cost card per class title and the workshop's outreach rates |
 | `POST /outreach/extract` | K14: `{text}` read once into fields, confidence, risk signals; never stored, contacts masked before the model call; a model failure answers 200 with `error: "extract_failed"` and rule-read fields |
 | `POST /outreach/quotes`, `GET /outreach/quotes`, `GET /outreach/quotes/{id}`, `POST /outreach/quotes/{id}/recalculate`, `/verify-org`, `/sent`, `/outcome` | K14: quote arithmetic, verdict, reminder task, and recorded answer; no `expectedRevision` |
+| `POST /agent/run` | `{question, history?, source: "chat" 또는 "voice", background?}`. 답, 단계, 제안을 반환합니다. `background: true`이면 `queued`로 바로 응답하고 작업 프로세스가 처리합니다 |
+| `GET /agent/runs?limit` | 최근 실행 목록. `limit`은 1-100, 기본 20. 단계와 제안은 들어 있지 않습니다 |
+| `GET /agent/runs/{id}` | 실행 하나의 진행 상황, 단계, 제안 |
+| `GET /agent/proposals` | 승인을 기다리는 제안. 먼저 만료되는 순서입니다 |
+| `POST /agent/proposals/{id}/approve` | `{expectedRevision, args?}`. 제안이 보낸 `expectedRevision`을 그대로 돌려보냅니다. `args`에는 송장번호처럼 승인하면서 적은 값을 넣습니다. 바뀌었거나 닫힌 제안은 409 |
+| `POST /agent/proposals/{id}/dismiss` | 제안을 실행하지 않고 닫습니다 |
+| `POST /agent/steps/{id}/undo` | 끝낸 단계를 되돌리고 `{step, summary}`를 반환합니다. 그 뒤 대상이 바뀌었으면 409 |
+| `GET /agent/settings`, `PUT /agent/settings` | 방식, 먼저 챙기기, 도구별 방식, 하루 한도(1-50), 조용한 시간, 점검 간격(5-240분). `expectedRevision`이 필요하고 오래된 값은 409, 없는 도구나 읽기 도구는 422 |
+| `GET /agent/memories`, `DELETE /agent/memories/{id}` | 기억 목록과 한 건 지우기(204) |
+| `POST /agent/invoices/import?filename` | 본문은 CSV나 XLSX 파일 바이트. 읽은 행과 `readyCount`, `proposalCount`, `proposalId`를 반환하고 아무것도 등록하지 않습니다. 2 MiB를 넘으면 413, 읽지 못하는 파일은 422 |
+| `POST /agent/invoices/{proposalId}/approve?filename&accept_format` | 같은 파일을 다시 받아 문제없는 행을 모두 등록하거나 하나도 등록하지 않습니다. `accept_format`에는 형식 경고를 확인한 행 번호를 쉼표로 적습니다. 파일이 다르면 409 |
 | `POST /tts` | `{text}` (1-2000 characters) read aloud by CLOVA Voice Premium as `audio/mpeg`; markdown is stripped first |
 
 `/ask` accepts `{question, history?}`, reads workshop facts from PostgreSQL, and returns
@@ -159,7 +175,7 @@ with three options. Every other turn goes through the intent gate in `intents.py
 HyperCLOVA X call (3-second deadline, 100 tokens) runs while the facts load and returns
 `{intent, confidence, reading}`. The intents are `lookup`, `write`, `edit`, `advise`, `act`, `react`,
 `clarify`, and `out_of_scope`, and each adds its own instructions to the answer prompt. An `act`
-answer says where to tap, because the assistant cannot change data. When the classifier
+answer says where to tap, because this route cannot change data. When the classifier
 times out, fails, or returns malformed JSON, keywords pick `act`, `write`, or `lookup`.
 Only `edit`, `advise`, and `react` keep earlier drafts in the context, so a new topic is never
 answered from a stale draft. The server logs each choice as `ask_intent` with `intent`,
@@ -196,8 +212,73 @@ Logs are one JSON object per line on stdout, with an allow-list of fields: route
 template, status, duration, request ID, and error type. Query strings, bodies, keys,
 and SQL parameters are not logged; run uvicorn with `--no-access-log` because its
 access log includes query strings. Request bodies are limited to 64 KiB, or 2 MiB on
-`/stt` (413). Unexpected failures return a generic 500, database failures a generic
+`/stt` and `/agent/invoices/` (413). Unexpected failures return a generic 500, database failures a generic
 503, and provider failures a generic 502.
+
+## 비서
+
+`agent_run.py`가 모델에 도구를 주고 `agent_policy.py`가 호출마다 처리 여부를 정합니다. 모델은 이 결정을 바꾸지 못합니다. 모델에 보내는 글과 실행, 단계 기록에서는 손님 정보를 가립니다. 제안의 실행 값과 기억은 원문으로 저장합니다. 대기 중인 실행의 원문 요청은 실행이 끝나면 지웁니다.
+
+| 결정 | 조건 |
+| --- | --- |
+| `auto` | 읽기이거나 대상, 근거, 확인 항목, 하루 한도를 모두 만족함 |
+| `proposed` | 방식이 `ask`이거나 근거가 없음, 대상이 불확실함, 확인 항목에 걸림, 한도를 채움 |
+| `clarify` | 맞는 대상이 없거나 여럿임 |
+| `refused` | 방식이 `off`, 없는 도구, 잘못된 값, 또는 말하지 않은 내용을 기억하려 함 |
+
+근거는 사장님의 현재 말과 설정된 택배사 어댑터의 결과입니다. 지금은 설정된 어댑터가 없습니다. 실행 한 번에 도구를 6번, 모델 시간을 45초까지 쓰고 모델 호출마다 1024토큰을 허용합니다. 실행은 한 번에 하나이며 다른 실행이 잠금을 쥐고 있으면 `/ask`와 같은 방식으로 답합니다. 모델이 아무것도 바꾸기 전에 실패해도 같습니다.
+
+`agent_hcx.py`의 CLOVA Studio 도구 호출 형식은 가정입니다. TODO: 실제 모델로 확인합니다.
+
+### 작업 프로세스 켜고 끄기
+
+[deploy/roundup-agent.service](deploy/roundup-agent.service)는 `agent_worker.py`를 `gongbang` 사용자로 실행합니다. 포트를 열지 않고 로그는 journal로 보냅니다. 대기 중인 실행을 5초마다 확인하고 설정한 간격마다 규칙으로 할 일을 찾아 제안을 올립니다. 간격의 처음 값은 15분입니다. 찾은 일을 직접 처리하지는 않습니다. 한 번에 올리는 제안은 10건까지이고 하루에는 설정의 하루 한도까지 올립니다.
+
+배포하면서 유닛을 설치하고 켭니다.
+
+```sh
+AGENT_WORKER=1 Server/deploy.sh
+```
+
+이 값 없이 배포하면 작업 프로세스를 건드리지 않습니다. 이미 켜져 있는 프로세스는 이전 릴리스 코드로 계속 돌기 때문에, 작업 프로세스를 쓴다면 배포할 때마다 이 값을 붙입니다.
+
+서버에서 상태를 보거나 끄고 다시 켭니다.
+
+```sh
+systemctl status roundup-agent
+journalctl -u roundup-agent -n 50
+sudo systemctl disable --now roundup-agent
+sudo systemctl enable --now roundup-agent
+```
+
+유닛을 끄면 먼저 올리는 제안과 `background` 실행이 멈추고 `queued` 실행은 다시 켤 때까지 기다립니다. `POST /agent/run`의 일반 실행은 계속됩니다. 비서 전체를 멈추려면 앱에서 "전부 멈추기"를 누르거나 `PUT /agent/settings`로 `mode`를 `off`로 바꿉니다.
+
+한 번 점검하고 결과를 출력하려면 환경 변수를 넣고 실행합니다. 이 명령도 제안을 실제로 저장합니다.
+
+```sh
+uv run --frozen --no-dev python agent_worker.py --once
+```
+
+### 비서 테스트
+
+`Server`에서 실행합니다. 테스트 DB 조건은 [tests/README.md](tests/README.md)를 봅니다.
+
+```sh
+ROUNDUP_TEST_DATABASE_URL=... ROUNDUP_TEST_DATABASE_SSLMODE=disable uv run pytest -q tests/test_agent_*.py
+```
+
+`test_agent_redteam.py`는 `tests/agent_corpora/redteam.json`의 공격과 헷갈리는 말을 실제 규칙과 실행 과정에 넣어 봅니다. 모델 평가는 업무 데이터를 바꾸지 않습니다. 평가용 스키마를 만들고 시드를 넣은 뒤 끝나면 지웁니다.
+
+```sh
+uv run python -m scripts.agent_eval --backend scripted
+uv run python -m scripts.agent_eval --backend live --yes-call-model
+```
+
+두 명령 모두 스키마를 만들 수 있는 역할의 `DATABASE_URL`과 `DATABASE_SSLMODE`가 필요합니다. `live`는 유료 모델을 부르므로 `CLOVA_STUDIO_API_KEY`도 있어야 합니다.
+
+- TODO: 비서 서버 테스트 수와 결과를 적습니다.
+- TODO: 레드팀 결과를 적습니다.
+- TODO: `scripted`와 `live` 평가 결과를 적습니다.
 
 ## Collectors
 

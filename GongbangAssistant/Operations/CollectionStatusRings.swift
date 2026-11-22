@@ -60,7 +60,7 @@ struct CollectionStatusRings: View {
     private var notice: some View {
         VStack(alignment: .leading, spacing: 6) {
             if display != .live {
-                StatusBadge(Status(text: "예시 데이터", tone: .neutral))
+                StatusBadge(Status(text: "보기용 예시", tone: .neutral))
                     .accessibilityIdentifier("operations.collection.sample")
             }
             PhraseText(text: noticeText)
@@ -72,11 +72,11 @@ struct CollectionStatusRings: View {
     private var noticeText: String {
         switch display {
         case .live:
-            "\((answer?.updatedAt ?? .now).formatted(Self.clock)) 기준이에요. 5초마다 새로 확인해요."
+            "\((answer?.updatedAt ?? .now).formatted(Self.clock))에 본 숫자예요. 5초 간격으로 다시 받아 와요."
         case .sampleWithoutStatus:
-            "지금은 예시로 보여 드려요. 채널 수집이 시작되면 실제 현황으로 바뀌어요."
+            "샘플 숫자로 채워 둔 화면이에요. 채널에서 실제로 불러오기 시작하면 공방 숫자로 바뀌어요."
         case .sampleBeforeConnection:
-            "아직 연결된 채널이 없어 예시로 보여 드려요. 채널을 연결하면 실제 현황으로 바뀌어요."
+            "아직은 샘플 숫자예요. 채널을 하나라도 연결하시면 그때부터 공방 숫자로 바뀌어요."
         }
     }
 
@@ -122,10 +122,10 @@ private enum CollectionChannel: String, CaseIterable {
 private extension CollectorState {
     var label: String {
         switch self {
-        case .collecting: "수집 중"
+        case .collecting: "가져오는 중"
         case .idle: "대기"
-        case .needsConnection: "연결 필요"
-        case .error: "오류"
+        case .needsConnection: "연결해 주세요"
+        case .error: "문제가 생겼어요"
         }
     }
 }
@@ -194,7 +194,7 @@ private struct CollectionRing: View {
 
     private var spokenValue: String {
         guard let source else { return "" }
-        let count = source.collectedToday > 0 ? "오늘 \(source.collectedToday.formatted())건 수집" : nil
+        let count = source.collectedToday > 0 ? "오늘 \(source.collectedToday.formatted())건 가져옴" : nil
         let ago = source.lastCollectedAt.map { RelativeDayFormatter.elapsed(since: $0, now: .now) }
         return [count, ago, source.message].compactMap { $0 }.joined(separator: ", ")
     }

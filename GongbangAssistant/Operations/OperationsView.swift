@@ -43,7 +43,7 @@ struct OperationsView: View {
                 }
             } header: {
                 HStack {
-                    SectionHeader(title: "먼저 확인해 주세요")
+                    SectionHeader(title: "이것부터 살펴보세요")
                     Spacer()
                     Text("\(data.attentionCount)건")
                         .font(.subheadline.weight(.semibold))
@@ -84,7 +84,7 @@ struct OperationsView: View {
                 } label: {
                     Label {
                         Text("기회")
-                        Text("저장해 둔 마켓·공모·지원사업")
+                        Text("마켓·공모·지원사업 모아 보기")
                             .foregroundStyle(Color.secondaryText)
                     } icon: {
                         MenuIcon(systemName: "chart.line.uptrend.xyaxis")
@@ -113,6 +113,7 @@ struct OperationsView: View {
                     }
                 }
                 .accessibilityIdentifier("operations.remaining")
+                .tutorialAnchor(.remainingWork)
             }
         } header: {
             ViewThatFits(in: .horizontal) {
@@ -172,7 +173,7 @@ struct OperationsView: View {
                 .buttonStyle(AttentionTileStyle())
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(metric.due?.isOverdue(at: .now) == true ? "기한 지남, " : "")\(metric.label) \(metric.display)")
-                .accessibilityHint("목록을 열어요")
+                .accessibilityHint("목록 열기")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("operations.attention.\(metric.key)")
             }
@@ -266,7 +267,7 @@ struct OpportunitiesView: View {
     var body: some View {
         LoadableContent(loader: loader, retry: load) { items in
             if items.isEmpty {
-                ContentUnavailableView("저장된 기회가 없어요", systemImage: "flag")
+                ContentUnavailableView("모아 둔 기회가 아직 비어 있어요", systemImage: "flag")
             } else {
                 List {
                     // No detail screen exists yet, so the cards show no chevron and only their own action.
@@ -302,10 +303,10 @@ private struct RemainingWorkRoute: Hashable {}
 /// Where the period's unprocessed work lives: each row opens that area already filtered.
 struct RemainingWorkView: View {
     private let rows: [(OperationArea, String, String)] = [
-        (.bookings, "deposit_pending", "예약금을 기다리는 예약"),
-        (.orders, "paid", "확인할 주문"),
-        (.deliveries, "scheduled", "보낼 택배"),
-        (.channels, "inquiries", "답변 기다리는 문의"),
+        (.bookings, "deposit_pending", "예약금 안 들어온 예약"),
+        (.orders, "paid", "봐야 할 주문"),
+        (.deliveries, "scheduled", "발송할 택배"),
+        (.channels, "inquiries", "답장 안 한 문의"),
     ]
 
     var body: some View {

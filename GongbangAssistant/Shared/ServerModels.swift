@@ -55,10 +55,10 @@ enum ActionCode: String, Codable, Hashable {
     /// The finished step for the toast, as in "‘머그컵’ 포장 완료했어요".
     var doneText: String {
         switch self {
-        case .confirmDeposit: "입금 확인했어요"
+        case .confirmDeposit: "입금 확인 완료"
         case .confirmOrder: "주문 확인했어요"
         case .pack: "포장 완료했어요"
-        case .registerInvoice: "송장 등록했어요"
+        case .registerInvoice: "송장 등록 완료"
         case .markDelivered: "배송 완료했어요"
         case .reviewContent: "검토했어요"
         case .completeTask: "완료했어요"
@@ -69,11 +69,11 @@ enum ActionCode: String, Codable, Hashable {
     /// The step taken back for the toast, as in "‘머그컵’ 포장 완료를 취소했어요".
     var undoneText: String {
         switch self {
-        case .confirmDeposit: "입금 확인을 취소했어요"
-        case .confirmOrder: "주문 확인을 취소했어요"
-        case .pack: "포장 완료를 취소했어요"
-        case .registerInvoice: "송장 등록을 취소했어요"
-        case .markDelivered: "배송 완료를 취소했어요"
+        case .confirmDeposit: "입금 확인을 되돌렸어요"
+        case .confirmOrder: "주문 확인을 되돌렸어요"
+        case .pack: "포장 완료를 되돌렸어요"
+        case .registerInvoice: "송장 등록을 되돌렸어요"
+        case .markDelivered: "배송 완료를 되돌렸어요"
         case .reviewContent: "검토를 취소했어요"
         case .completeTask: "완료를 취소했어요"
         case .acknowledgeRecommendation: "확인을 취소했어요"
@@ -585,4 +585,204 @@ struct AssistantActivity: Decodable, Identifiable, Hashable {
         case .missedPickup: .work(.shipment, targetId)
         }
     }
+}
+
+// MARK: - Assistant agent
+
+/// How far the assistant may go, for everything or for one tool.
+enum AgentMode: String, Codable, CaseIterable, Identifiable, Hashable {
+    case off
+    case ask
+    case auto
+
+    var id: Self { self }
+}
+
+/// What the server's policy did with one tool call the assistant asked for.
+enum AgentDecision: String, Codable, Hashable {
+    case auto
+    case proposed
+    case refused
+    case clarify
+}
+
+enum AgentRunSource: String, Codable, Hashable {
+    case chat
+    case voice
+    case proactive
+}
+
+enum AgentRunStatus: String, Codable, Hashable {
+    case queued
+    case running
+    case done
+    case fallback
+    case failed
+    case stopped
+
+    /// A queued or running run goes on at the server; `GET /agent/runs/{id}` tells how far it got.
+    var isUnfinished: Bool { self == .queued || self == .running }
+}
+
+/// The agent routes send moments as ISO 8601 text, with or without fractions of a second.
+enum AgentMoment {
+    static func date(_ text: String) -> Date? {
+        (try? Date(text, strategy: .iso8601))
+            ?? (try? Date(text, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
+    }
+}
+
+/// The row a step or proposal acts on; the server masks its label.
+struct AgentTarget: Codable, Hashable {
+    let kind: String
+    let id: String
+    let label: String
+}
+
+struct AgentEvidence: Codable, Hashable {
+    let kind: String
+    let excerpt: String
+}
+
+struct AgentStep: Codable, Identifiable, Hashable {
+    let id: String
+    let tool: String
+    let title: String
+    let decision: AgentDecision
+    let reason: String
+    let target: AgentTarget?
+    let evidence: [AgentEvidence]
+    let undoable: Bool
+    let undone: Bool
+}
+
+struct AgentProposal: Codable, Identifiable, Hashable {
+    enum State: String, Codable, Hashable {
+        case open
+        case approved
+        case dismissed
+        case expired
+    }
+
+    let id: String
+    /// The step that raised the proposal. Approving runs that same step, which then comes back as `step`.
+    let stepId: String
+    let title: String
+    let reason: String
+    let preview: [CardField]
+    let evidenceNeeded: [String]
+    let expiresAt: String
+    /// Sent back unchanged on approval; nil when approving creates the row.
+    let expectedRevision: Int?
+    let tool: String
+    let state: State
+    let target: AgentTarget?
+    let step: AgentStep?
+
+    var expiry: Date? { AgentMoment.date(expiresAt) }
+}
+
+struct AgentRunReply: Decodable {
+    let runId: String
+    let status: AgentRunStatus
+    /// Nil while the run is queued or running.
+    let answer: String?
+    let steps: [AgentStep]
+    let proposals: [AgentProposal]
+    let mode: AgentMode
+}
+
+/// A stored run; the server masks `question`, and `answer` arrives when the run has finished.
+struct AgentRun: Decodable, Identifiable, Hashable {
+    let id: String
+    let status: AgentRunStatus
+    let source: AgentRunSource
+    let question: String
+    let answer: String?
+    let createdAt: String
+    let steps: [AgentStep]
+    let proposals: [AgentProposal]
+
+    var date: Date? { AgentMoment.date(createdAt) }
+}
+
+struct AgentList<Item: Decodable>: Decodable {
+    let items: [Item]
+}
+
+struct AgentUndoResult: Decodable {
+    let step: AgentStep
+    let summary: String
+}
+
+/// One thing the assistant keeps in mind, with the owner's own sentence it came from.
+struct AgentMemory: Decodable, Identifiable, Hashable {
+    let id: String
+    let text: String
+    let sourceQuote: String
+    let createdAt: String
+
+    var date: Date? { AgentMoment.date(createdAt) }
+}
+
+struct AgentSettings: Decodable, Equatable {
+    /// One tool with the mode it follows now: its own choice, or the general mode.
+    struct Tool: Decodable, Identifiable, Equatable {
+        let tool: String
+        let tier: String
+        var mode: AgentMode
+        var id: String { tool }
+    }
+
+    /// A daily window in Seoul time as "HH:mm" texts; a start later than its end runs past midnight.
+    struct QuietHours: Codable, Equatable {
+        var start: String
+        var end: String
+    }
+
+    var mode: AgentMode
+    var proactive: Bool
+    var tools: [Tool]
+    var dailyCap: Int
+    var quietHours: QuietHours?
+    var revision: Int
+}
+
+/// One change the owner makes on the settings screen; the server keeps every field that is not sent.
+enum AgentSettingsChange {
+    case mode(AgentMode)
+    case proactive(Bool)
+    case tool(String, AgentMode)
+    case dailyCap(Int)
+    case quietHours(AgentSettings.QuietHours?)
+}
+
+/// What the server read from an uploaded carrier export: one row per tracking number, matched to a parcel.
+struct AgentInvoiceImport: Decodable {
+    struct Problem: Decodable, Hashable {
+        let code: String
+        let text: String
+    }
+
+    struct Row: Decodable, Hashable {
+        let line: Int
+        let number: String
+        let target: AgentTarget?
+        let carrier: String?
+        /// `known` when the file named the carrier; `guessed` from the number's length alone, or `unknown`.
+        let carrierStatus: String
+        let problems: [Problem]
+        /// False only for a row with no problem, one parcel, and a certain carrier.
+        let needsOwner: Bool
+    }
+
+    let rows: [Row]
+    /// The one proposal that registers this file's rows; nil when no row is clean.
+    let proposalId: String?
+}
+
+/// What one approval of a carrier export did.
+struct AgentInvoiceOutcome: Decodable {
+    let registered: Int
+    let proposal: AgentProposal
 }

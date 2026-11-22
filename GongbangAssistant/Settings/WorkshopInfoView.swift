@@ -72,16 +72,16 @@ struct WorkshopInfoView: View {
                     Task { await search() }
                 } label: {
                     if isSearching {
-                        ProgressView("위치를 찾는 중이에요")
+                        ProgressView("지도에서 찾고 있어요")
                     } else {
-                        Label("지도에서 위치 확인", systemImage: "map")
+                        Label("지도로 위치 보기", systemImage: "map")
                     }
                 }
                 .disabled(isSearching || address.trimmingCharacters(in: .whitespaces).isEmpty)
             } header: {
                 Text("공방 주소")
             } footer: {
-                Text("네이버 지도로 주소를 확인해요. 저장하면 확인된 위치도 함께 보관해요.")
+                Text("이 주소를 네이버 지도에서 찾아볼게요. 저장을 누르시면 찾아낸 위치도 같이 보관돼요.")
             }
 
             if let errorMessage {
@@ -99,13 +99,13 @@ struct WorkshopInfoView: View {
             }
 
             if let place {
-                CardSection("확인된 위치") {
+                CardSection("찾은 위치") {
                     Text(place.address)
                         .textSelection(.enabled)
                     Group {
                         if let mapImage {
                             Image(uiImage: mapImage).resizable().scaledToFit()
-                                .accessibilityLabel("공방 위치 지도")
+                                .accessibilityLabel("지도로 본 공방 위치")
                         } else {
                             ProgressView()
                                 .frame(maxWidth: .infinity, minHeight: 160)

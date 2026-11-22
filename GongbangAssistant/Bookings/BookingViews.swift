@@ -201,7 +201,7 @@ struct BookingDetailView: View {
         }
         CardSection("처리") {
             ProcessStepRow(
-                label: "예약금", isDone: detail.depositConfirmed, doneText: "입금을 확인했어요",
+                label: "예약금", isDone: detail.depositConfirmed, doneText: "입금 확인 완료",
                 actionTitle: detail.action?.label, deadline: detail.depositDeadline, due: detail.depositDue,
                 isRunning: app.isRunning(detail.id),
                 perform: { run(detail.id) { try await RoundupAPI.confirmDeposit(bookingID: detail.id, revision: detail.revision) } },
@@ -229,17 +229,17 @@ struct SessionStepRow: View {
 
     var body: some View {
         ProcessStepRow(
-            label: "수업", isDone: session.isDone, doneText: "수업을 완료했어요",
-            actionTitle: "수업 완료로 표시", isRunning: app.isRunning(session.id), isPrimary: isPrimary,
-            isActionEnabled: session.hasStarted, actionHint: "수업이 시작되면 누를 수 있어요.",
+            label: "수업", isDone: session.isDone, doneText: "수업을 마쳤어요",
+            actionTitle: "수업 마침으로 바꾸기", isRunning: app.isRunning(session.id), isPrimary: isPrimary,
+            isActionEnabled: session.hasStarted, actionHint: "시작 시각이 돼야 버튼이 켜져요.",
             perform: { if depositPending { isConfirming = true } else { setDone(true) } },
             undo: { setDone(false) }
         )
-        .confirmationDialog("예약금 입금이 아직 확인되지 않았어요", isPresented: $isConfirming, titleVisibility: .visible) {
-            Button("그래도 수업 완료로 표시") { setDone(true) }
-            Button("입금 확인 먼저 하기", role: .cancel) {}
+        .confirmationDialog("아직 예약금 입금을 확인하지 않으셨어요", isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("그래도 수업 마치기") { setDone(true) }
+            Button("입금부터 확인하기", role: .cancel) {}
         } message: {
-            Text("위의 입금 확인하기로 예약금을 먼저 확인할 수 있어요.")
+            Text("바로 위 입금 확인 버튼으로 예약금이 들어왔는지 먼저 살펴보세요.")
         }
     }
 
@@ -291,9 +291,9 @@ struct ClassSessionView: View {
             CardSection("수업 정보") {
                 DetailValueRow(label: "일시", value: content.session.schedule)
             }
-            CardSection("예약 \(content.bookings.count)건") {
+            CardSection("예약 \(content.bookings.count)개") {
                 if content.bookings.isEmpty {
-                    Text("이 수업에는 아직 예약이 없어요.")
+                    Text("이 수업을 예약한 손님은 아직 없어요.")
                         .foregroundStyle(Color.secondaryText)
                 }
                 ForEach(content.bookings) { item in
@@ -442,7 +442,7 @@ struct ProgressSteps: View {
         }
         .background { lines(isStacked: isStacked) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("진행 단계")
+        .accessibilityLabel("어디까지 왔나")
         .accessibilityValue(accessibilityValue)
     }
 

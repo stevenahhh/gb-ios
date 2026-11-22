@@ -449,9 +449,9 @@ async def booked_seats(db: AsyncSession, session_id: str) -> int:
 def summary_text(result: Calculation) -> str:
     """Say the comparison in one sentence made only of computed numbers."""
     if result.net_per_person_outreach is None or result.net_per_person_oneday is None:
-        return "원가가 비어 있어 판단하지 못했어요."
+        return "원가 칸이 비어서 계산을 못 했어요."
     outreach, oneday = won(result.net_per_person_outreach), won(result.net_per_person_oneday)
-    text = f"1인 순수익 {outreach}, 원데이는 {oneday}이에요."
+    text = f"1인당 남는 금액 {outreach}, 원데이 수업은 {oneday}이에요."
     if result.net_per_hour_outreach is not None and result.net_per_hour_oneday is not None:
         text += (
             f" 시간당으로는 {won(result.net_per_hour_outreach)}, "
@@ -514,7 +514,7 @@ def deadline_for(row: OutreachQuoteRow, now: datetime) -> CardDue | None:
     """Show the follow-up moment of a quote still waiting for an answer."""
     if row.follow_up_at is None or effective_status(row, now) not in {"sent", "follow_up"}:
         return None
-    return due(row.follow_up_at, suffix=" 다시 연락", missed="기한 지남")
+    return due(row.follow_up_at, suffix=" 다시 연락하기", missed="기한 지남")
 
 
 async def view(db: AsyncSession, row: OutreachQuoteRow, now: datetime) -> QuoteView:
@@ -624,7 +624,7 @@ def row_view(row: OutreachQuoteRow, now: datetime) -> QuoteRowView:
     parts = [part for part in (day or fields.date_text, f"{inputs.headcount}명", row.class_id) if part]
     return QuoteRowView(
         id=row.id, status=effective_status(row, now),
-        title=fields.org_name or f"{ORG_LABELS[fields.org_type]} 출강",
+        title=fields.org_name or f"{ORG_LABELS[fields.org_type]} 출장 수업",
         detail=" · ".join(parts), total_krw=calculation.total_krw, follow_up_due=deadline_for(row, now),
     )
 
@@ -678,16 +678,17 @@ async def remind(db: AsyncSession, row: OutreachQuoteRow, at: datetime) -> None:
     fields = QuoteFields.model_validate(row.fields)
     label = fields.org_name or ORG_LABELS[fields.org_type]
     task = TaskRow(
-        id=f"task-{uuid4().hex}", kind="general", title=f"{label} 출강 견적 다시 연락",
-        detail="답이 없으면 다시 연락해 주세요", due_at=at, status="open",
+        id=f"task-{uuid4().hex}", kind="general", title=f"{label} 출장 수업 견적 다시 연락하기",
+        detail="답이 오지 않았다면 한 번 더 연락해 보세요", due_at=at, status="open",
     )
     db.add(task)
     await db.flush()
     row.follow_up_task_id = task.id
 
 
-@router.post("/outreach/quotes/{quote_id}/outcome")
-async def record_outcome(quote_id: str, body: OutcomeRequest, db: Session, now: Now) -> QuoteView:
+async def save_outcome(
+    db: AsyncSession, quote_id: str, body: OutcomeRequest, now: datetime,
+) -> OutreachQuoteRow:
     """Record the institution's answer and close the reminder."""
     if body.outcome == "accepted_adjusted" and body.final_total_krw is None:
         raise HTTPException(422, "final_total_krw is required")
@@ -701,4 +702,10 @@ async def record_outcome(quote_id: str, body: OutcomeRequest, db: Session, now: 
         task.status, task.completed_at = "done", now
         task.revision += 1
     await db.flush()
-    return await view(db, row, now)
+    return row
+
+
+@router.post("/outreach/quotes/{quote_id}/outcome")
+async def record_outcome(quote_id: str, body: OutcomeRequest, db: Session, now: Now) -> QuoteView:
+    """Record the institution's answer and close the reminder."""
+    return await view(db, await save_outcome(db, quote_id, body, now), now)

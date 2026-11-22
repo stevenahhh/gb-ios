@@ -9,11 +9,11 @@ nonisolated enum OutreachSignal: String, Codable, Hashable {
 
     var text: String {
         switch self {
-        case .mobileOnlyContact: "연락처가 휴대폰 번호뿐이에요"
-        case .proxyPurchase: "지정 업체에서 대신 사 달라고 해요"
-        case .marginOffer: "차액이나 수수료를 주겠다고 해요"
-        case .sameDayPressure: "오늘 안에 정해 달라고 재촉해요"
-        case .prepayByOwner: "공방이 먼저 돈을 내야 해요"
+        case .mobileOnlyContact: "받은 번호가 개인 휴대폰 하나뿐이에요"
+        case .proxyPurchase: "특정 업체에서 물건을 대신 사 달래요"
+        case .marginOffer: "수수료나 차액을 떼어 준대요"
+        case .sameDayPressure: "답을 오늘 안에 달라고 서둘러요"
+        case .prepayByOwner: "공방 쪽에서 돈부터 먼저 내라고 해요"
         }
     }
 }
@@ -29,8 +29,8 @@ enum OutreachOrgType: String, Codable, CaseIterable, Identifiable, Hashable {
         case .public: "공공기관"
         case .company: "회사"
         case .welfare: "복지기관"
-        case .other: "그 밖의 기관"
-        case .unknown: "모름"
+        case .other: "기타 기관"
+        case .unknown: "잘 모르겠어요"
         }
     }
 }
@@ -42,7 +42,7 @@ enum OutreachVat: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var label: String {
         switch self {
-        case .unknown: "선택 안 함"
+        case .unknown: "고르지 않았어요"
         case .included: "부가세 포함"
         case .excluded: "부가세 별도"
         case .exempt: "면세"
@@ -58,7 +58,7 @@ enum OutreachContact: String, Codable, Hashable {
         case .landline: "대표번호"
         case .mobile: "휴대폰"
         case .email: "이메일"
-        case .unknown: "모름"
+        case .unknown: "잘 모르겠어요"
         }
     }
 }
@@ -73,10 +73,10 @@ enum OutreachQuoteStatus: String, Decodable, Hashable {
         switch self {
         case .draft: Status(text: "작성 중", tone: .neutral)
         case .sent: Status(text: "보냄", tone: .progress)
-        case .followUp: Status(text: "다시 연락 필요", tone: .attention)
+        case .followUp: Status(text: "한 번 더 연락하기", tone: .attention)
         case .accepted, .acceptedAdjusted: Status(text: "수락", tone: .done)
         case .declined: Status(text: "거절", tone: .neutral)
-        case .noReply: Status(text: "무응답", tone: .neutral)
+        case .noReply: Status(text: "답이 없어요", tone: .neutral)
         }
     }
 }
@@ -92,9 +92,9 @@ enum OutreachOutcome: String, Codable, CaseIterable, Identifiable, Hashable {
     var label: String {
         switch self {
         case .accepted: "수락"
-        case .acceptedAdjusted: "금액 조정 후 수락"
+        case .acceptedAdjusted: "금액 조정하고 수락"
         case .declined: "거절"
-        case .noReply: "무응답"
+        case .noReply: "답이 없어요"
         }
     }
 }
@@ -217,7 +217,7 @@ struct OutreachQuote: Decodable, Hashable, Identifiable {
     let outcome: OutreachOutcome?
     let finalTotalKrw: Int?
 
-    var title: String { fields.orgName ?? "\(fields.orgType == .unknown ? "기관" : fields.orgType.label) 출강" }
+    var title: String { fields.orgName ?? "\(fields.orgType == .unknown ? "기관" : fields.orgType.label) 출장 수업" }
 }
 
 struct OutreachQuoteRow: Decodable, Hashable, Identifiable {
@@ -248,7 +248,7 @@ enum OutreachTravelMode: String, Codable, CaseIterable, Identifiable, Hashable {
     case perKm = "per_km"
 
     var id: Self { self }
-    var label: String { self == .flat ? "고정 금액" : "1km당" }
+    var label: String { self == .flat ? "한 번에 정해진 금액" : "1km마다" }
 }
 
 struct OutreachDefaults: Codable, Hashable {
@@ -275,7 +275,7 @@ enum OutreachFormat {
     }
 
     static func won(_ value: Int) -> String { "\(value.formatted(.number.grouping(.automatic)))원" }
-    static func won(_ value: Int?) -> String { value.map { won($0) } ?? "모름" }
+    static func won(_ value: Int?) -> String { value.map { won($0) } ?? "잘 모르겠어요" }
 
     /// "2026-12-05" and "14:00" as one moment in workshop time.
     static func moment(day: String, clock: String = "00:00") -> Date? {

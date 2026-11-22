@@ -23,6 +23,12 @@ struct AssistantTranscript: View {
         conversation.turns.lastIndex { $0.role == .owner } ?? conversation.turns.endIndex
     }
 
+    /// One card in the whole conversation takes the prominent button: the first still waiting.
+    private var primaryProposal: AgentProposal.ID? {
+        conversation.turns.flatMap { $0.agent?.proposals ?? [] }
+            .first { AgentCenter.shared.standing(of: $0, at: .now) == .open }?.id
+    }
+
     private var isLive: Bool {
         conversation.turns[exchangeStart...].first.map { $0.date > liveSince } ?? false
     }
@@ -66,13 +72,15 @@ struct AssistantTranscript: View {
                 withAnimation(reduceMotion ? nil : .snappy) { proxy.scrollTo(Self.exchange, anchor: .top) }
             }
         }
-        .onChange(of: conversation.turns.last?.id) {
-            if let last = conversation.turns.last, last.role == .assistant {
+        // Keyed by the words too: the answer of a run that went on at the server arrives in a turn already shown.
+        .onChange(of: conversation.turns.last.map { [$0.id.uuidString, $0.text] }) {
+            if let last = conversation.turns.last, last.role == .assistant, !last.text.isEmpty {
                 AccessibilityNotification.Announcement(last.text).post()
             }
         }
         .task(id: app.dataVersion) {
             await ConversationStore.shared.refreshCards()
+            await ConversationStore.shared.refreshRuns()
         }
     }
 
@@ -96,7 +104,12 @@ struct AssistantTranscript: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.leading, 48)
         case .assistant:
-            answer(turn)
+            // The answer of a run that goes on at the server has no words yet; how the run stands takes their place.
+            if turn.text.isEmpty, let agent = turn.agent {
+                AgentRunDetail(record: agent, primaryID: primaryProposal)
+            } else {
+                answer(turn)
+            }
         case .failure:
             UnansweredNotice(text: turn.text, retry: turn.id == conversation.turns.last?.id ? retry : nil)
         }
@@ -113,9 +126,9 @@ struct AssistantTranscript: View {
                 .textSelection(.enabled)
                 .accessibilityLabel(Text("\(AssistantIdentity.name): \(Text(text))"))
             // Written posts and replies get pasted elsewhere, so every answer can be copied in one tap.
-            Button("복사하기", systemImage: "doc.on.doc") {
+            Button("글 복사", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = turn.text
-                app.showToast("복사했어요", seconds: 2)
+                app.showToast("복사 끝!", seconds: 2)
             }
             .font(.subheadline.weight(.semibold))
             .buttonStyle(.bordered)
@@ -129,6 +142,12 @@ struct AssistantTranscript: View {
                     .background(AppPalette.card, in: .card)
             }
             .opacity(isFresh.wrappedValue ? 0 : 1)
+            // What the answer's run did and what it asks the owner to approve, hidden like the cards until the
+            // text has settled.
+            if let agent = turn.agent, agent.hasDetail(showingStatus: true) {
+                AgentRunDetail(record: agent, primaryID: primaryProposal)
+                    .opacity(isFresh.wrappedValue ? 0 : 1)
+            }
         }
         .animation(.default, value: isFresh.wrappedValue)
     }
@@ -137,9 +156,9 @@ struct AssistantTranscript: View {
     @ViewBuilder
     private var pending: some View {
         if isAnswering {
-            GeneratingIndicator(label: "\(AssistantIdentity.name)가 현황을 보고 있어요")
+            GeneratingIndicator(label: "\(AssistantIdentity.name)가 공방 상황을 살펴보는 중이에요")
         } else if conversation.turns.last?.role == .owner {
-            UnansweredNotice(text: "답을 받지 못했어요.", retry: retry)
+            UnansweredNotice(text: "답이 도착하지 않았어요.", retry: retry)
         }
     }
 }

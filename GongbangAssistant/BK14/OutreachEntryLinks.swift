@@ -7,8 +7,8 @@ struct OutreachQuoteLink: View {
             OutreachQuoteListView()
         } label: {
             Label {
-                Text("출강 견적")
-                Text("기관 문의를 읽고 받을지 판단해요")
+                Text("출장 수업 견적")
+                Text("기관에서 온 문의를 읽고 맡을 만한지 따져 봐요")
                     .foregroundStyle(Color.secondaryText)
             } icon: {
                 MenuIcon(systemName: "doc.text")
@@ -24,7 +24,7 @@ struct OutreachCostLink: View {
         NavigationLink {
             ClassCostListView()
         } label: {
-            Label { Text("수업별 원가") } icon: { MenuIcon(systemName: "wonsign.circle") }
+            Label { Text("수업마다 드는 돈") } icon: { MenuIcon(systemName: "wonsign.circle") }
         }
         .accessibilityIdentifier("settings.classCosts")
     }

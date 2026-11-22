@@ -11,10 +11,15 @@ import hmac
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from activities import router as activity_router
+from agent_api import router as agent_router
+from agent_api_invoices import router as agent_invoice_router
 from ai import router as ai_router
 from b_k06 import router as k06_router
 from b_k14 import router as k14_router
@@ -23,11 +28,12 @@ from bookings import router as booking_router
 from channels import router as channel_router
 from collectors.routes import router as collector_router
 from common import Session
+from connections import router as connection_router
 from database import database_lifespan, schema_is_current
 from details import router as detail_router
 from drafts import router as draft_router
 from inquiries import router as inquiry_router
-from observability import RequestBoundary, configure_logging
+from observability import AGENT_ERRORS, AGENT_ROUTES, RequestBoundary, configure_logging, public_detail
 from operations import router as operations_router
 from orders import router as order_router
 from providers import geocode_address, require_env, static_map_image, transcribe
@@ -57,15 +63,34 @@ app = FastAPI(
     dependencies=[Depends(require_api_key)],
     lifespan=database_lifespan,
 )
-app.add_middleware(RequestBoundary)
+app.add_middleware(RequestBoundary, check_key=require_api_key)
 app.include_router(k06_router)  # first, so /class-sessions/under-min is not read as a class id
 for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
     detail_router, draft_router, undo_router, ai_router, activity_router, speech_router,
-    collector_router, k14_router, grounded_router,
+    collector_router, k14_router, grounded_router, agent_invoice_router, agent_router, connection_router,
 ):
     app.include_router(router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def refused(request: Request, error: StarletteHTTPException) -> Response:
+    """Answer a refusal; agent routes say it in Korean."""
+    if not request.url.path.startswith(AGENT_ROUTES):
+        return await http_exception_handler(request, error)
+    detail = public_detail(request.url.path, error.status_code, error.detail)
+    return await http_exception_handler(
+        request, StarletteHTTPException(error.status_code, detail, error.headers),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def bad_input(request: Request, error: RequestValidationError) -> Response:
+    """Answer bad input; agent routes say it in Korean without naming fields."""
+    if not request.url.path.startswith(AGENT_ROUTES):
+        return await request_validation_exception_handler(request, error)
+    return await http_exception_handler(request, StarletteHTTPException(422, AGENT_ERRORS[422]))
 
 
 class Health(BaseModel):

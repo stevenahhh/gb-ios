@@ -101,7 +101,7 @@ struct TimelineEntry: Identifiable, Hashable {
         minutes = nil
         title = "택배 수거 \(pickups.count)건"
         let names = pickups.prefix(2).map(\.title).joined(separator: " · ")
-        subject = pickups.count > 2 ? "\(names) 외 \(pickups.count - 2)건" : names
+        subject = pickups.count > 2 ? "\(names) 말고 \(pickups.count - 2)건" : names
         isDone = pickups.allSatisfy { $0.isDone == true }
         reportsDone = pickups.allSatisfy { $0.isDone != nil }
         destination = .area(AreaRoute(area: .deliveries, filter: "scheduled"))
@@ -208,7 +208,7 @@ enum TimelineText {
     static func range(_ entry: TimelineEntry) -> String? {
         guard entry.minutes != nil else { return nil }
         if entry.end >= 24 * 60 {
-            return "\(clock(entry.start)) ~ 다음날 \(clock(entry.end))"
+            return "\(clock(entry.start)) ~ 이튿날 \(clock(entry.end))"
         }
         return "\(clock(entry.start))–\(clock(entry.end))"
     }
@@ -239,7 +239,7 @@ enum TimelineText {
     /// 진행 중 · N분 남음, N분 후, 1시간 20분 후, then a clock time beyond two hours.
     static func next(_ entry: TimelineEntry, now: Int) -> String {
         if entry.start <= now, entry.minutes != nil {
-            return "진행 중 · \(max(entry.end - now, 1))분 남음"
+            return "수업 중 · \(max(entry.end - now, 1))분 뒤 끝나요"
         }
         let wait = entry.start - now
         switch wait {
@@ -312,7 +312,7 @@ struct DaySection: View {
                 if hasPinned {
                     Rectangle().fill(CalendarTokens.separator).frame(height: 1).padding(.top, 20)
                 }
-                emptyTimeline(hasPinned ? "시간이 정해진 일정이 없어요" : "일정이 없어요")
+                emptyTimeline(hasPinned ? "몇 시에 할지 정한 일정은 하나도 없어요" : "일정이 없어요")
             } else {
                 TimelineList(plan: TimelinePlan(entries: schedule.entries, relation: relation, now: nowMinutes),
                              now: nowMinutes, check: check)
@@ -414,7 +414,7 @@ struct PinnedSummaryCard: View {
                     NavigationLink {
                         DayOrdersView(date: date, orders: orders)
                     } label: {
-                        row(symbol: "bag", lead: "새 주문 \(orders.count)건", rest: " · \(total)", chevron: true)
+                        row(symbol: "bag", lead: "새로 들어온 주문 \(orders.count)건", rest: " · \(total)", chevron: true)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("calendar.orders")
@@ -430,7 +430,7 @@ struct PinnedSummaryCard: View {
             OverdueMark()
                 .font(.subheadline)
                 .frame(width: 20)
-            Text("못 보낸 택배 \(overdue.count)건")
+            Text("기한 넘긴 발송 \(overdue.count)건")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(CalendarTokens.label)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 1)
@@ -841,7 +841,7 @@ struct TimelineLegend: View {
             .font(.subheadline)
             .foregroundStyle(CalendarTokens.secondary)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("범례: 채운 원 예약, 사각형 배송, 빈 원 할 일, 회색 체크 끝남, 빨간 시계 기한 지남")
+            .accessibilityLabel("아이콘 뜻: 색칠한 동그라미 예약, 네모 배송, 속 빈 동그라미 할 일, 회색 체크 다 한 일, 빨간 시계 늦어진 일")
         }
     }
 
@@ -858,7 +858,7 @@ struct TimelineLegend: View {
         HStack(spacing: 5) {
             OverdueMark()
                 .font(.system(size: Self.markSize + 1))
-            Text("지남")
+            Text("이미 지났어요")
         }
     }
 
@@ -889,7 +889,7 @@ struct DayOrdersView: View {
             }
         }
         .cardList()
-        .navigationTitle("\(date.koreanDay(weekday: false)) 새 주문")
+        .navigationTitle("\(date.koreanDay(weekday: false)) 새로 들어온 주문")
         .navigationBarTitleDisplayMode(.inline)
     }
 

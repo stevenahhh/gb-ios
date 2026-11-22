@@ -202,7 +202,7 @@ async def test_versions_grow_and_never_change(database: AsyncEngine, client: Asy
     assert (await client.post("/policy/versions", json=first)).json()["version"] == 1
     assert (await client.post("/policy/versions", json=second)).json()["version"] == 2
     listed = (await client.get("/policy/versions")).json()
-    assert [(row["version"], row["change"]) for row in listed] == [(2, "당일 50% 환불"), (1, "첫 규정")]
+    assert [(row["version"], row["change"]) for row in listed] == [(2, "당일 50% 환불"), (1, "첫 번째 규정")]
     assert (await client.get("/policy/versions/1")).json()["labels"] == ["당일 환불 없음"]
     duplicate: Body = {"rules": [{"daysBefore": 0}, {"daysBefore": 0}], "sourceText": "x"}
     assert (await client.post("/policy/versions", json=duplicate)).status_code == 422

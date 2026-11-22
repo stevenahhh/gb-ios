@@ -61,13 +61,14 @@ struct TodayView: View {
         await loader.load { try await RoundupAPI.today() }
         if let count = loader.value?.attentionCount { app.updateAttention(count) }
         await BK25JudgmentInbox.shared.load()
+        await AgentCenter.shared.loadProposals()
     }
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("오늘 등록된 일이 없어요", systemImage: "checkmark.circle")
+            Label("오늘은 잡힌 게 없어요", systemImage: "checkmark.circle")
         } description: {
-            Text(verbatim: "예약과 주문이 생기면\n오늘 할 일이 여기에 모여요.")
+            Text(verbatim: "손님 예약·주문이 들어오면\n그날 챙길 목록이 여기 떠요.")
                 .foregroundStyle(Color.secondaryText)
         }
         .accessibilityIdentifier("today.empty")
@@ -81,6 +82,7 @@ struct TodayView: View {
             }
 
             BK06TodaySection()
+            AgentProposalSection()
             BK25JudgmentSection()
 
             ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
@@ -128,7 +130,7 @@ struct TodayView: View {
                         TaskRow(item: entry.item, kind: entry.kind, isInOverdueGroup: true)
                     }
                     if overdue.count > 3 {
-                        NavigationLink("모두 보기") { OverdueListView() }
+                        NavigationLink("다 보기") { OverdueListView() }
                             .accessibilityIdentifier("today.overdue.all")
                     }
                 } header: {
@@ -163,15 +165,15 @@ struct TodayView: View {
             }
             .environment(\.hidesCardStatus, today.channels.cards.allChannelsUnconnected)
             CardSection {
-                cards(today.channels.todos, empty: "오늘 챙길 채널 일이 없어요")
+                cards(today.channels.todos, empty: "오늘 채널 쪽은 챙길 게 없어요")
             } header: {
-                SectionHeader(title: "오늘 챙길 일 \(today.channels.todos.count)건")
+                SectionHeader(title: "챙길 채널 일 \(today.channels.todos.count)건")
             }
         case .delivery:
             CardSection {
-                cards(today.delivery.shipToday, empty: "오늘 발송할 물건이 없어요")
+                cards(today.delivery.shipToday, empty: "오늘은 부칠 택배가 없어요")
             } header: {
-                SectionHeader(title: "오늘 발송할 물건 \(today.delivery.shipToday.count)건", area: .deliveries)
+                SectionHeader(title: "오늘 부칠 택배 \(today.delivery.shipToday.count)건", area: .deliveries)
             }
             CardSection {
                 NavigationLink(value: AreaRoute(area: .deliveries, filter: "in_transit")) {
@@ -186,15 +188,15 @@ struct TodayView: View {
                 }
                 ForEach(today.delivery.inTransit) { WorkCard(item: $0) }
             } header: {
-                SectionHeader(title: "이동 중인 배송")
+                SectionHeader(title: "가고 있는 택배")
             }
         case .suggestions:
             CardSection {
-                cards(today.suggestions.items, empty: "지금은 새로운 추천이 없어요")
+                cards(today.suggestions.items, empty: "새로 드릴 추천이 지금은 없어요")
             } header: {
                 SectionHeader(title: "오늘의 추천")
             } footer: {
-                Text("비서가 공방의 예약과 초안을 보고 골랐어요. 틀릴 수 있으니 내용을 확인해 주세요.")
+                Text("예약 상황과 써 둔 글을 훑어보고 고른 거예요. 비서도 헛짚을 때가 있으니 하나씩 살펴보고 쓰세요.")
             }
         }
     }

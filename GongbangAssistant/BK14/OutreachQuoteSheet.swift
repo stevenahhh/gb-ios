@@ -8,7 +8,7 @@ struct OutreachSheetDetails {
     var account = ""
     var manager = ""
     var preparation = ""
-    var payment = "계좌 이체"
+    var payment = "계좌로 입금"
     var vat = OutreachVat.unknown
 }
 
@@ -20,14 +20,14 @@ struct OutreachSheetPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("출강 견적서").font(.system(size: 24, weight: .bold))
+            Text("출장 수업 견적서").font(.system(size: 24, weight: .bold))
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(verbatim: details.shopName).fontWeight(.semibold)
                     if !details.phone.isEmpty { Text(verbatim: "연락처 \(details.phone)") }
                 }
                 Spacer()
-                Text(verbatim: "작성일 \(OutreachFormat.dayText(Date.now.dayKey))")
+                Text(verbatim: "\(OutreachFormat.dayText(Date.now.dayKey)) 작성")
             }
             Divider()
             table([
@@ -40,22 +40,22 @@ struct OutreachSheetPage: View {
                 ("인원", "\(quote.inputs.headcount)명"),
             ])
             Divider()
-            Text("내역").fontWeight(.semibold)
+            Text("금액 내역").fontWeight(.semibold)
             table(quote.calculation.lines.map { ($0.label, OutreachFormat.won($0.amountKrw)) })
             table([
                 ("총액", OutreachFormat.won(quote.calculation.totalKrw)),
-                ("1인 단가", OutreachFormat.won(quote.calculation.perPersonKrw)),
+                ("1인당 가격", OutreachFormat.won(quote.calculation.perPersonKrw)),
                 ("부가세", details.vat == .unknown ? "" : details.vat.label),
             ])
             .fontWeight(.semibold)
             if !quote.calculation.tierPrices.isEmpty {
                 Divider()
-                Text("인원별 1인 단가").fontWeight(.semibold)
+                Text("인원에 따른 1인 가격").fontWeight(.semibold)
                 table(quote.calculation.tierPrices.map { ("\($0.headcount)명", OutreachFormat.won($0.perPersonKrw)) })
             }
             Divider()
             table([
-                ("변경·취소 마감", quote.changeDeadline.map(OutreachFormat.dayText) ?? ""),
+                ("날짜 변경, 취소는 언제까지", quote.changeDeadline.map(OutreachFormat.dayText) ?? ""),
                 ("준비물", details.preparation),
                 ("입금 방식", details.payment),
                 ("계좌", details.account),
@@ -84,7 +84,7 @@ struct OutreachSheetPage: View {
 
     /// Writes the page to a temporary file on the device; nothing is uploaded.
     static func render(_ quote: OutreachQuote, details: OutreachSheetDetails) -> URL? {
-        let url = FileManager.default.temporaryDirectory.appending(path: "출강 견적서 \(quote.id.suffix(6)).pdf")
+        let url = FileManager.default.temporaryDirectory.appending(path: "출장 수업 견적서 \(quote.id.suffix(6)).pdf")
         let renderer = ImageRenderer(content: OutreachSheetPage(quote: quote, details: details))
         var box = CGRect(origin: .zero, size: size)
         guard let context = CGContext(url as CFURL, mediaBox: &box, nil) else { return nil }
@@ -114,7 +114,7 @@ struct OutreachPDFPreview: View {
             List {
                 if quote.locked {
                     CardSection {
-                        Label("기관 확인 후 내보낼 수 있습니다", systemImage: "lock")
+                        Label("기관 정보를 확인하셔야 내보낼 수 있어요", systemImage: "lock")
                             .accessibilityIdentifier("outreach.locked")
                     }
                 }
@@ -127,20 +127,20 @@ struct OutreachPDFPreview: View {
                     field("담당자 이름", $details.manager)
                     field("준비물", $details.preparation)
                     field("입금 방식", $details.payment)
-                    Picker("부가세 표시", selection: $details.vat) {
+                    Picker("부가세 적는 방식", selection: $details.vat) {
                         ForEach(OutreachVat.allCases) { Text($0.label).tag($0) }
                     }
-                    Toggle("연락처와 계좌를 확인했어요", isOn: $hasChecked)
+                    Toggle("전화번호와 입금 계좌, 둘 다 봤어요", isOn: $hasChecked)
                         .accessibilityIdentifier("outreach.checked")
                 } header: {
-                    Text("견적표에 넣을 내용")
+                    Text("견적서에 들어갈 정보")
                 } footer: {
-                    Text("여기 적은 값은 이 기기에만 있어요.")
+                    Text("여기에 쓰신 정보는 이 아이폰에만 남아요.")
                 }
                 CardSection {
                     if let errorMessage { Label(errorMessage, systemImage: "exclamationmark.circle") }
                     Button(action: export) {
-                        BusyLabel(title: "PDF 내보내기", isBusy: false, isProminent: true)
+                        BusyLabel(title: "PDF 파일로 저장", isBusy: false, isProminent: true)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -150,7 +150,7 @@ struct OutreachPDFPreview: View {
                 }
             }
             .cardList()
-            .navigationTitle("견적표 미리보기")
+            .navigationTitle("견적서 먼저 보기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
@@ -176,7 +176,7 @@ struct OutreachPDFPreview: View {
         .clipShape(.rect)
         .listRowInsets(EdgeInsets())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("견적표 미리보기, 총액 \(OutreachFormat.won(quote.calculation.totalKrw))")
+        .accessibilityLabel("보내기 전에 견적서 보기, 합계 \(OutreachFormat.won(quote.calculation.totalKrw))")
     }
 
     private func field(_ title: String, _ value: Binding<String>) -> some View {
@@ -201,7 +201,7 @@ struct OutreachPDFPreview: View {
             errorMessage = nil
             file = OutreachPDFFile(url: url)
         } else {
-            errorMessage = "PDF를 만들지 못했어요. 다시 시도해 주세요."
+            errorMessage = "PDF 파일을 못 만들었어요. 조금 있다가 한 번 더 눌러 주세요."
         }
     }
 }

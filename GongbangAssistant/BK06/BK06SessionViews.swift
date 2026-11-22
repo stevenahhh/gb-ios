@@ -7,12 +7,12 @@ struct BK06SessionListView: View {
     var body: some View {
         List {
             CardSection {
-                if sessions.isEmpty { Text("앞으로 2주 동안 잡힌 수업이 없어요").foregroundStyle(Color.secondaryText) }
+                if sessions.isEmpty { Text("앞으로 2주는 수업이 하나도 없어요").foregroundStyle(Color.secondaryText) }
                 ForEach(sessions) { item in
                     NavigationLink { BK06SessionView(sessionID: item.sessionId) } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(verbatim: item.classTitle).font(.headline)
-                            PhraseText(text: "\(item.schedule) · 예약 \(item.booked)명 · 정원 \(item.capacity)명")
+                            PhraseText(text: "\(item.schedule) · \(item.booked)/\(item.capacity)명")
                                 .font(.subheadline)
                                 .foregroundStyle(Color.secondaryText)
                         }
@@ -22,7 +22,7 @@ struct BK06SessionListView: View {
             }
         }
         .cardList()
-        .navigationTitle("출석 체크와 대기 손님")
+        .navigationTitle("출석 체크, 빈자리 기다리는 손님")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -38,31 +38,31 @@ struct BK06SessionView: View {
         LoadableContent(loader: loader, retry: load) { detail in
             List {
                 CardSection {
-                    if detail.guests.isEmpty { Text("예약한 손님이 없어요").foregroundStyle(Color.secondaryText) }
+                    if detail.guests.isEmpty { Text("예약하신 손님이 아직 없어요").foregroundStyle(Color.secondaryText) }
                     ForEach(detail.guests) { guestRow($0) }
                 } header: {
-                    Text("\(detail.schedule) · 예약 \(detail.booked)명 · 정원 \(detail.capacity)명")
+                    Text("\(detail.schedule) · \(detail.booked)/\(detail.capacity)명")
                 } footer: {
-                    Text("손님이 오시면 행을 눌러 주세요. 오른쪽 버튼으로 규정 안내를 복사할 수 있어요.")
+                    Text("오른쪽 버튼을 누르면 환불 규정 안내를 복사해요. 손님이 도착하시면 그분 이름을 눌러 주세요.")
                 }
-                CardSection("자리를 기다리는 분") {
+                CardSection("빈자리를 기다리는 손님") {
                     ForEach(detail.targets) { target in
                         BK06ValueRow(label: "\(target.name) 님", value: target.sourceText)
                             .swipeActions {
-                                Button("빼기", role: .destructive) {
+                                Button("명단에서 빼기", role: .destructive) {
                                     act { try await RoundupAPI.k06RemoveWaiting(sessionID: sessionID, entryID: target.entryId) }
                                 }
                             }
                     }
-                    Button("기다리는 분 추가", systemImage: "plus") { isAddingGuest = true }
+                    Button("기다리는 손님 추가", systemImage: "plus") { isAddingGuest = true }
                         .accessibilityIdentifier("k06.addWaiting")
                 }
                 CardSection("최소 인원") {
                     if let seats = detail.minSeats { BK06ValueRow(label: "최소 인원", value: "\(seats)명") }
                     if let deadline = detail.materialOrderDeadline {
-                        BK06ValueRow(label: "재료 발주 마감", value: BK06Format.when(deadline))
+                        BK06ValueRow(label: "재료 주문 마감일", value: BK06Format.when(deadline))
                     }
-                    Button(detail.minSeats == nil ? "최소 인원을 정하면 미리 알려 드려요" : "고치기") { isPlanning = true }
+                    Button(detail.minSeats == nil ? "모자랄 것 같으면 미리 알려 드릴게요. 최소 인원을 적어 두세요" : "고치기") { isPlanning = true }
                         .accessibilityIdentifier("k06.plan")
                 }
             }
@@ -95,7 +95,7 @@ struct BK06SessionView: View {
         HStack(spacing: 12) {
             attendanceButton(guest)
             // Visible, not only behind a long press: copying the rule notice is a common next step.
-            Button(guest.noticed ? "규정 안내 다시 복사" : "규정 안내 복사", systemImage: "doc.on.doc") { copyNotice(guest) }
+            Button(guest.noticed ? "규정 안내 한 번 더 복사" : "규정 안내 복사하기", systemImage: "doc.on.doc") { copyNotice(guest) }
                 .labelStyle(.iconOnly)
                 .frame(minWidth: 44, minHeight: 44)
                 .buttonStyle(.borderless)
@@ -116,7 +116,7 @@ struct BK06SessionView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(guest.customerName) 님 · \(guest.people)명").font(.headline)
-                    Text(guest.noShowAt != nil ? "노쇼" : guest.attendedAt != nil ? "도착" : "아직 체크 없음")
+                    Text(guest.noShowAt != nil ? "노쇼" : guest.attendedAt != nil ? "도착" : "출석 체크 전")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }
@@ -128,7 +128,7 @@ struct BK06SessionView: View {
         .buttonStyle(.borderless)
         .foregroundStyle(Color.primary)
         .contextMenu {
-            Button(guest.noticed ? "규정 안내 다시 복사" : "규정 안내 복사", systemImage: "doc.on.doc") { copyNotice(guest) }
+            Button(guest.noticed ? "규정 안내 한 번 더 복사" : "규정 안내 복사하기", systemImage: "doc.on.doc") { copyNotice(guest) }
         }
         .accessibilityIdentifier("k06.guest.\(guest.bookingId)")
     }
@@ -137,7 +137,7 @@ struct BK06SessionView: View {
         act {
             let notice = try await RoundupAPI.k06Notice(bookingID: guest.bookingId)
             UIPasteboard.general.string = notice.summary
-            app.showToast("규정 \(notice.version)판 안내를 복사했어요", seconds: 3)
+            app.showToast("\(notice.version)번째 규정 안내 복사 끝!", seconds: 3)
         }
     }
 }
@@ -162,7 +162,7 @@ struct BK06PlanEditor: View {
             List {
                 CardSection {
                     Stepper("최소 \(seats)명", value: $seats, in: 1...100)
-                    DatePicker("재료 발주 마감", selection: $deadline)
+                    DatePicker("재료 주문 마감일", selection: $deadline)
                     TextField("1인 재료비(원)", text: $material).keyboardType(.numberPad)
                 }
             }
@@ -196,15 +196,15 @@ struct BK06WaitingEditor: View {
             List {
                 CardSection {
                     TextField("이름", text: $name)
-                    TextField("전화번호(선택)", text: $phone).keyboardType(.phonePad)
-                    Picker("구분", selection: $isMakeup) {
-                        Text("대기를 부탁한 손님").tag(false)
-                        Text("보강이 남은 수강생").tag(true)
+                    TextField("전화번호(없어도 괜찮아요)", text: $phone).keyboardType(.phonePad)
+                    Picker("어떤 손님인가요", selection: $isMakeup) {
+                        Text("빈자리 나면 연락 달라고 하신 손님").tag(false)
+                        Text("보강 수업이 남은 수강생").tag(true)
                     }
                 }
             }
             .cardList()
-            .navigationTitle("기다리는 분")
+            .navigationTitle("기다리는 손님")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
@@ -236,15 +236,15 @@ struct BK06LateView: View {
                     CardSection {
                         BK06CopyableDraft(name: card.customerName, text: draft)
                     } header: {
-                        Text("노쇼로 기록했어요")
+                        Text("노쇼로 기록해 뒀어요")
                     }
                 }
                 .cardList()
             } else if outcome == nil, let card = cards.late.first(where: { $0.id == bookingID }) {
                 list(card)
             } else {
-                ContentUnavailableView("이미 처리한 손님이에요", systemImage: "checkmark.circle",
-                                       description: Text("도착이나 노쇼로 표시했거나 예약이 바뀌었어요."))
+                ContentUnavailableView("이미 정리하신 손님이에요", systemImage: "checkmark.circle",
+                                       description: Text("이미 도착이나 노쇼로 표시하셨거나 그사이 예약 내용이 달라졌어요."))
                     .accessibilityIdentifier("k06.late.done")
             }
         }
@@ -269,11 +269,11 @@ struct BK06LateView: View {
                         .foregroundStyle(Color.secondaryText)
                 }
                 if let phone = card.phone, let url = URL(string: "tel:\(phone.filter(\.isNumber))") {
-                    Button("전화하기", systemImage: "phone") { openURL(url) }
+                    Button("전화 걸기", systemImage: "phone") { openURL(url) }
                         .buttonStyle(.bordered)
                 }
             }
-            CardSection("확인 메시지") {
+            CardSection("확인 문자 보내기") {
                 BK06CopyableDraft(name: card.customerName, text: card.draft)
             }
             CardSection {
@@ -282,9 +282,9 @@ struct BK06LateView: View {
                     .buttonStyle(.bordered)
                     .disabled(isBusy)
                     .accessibilityIdentifier("k06.arrived")
-                BK06PrimaryButton(title: "노쇼로 기록", isBusy: isBusy, identifier: "k06.noShow") { mark(arrived: false) }
+                BK06PrimaryButton(title: "노쇼로 기록하기", isBusy: isBusy, identifier: "k06.noShow") { mark(arrived: false) }
             } footer: {
-                Text("노쇼 기록은 우리 공방에서만 보여요. 예약금은 앱이 옮기지 않아요.")
+                Text("예약금은 앱이 건드리지 않아요. 노쇼 기록도 우리 공방 안에서만 보여요.")
             }
         }
         .cardList()
@@ -296,7 +296,7 @@ struct BK06LateView: View {
         Task {
             do {
                 outcome = try await RoundupAPI.k06Attendance(bookingID: bookingID, arrived: arrived)
-                app.showToast(arrived ? "도착으로 표시했어요" : "노쇼로 기록했어요") {
+                app.showToast(arrived ? "도착 체크 끝!" : "노쇼로 기록해 뒀어요") {
                     await app.run(id: "k06.undoAttendance") { try await RoundupAPI.k06UndoAttendance(bookingID: bookingID) }
                 }
             } catch {
@@ -327,10 +327,10 @@ struct BK06RefillView: View {
                 }
                 if refill.targets.isEmpty {
                     CardSection {
-                        Text("제안할 분이 없어요").accessibilityIdentifier("k06.refill.empty")
-                        NavigationLink("기다리는 분 추가하러 가기") { BK06SessionView(sessionID: sessionID) }
+                        Text("연락드릴 손님이 없어요").accessibilityIdentifier("k06.refill.empty")
+                        NavigationLink("빈자리 대기 명단 채우러 가기") { BK06SessionView(sessionID: sessionID) }
                     } footer: {
-                        Text("대기를 부탁한 손님이나 보강이 남은 수강생을 적어 두면 여기에 순서대로 보여요.")
+                        Text("빈자리 나면 연락 달라고 하신 손님이나 보강 수업이 남은 분을 적어 두시면 연락드릴 순서대로 보여 드려요.")
                     }
                 } else {
                     offers(refill)
@@ -348,13 +348,13 @@ struct BK06RefillView: View {
     @ViewBuilder
     private func offers(_ refill: BK06Refill) -> some View {
         let target = refill.targets.first { $0.id == chosen } ?? refill.targets[0]
-        CardSection("제안할 순서") {
+        CardSection("연락드릴 순서") {
             ForEach(Array(refill.targets.enumerated()), id: \.element.id) { index, item in
                 Button { chosen = item.id } label: {
                     HStack(spacing: 10) {
                         BK06ValueRow(label: "\(index + 1). \(item.name) 님", value: item.sourceText)
                         if item.id == target.id {
-                            Image(systemName: "checkmark").accessibilityLabel("선택함")
+                            Image(systemName: "checkmark").accessibilityLabel("골랐어요")
                         }
                     }
                     .contentShape(.rect)
@@ -364,15 +364,15 @@ struct BK06RefillView: View {
         }
         CardSection {
             Text(verbatim: target.draft).textSelection(.enabled)
-            BK06PrimaryButton(title: target.id == refill.targets[0].id ? "첫 번째 분께 보낼 초안 복사" : "\(target.name) 님께 보낼 초안 복사",
+            BK06PrimaryButton(title: target.id == refill.targets[0].id ? "맨 앞 손님께 갈 초안 복사하기" : "\(target.name) 님께 보낼 초안 복사하기",
                               identifier: "k06.refill.copy") {
                 UIPasteboard.general.string = target.draft
-                app.showToast("복사했어요. 쓰시는 채널에서 보내 주세요", seconds: 3)
+                app.showToast("복사 끝! 카톡이든 문자든 평소 쓰시는 채널에 붙여 보내 주세요", seconds: 3)
             }
         } header: {
-            Text("제안 초안")
+            Text("빈자리 안내 초안")
         } footer: {
-            Text("한 분씩 보내고 답을 기다려 주세요. 수락하시면 예약 등록에서 자리를 채워 주세요.")
+            Text("자리 하나에 한 분씩 연락하고 답이 올 때까지 기다려 주세요. 오신다고 하면 예약 넣기에서 이름을 올리시면 돼요.")
         }
     }
 }
@@ -394,15 +394,15 @@ struct BK06UnderMinView: View {
                     Text(verbatim: card.className).font(.headline)
                     Text(verbatim: BK06Format.when(card.startsAt)).font(.subheadline).foregroundStyle(Color.secondaryText)
                 }
-                BK06ValueRow(label: "예약", value: "\(card.booked)명", tag: "최소 \(card.minSeats)명")
-                BK06ValueRow(label: "재료 발주 마감", value: BK06Format.when(card.orderDeadline))
+                BK06ValueRow(label: "예약", value: "\(card.booked)명", tag: "적어도 \(card.minSeats)명")
+                BK06ValueRow(label: "재료 주문 마감일", value: BK06Format.when(card.orderDeadline))
                 if let material = card.materialWon {
-                    BK06ValueRow(label: "예약 인원 재료비", value: BK06Format.won(material), tag: "추정")
+                    BK06ValueRow(label: "예약된 인원만큼 드는 재료비", value: BK06Format.won(material), tag: "추정")
                 }
             }
             if let drafts {
-                CardSection("안내 초안") {
-                    if drafts.isEmpty { Text("안내할 손님이 없어요") }
+                CardSection("안내 문자 초안") {
+                    if drafts.isEmpty { Text("연락드릴 손님이 없어요") }
                     ForEach(drafts) { BK06CopyableDraft(name: $0.customerName, text: $0.draft) }
                 }
             } else {
@@ -410,42 +410,42 @@ struct BK06UnderMinView: View {
             }
         }
         .cardList()
-        .navigationTitle("인원 미달")
+        .navigationTitle("인원 부족")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(decision == "merge" ? "이 회차 예약을 옮길까요?" : "이번 회차를 취소할까요?",
+        .confirmationDialog(decision == "merge" ? "예약을 다른 날 수업으로 옮길까요?" : "이번 수업을 취소할까요?",
                             isPresented: $isConfirming, titleVisibility: .visible) {
-            Button(decision == "merge" ? "합치고 초안 만들기" : "취소하고 초안 만들기", role: .destructive) { decide() }
+            Button(decision == "merge" ? "반 합치고 초안 받기" : "취소하고 초안 받기", role: .destructive) { decide() }
         } message: {
-            Text("앱에서 되돌릴 수 없어요. 손님에게는 아무것도 보내지 않아요.")
+            Text("손님께는 아무 연락도 가지 않아요. 다만 한 번 하면 앱에서 원래대로 돌릴 수 없어요.")
         }
         .onDisappear { if drafts != nil { app.dataDidChange() } }
     }
 
     private var choices: some View {
         CardSection {
-            Picker("진행 방식", selection: $decision) {
-                Text("그대로 진행").tag("run")
-                if !card.mergeCandidates.isEmpty { Text("다른 회차와 합치기").tag("merge") }
-                Text("이번 회차 취소").tag("cancel")
+            Picker("수업을 어떻게 할까요", selection: $decision) {
+                Text("예정대로 수업하기").tag("run")
+                if !card.mergeCandidates.isEmpty { Text("다른 수업이랑 반 합치기").tag("merge") }
+                Text("이번 수업 취소하기").tag("cancel")
             }
             .accessibilityIdentifier("k06.underMin.decision")
             if decision == "merge" {
-                Picker("합칠 회차", selection: $mergeInto) {
-                    Text("골라 주세요").tag(String?.none)
+                Picker("합칠 수업 고르기", selection: $mergeInto) {
+                    Text("하나 골라 주세요").tag(String?.none)
                     ForEach(card.mergeCandidates) { option in
-                        Text("\(BK06Format.when(option.startsAt)) · 남은 자리 \(option.openSeats)개").tag(Optional(option.sessionId))
+                        Text("\(BK06Format.when(option.startsAt)) · \(option.openSeats)자리 비어 있어요").tag(Optional(option.sessionId))
                     }
                 }
             }
             if let errorMessage { BK06ErrorRow(message: errorMessage) }
-            BK06PrimaryButton(title: "결정하고 안내 초안 만들기", isBusy: isBusy, identifier: "k06.underMin.decide") {
+            BK06PrimaryButton(title: "정하고 손님 안내 문자 초안 받기", isBusy: isBusy, identifier: "k06.underMin.decide") {
                 if decision == "run" { decide() } else { isConfirming = true }
             }
             .disabled(decision == "merge" && mergeInto == nil)
         } header: {
-            Text("결정")
+            Text("어떻게 할까요")
         } footer: {
-            if card.mergeCandidates.isEmpty { Text("같은 주에 합칠 수 있는 회차가 없어요.") }
+            if card.mergeCandidates.isEmpty { Text("같은 주에는 합칠 만한 수업이 안 보여요.") }
         }
     }
 
@@ -458,7 +458,7 @@ struct BK06UnderMinView: View {
                     sessionID: card.sessionId, decision: decision,
                     mergeInto: decision == "merge" ? mergeInto : nil, revision: card.revision).drafts
             } catch let error as RoundupAPIError where error.isConflict && decision == "merge" {
-                errorMessage = "합칠 자리가 없어졌어요. 다른 회차를 골라 주세요."
+                errorMessage = "그새 자리가 다 찼어요. 합칠 수업을 새로 골라 주세요."
             } catch {
                 errorMessage = error.localizedDescription
             }

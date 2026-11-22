@@ -1,6 +1,6 @@
 """Owner tasks, including material orders and channel chores."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter
@@ -39,15 +39,20 @@ async def open_channel_tasks(db: AsyncSession, today: date, text: str = "") -> l
     return [task_card(task, today) for task in rows]
 
 
+def set_done(task: TaskRow, now: datetime, *, done: bool) -> None:
+    """Complete a locked task, or reopen it."""
+    if (task.status == "done") == done:
+        raise invalid_transition()
+    task.status = "done" if done else "open"
+    task.completed_at = now if done else None
+    task.revision += 1
+
+
 @router.post("/tasks/{task_id}/completion")
 async def set_task_completion(task_id: str, body: SessionCompletion, db: Session, now: Now) -> Card:
     """Complete a task or reopen it."""
     task = await locked(db, TaskRow, task_id, body.expected_revision)
-    if (task.status == "done") == body.done:
-        raise invalid_transition()
-    task.status = "done" if body.done else "open"
-    task.completed_at = now if body.done else None
-    task.revision += 1
+    set_done(task, now, done=body.done)
     await db.flush()
     return task_card(task, now.date())
 

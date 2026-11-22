@@ -251,7 +251,7 @@ struct GeneratingIndicator: View {
     @Previewable @State var isFresh = true
     @Previewable @State var run = 0
     VStack(alignment: .leading, spacing: 16) {
-        GeneratingIndicator(label: "비서가 현황을 보고 있어요")
+        GeneratingIndicator(label: "비서가 공방 상황을 살피는 중이에요")
             .font(.subheadline)
         GeneratedText(AttributedString("안녕하세요, 오롯 공방이에요. 토요일 2시 물레 클래스는 두 자리 남아 있어요. 예약금 2만 원을 보내 주시면 자리를 잡아 둘게요."), isFresh: $isFresh)
             .id(run)

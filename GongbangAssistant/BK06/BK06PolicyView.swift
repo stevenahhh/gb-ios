@@ -7,12 +7,12 @@ struct BK06PolicyRow: View {
     var body: some View {
         NavigationLink { BK06PolicyView() } label: {
             LabeledContent {
-                if let version = loader.value?.first?.version { Text("\(version)판") }
+                if let version = loader.value?.first?.version { Text("\(version)번째 규정") }
             } label: {
                 // Named apart from 예약·환불 규정 (what the assistant quotes): this table is what refunds are computed from.
                 Label {
-                    Text("환불 계산표")
-                    Text("취소 문자에서 환불액을 계산해요")
+                    Text("환불 금액 계산기")
+                    Text("손님 취소 문자를 보고 돌려드릴 금액을 알려 드려요")
                         .foregroundStyle(Color.secondaryText)
                 } icon: { MenuIcon(systemName: "doc.text") }
             }
@@ -33,9 +33,9 @@ struct BK06PolicyView: View {
                 list(current, versions)
             } else {
                 ContentUnavailableView {
-                    Label("아직 정한 규정이 없어요", systemImage: "doc.text")
+                    Label("아직 만들어 둔 규정이 없어요", systemImage: "doc.text")
                 } description: {
-                    Text(verbatim: "평소 안내하는 취소·환불 규정을\n말하거나 붙여넣으면 표로 정리해요.")
+                    Text(verbatim: "손님께 늘 안내하시던 취소, 환불 규정을\n불러 주시거나 붙여 넣어 주세요. 깔끔한 표로 바꿔 드릴게요.")
                         .foregroundStyle(Color.secondaryText)
                 } actions: {
                     BK06PrimaryButton(title: "규정 말하기", identifier: "k06.policy.start") { isEditing = true }
@@ -43,7 +43,7 @@ struct BK06PolicyView: View {
                 }
             }
         }
-        .navigationTitle("환불 계산표")
+        .navigationTitle("환불 금액 계산기")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: app.dataVersion) { await load() }
         .navigationDestination(isPresented: $isEditing) { BK06PolicyEditor() }
@@ -55,20 +55,20 @@ struct BK06PolicyView: View {
 
     private func list(_ current: BK06PolicyVersion, _ versions: [BK06PolicyVersion]) -> some View {
         List {
-            BK06PolicyTable(version: current, title: "지금 규정 \(current.version)판")
+            BK06PolicyTable(version: current, title: "현재 \(current.version)번째 규정")
             CardSection {
                 BK06PrimaryButton(title: "규정 말하기", identifier: "k06.policy.start") { isEditing = true }
             }
-            CardSection("판 이력") {
+            CardSection("이전 규정 기록") {
                 ForEach(versions) { version in
                     NavigationLink {
-                        List { BK06PolicyTable(version: version, title: "\(version.version)판") }
+                        List { BK06PolicyTable(version: version, title: "\(version.version)번째 규정") }
                             .cardList()
-                            .navigationTitle("\(version.version)판")
+                            .navigationTitle("\(version.version)번째 규정")
                             .navigationBarTitleDisplayMode(.inline)
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("\(version.version)판 · \(BK06Format.when(version.approvedAt))")
+                            Text("\(version.version)번째 규정 · \(BK06Format.when(version.approvedAt))")
                             PhraseText(text: version.change).font(.subheadline).foregroundStyle(Color.secondaryText)
                         }
                     }
@@ -97,16 +97,16 @@ struct BK06PolicyTable: View {
             Text(verbatim: title)
         }
         if !version.unread.isEmpty {
-            CardSection("확인할 문장") {
+            CardSection("한 번 더 봐 주실 문장") {
                 ForEach(version.unread, id: \.self) { BK06PendingLabel(text: $0) }
             }
         }
         CardSection("지각 기준") {
             if let late = version.late {
-                BK06ValueRow(label: "\(late.lateMinutes)분 넘으면", value: "노쇼")
+                BK06ValueRow(label: "\(late.lateMinutes)분 넘게 늦으면", value: "노쇼")
                 if !late.note.isEmpty { Text(verbatim: late.note).font(.subheadline).foregroundStyle(Color.secondaryText) }
             } else {
-                BK06PendingLabel(text: "정하지 않음")
+                BK06PendingLabel(text: "아직 안 정했어요")
             }
         }
     }
@@ -150,25 +150,25 @@ struct BK06PolicyEditor: View {
     var body: some View {
         List {
             CardSection {
-                TextField("3일 전까지 전액 환불, 당일 환불 불가처럼 적어 주세요", text: $text, axis: .vertical)
+                TextField("예: 수업 3일 전까지는 전액 환불, 당일에는 환불 불가", text: $text, axis: .vertical)
                     .lineLimit(5...14)
-                    .accessibilityLabel("규정 문장")
+                    .accessibilityLabel("규정 내용")
                     .accessibilityIdentifier("k06.policy.text")
             } header: {
-                Text("규정 문장")
+                Text("규정 내용")
             } footer: {
-                Text("키보드의 마이크로 말하거나 지금 쓰는 안내문을 붙여넣어 주세요.")
+                Text("키보드 마이크 버튼을 눌러 말씀하시거나 평소 보내시던 안내 문구를 통째로 붙여 넣어 주세요.")
             }
             if let errorMessage {
                 CardSection { BK06ErrorRow(message: errorMessage) }
             }
             if isReading {
-                CardSection { GeneratingIndicator(label: "규정을 표로 옮기고 있어요") }
+                CardSection { GeneratingIndicator(label: "받은 규정을 표에 옮겨 담는 중이에요") }
             } else if hasTable {
                 table
             } else {
                 CardSection {
-                    BK06PrimaryButton(title: "규정표 만들기", identifier: "k06.policy.extract") { extract() }
+                    BK06PrimaryButton(title: "표로 만들기", identifier: "k06.policy.extract") { extract() }
                         .disabled(trimmed.isEmpty)
                 }
             }
@@ -188,39 +188,39 @@ struct BK06PolicyEditor: View {
                 Button { editedDay = BK06EditedDay(index: index) } label: { BK06RuleRow(rule: rule) }
                     .foregroundStyle(Color.primary)
             }
-            Button("행 추가", systemImage: "plus") { addRule() }
+            Button("줄 추가", systemImage: "plus") { addRule() }
         } header: {
-            Text("규정표")
+            Text("환불 규정표")
         } footer: {
-            Text("행을 누르면 고칠 수 있어요. 정하지 않은 조건은 계산하지 않고 사장님께 여쭤 봐요.")
+            Text("고치고 싶은 줄을 톡 눌러 보세요. 빈칸으로 둔 경우는 앱이 멋대로 계산하지 않고 사장님 뜻을 물어볼게요.")
         }
         if !unread.isEmpty {
             CardSection {
                 ForEach(unread, id: \.self) { line in
                     VStack(alignment: .leading, spacing: 8) {
                         BK06PendingLabel(text: line)
-                        Button("표에 반영했어요") { unread.removeAll { $0 == line } }
+                        Button("표에 넣었어요") { unread.removeAll { $0 == line } }
                             .buttonStyle(.bordered)
                     }
                 }
             } header: {
-                Text("확인할 문장")
+                Text("한 번 더 봐 주실 문장")
             } footer: {
-                Text("환불이나 취소에 관한 문장이 남아 있으면 금액을 정하지 않아요. 위 표를 고친 뒤 눌러 주세요.")
+                Text("옮기지 못한 글에 환불이나 취소 이야기가 있으면 얼마를 돌려줄지 비워 둘게요. 위쪽 표부터 손본 다음 눌러 주세요.")
             }
         }
         CardSection("지각 기준") {
-            Toggle("늦으면 노쇼로 보기", isOn: Binding(
+            Toggle("늦게 오시면 노쇼로 치기", isOn: Binding(
                 get: { late != nil }, set: { late = $0 ? BK06LateRule(lateMinutes: 15, note: "") : nil }))
             if let current = late {
-                Stepper("\(current.lateMinutes)분 넘으면 노쇼", value: Binding(
+                Stepper("\(current.lateMinutes)분 넘게 늦으면 노쇼", value: Binding(
                     get: { current.lateMinutes },
                     // The quoted sentence no longer matches a changed threshold.
                     set: { late = BK06LateRule(lateMinutes: $0, note: "") }), in: 5...180, step: 5)
             }
         }
         CardSection {
-            BK06PrimaryButton(title: "이 규정으로 저장", isBusy: app.isRunning("k06.policy"), identifier: "k06.policy.save") { save() }
+            BK06PrimaryButton(title: "이 규정 저장하기", isBusy: app.isRunning("k06.policy"), identifier: "k06.policy.save") { save() }
                 .disabled(rules.isEmpty)
             Button("문장 다시 읽기") { extract() }
                 .disabled(trimmed.isEmpty)
@@ -246,7 +246,7 @@ struct BK06PolicyEditor: View {
                 (rules, late, unread) = (draft.rules, draft.late, draft.unread)
                 hasTable = true
             } catch {
-                errorMessage = "규정을 읽지 못했어요. 다시 시도해 주세요."
+                errorMessage = "규정을 못 읽었어요. 조금 있다가 한 번 더 눌러 주세요."
             }
             isReading = false
         }
@@ -277,19 +277,19 @@ struct BK06RuleEditor: View {
             List {
                 CardSection {
                     Stepper(rule.dayText, value: $rule.daysBefore, in: 0...365)
-                    if takenDays.contains(rule.daysBefore) { BK06ErrorRow(message: "같은 날짜의 행이 이미 있어요.") }
-                    Toggle("환불 비율 정하기", isOn: Binding(
+                    if takenDays.contains(rule.daysBefore) { BK06ErrorRow(message: "그 날짜로 만든 줄이 벌써 있어요.") }
+                    Toggle("환불 비율 고르기", isOn: Binding(
                         get: { rule.refundPercent != nil }, set: { rule.refundPercent = $0 ? 50 : nil }))
                     if let percent = rule.refundPercent {
                         Stepper(rule.outcomeText, value: Binding(
                             get: { percent }, set: { rule.refundPercent = $0 }), in: 0...100, step: 5)
                     }
-                    Toggle("재료비 공제", isOn: $rule.deductMaterial)
-                    Toggle("이월 가능", isOn: $rule.carryOverAllowed)
+                    Toggle("재료비 빼기", isOn: $rule.deductMaterial)
+                    Toggle("다음 수업으로 넘기기 가능", isOn: $rule.carryOverAllowed)
                 }
             }
             .cardList()
-            .navigationTitle("규정 행")
+            .navigationTitle("규정 한 줄")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
@@ -313,7 +313,7 @@ struct BK06CaseListView: View {
     var body: some View {
         LoadableContent(loader: loader, retry: load) { cases in
             if cases.isEmpty {
-                ContentUnavailableView("아직 기록이 없어요", systemImage: "tray")
+                ContentUnavailableView("아직 쌓인 기록이 없어요", systemImage: "tray")
             } else {
                 List {
                     CardSection {
@@ -330,7 +330,7 @@ struct BK06CaseListView: View {
                             }
                         }
                     } footer: {
-                        Text("손님이 삭제를 요청하면 왼쪽으로 밀어 그 예약의 기록을 모두 지워 주세요. 이 기록은 우리 공방에서만 보여요.")
+                        Text("손님이 남은 기록을 없애 달라고 하셨나요? 그 예약을 왼쪽으로 쓸어 넘기면 한 번에 사라져요. 다른 공방에는 이 기록이 보이지 않아요.")
                     }
                 }
                 .cardList()
@@ -339,7 +339,7 @@ struct BK06CaseListView: View {
         .navigationTitle("취소·노쇼 기록")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: app.dataVersion) { await load() }
-        .confirmationDialog("이 예약의 기록을 모두 지울까요?", isPresented: Binding(
+        .confirmationDialog("여기 남은 이 예약 기록을 전부 지울까요?", isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
             Button("기록 지우기", role: .destructive) {
                 guard let id = removing?.bookingId else { return }

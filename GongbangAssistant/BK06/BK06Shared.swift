@@ -71,7 +71,7 @@ struct BK06PendingLabel: View {
 }
 
 struct BK06Disclaimer: View {
-    var body: some View { Text("앱이 계산한 금액은 참고용이며 법률 자문이 아닙니다.") }
+    var body: some View { Text("앱이 계산한 금액은 참고로만 봐 주세요. 법률 상담을 대신하지 않아요.") }
 }
 
 /// A fixed message the owner copies and sends from their own channel.
@@ -83,9 +83,9 @@ struct BK06CopyableDraft: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(verbatim: text).textSelection(.enabled)
-            Button("\(name) 님께 보낼 문장 복사", systemImage: "doc.on.doc") {
+            Button("\(name) 님께 보낼 문장 복사하기", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = text
-                app.showToast("복사했어요. 쓰시는 채널에서 보내 주세요", seconds: 3)
+                app.showToast("복사 끝! 카톡이든 문자든 평소 쓰시는 채널에 붙여 보내 주세요", seconds: 3)
             }
             .buttonStyle(.bordered)
         }

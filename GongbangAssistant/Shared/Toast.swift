@@ -50,7 +50,7 @@ struct ToastHost: View {
     }
 
     private func present(_ toast: AppToast) async {
-        AccessibilityNotification.Announcement(toast.undo == nil ? toast.message : "\(toast.message). 되돌리기 버튼이 있어요").post()
+        AccessibilityNotification.Announcement(toast.undo == nil ? toast.message : "\(toast.message). 실수였다면 되돌리기를 누르세요").post()
         if toast.undo != nil, isVoiceOverOn || UIAccessibility.isSwitchControlRunning { return }
         try? await Task.sleep(for: .seconds(toast.seconds))
         if app.toast?.id == toast.id { app.toast = nil }
@@ -134,7 +134,7 @@ struct PressDimStyle: ButtonStyle {
         .ignoresSafeArea()
         .overlay { ToastHost() }
         .environment(app)
-        .task { app.showToast("‘오롯 머그컵 2개 포장’ 완료했어요", seconds: 600) {} }
+        .task { app.showToast("‘오롯 머그컵 2개 포장’ 끝!", seconds: 600) {} }
 }
 
 #Preview("알림 · 안내만") {
@@ -143,5 +143,5 @@ struct PressDimStyle: ButtonStyle {
         .ignoresSafeArea()
         .overlay { ToastHost() }
         .environment(app)
-        .task { app.showToast("복사했어요", seconds: 600) }
+        .task { app.showToast("복사 끝!", seconds: 600) }
 }

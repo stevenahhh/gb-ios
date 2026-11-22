@@ -175,7 +175,7 @@ final class TabNavigationUITests: RoundupUITestCase {
         app.tabBars.buttons["운영"].tap()
         let tile = app.buttons["operations.attention.depositPending"]
         XCTAssertTrue(tile.waitForExistence(timeout: 10))
-        XCTAssertNotNil(tile.label.wholeMatch(of: /(기한 지남, )?예약금 미확인 \d+건/), "the tile ends at its label: \(tile.label)")
+        XCTAssertNotNil(tile.label.wholeMatch(of: /(기한 지남, )?예약금 확인 전 \d+건/), "the tile ends at its label: \(tile.label)")
         keepScreenshot(of: app, named: "operations-tiles")
 
         let rings = app.descendants(matching: .any)
@@ -202,7 +202,7 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testUnreachableServerShowsRetryInsteadOfData() throws {
         let app = try launch(apiURL: "http://127.0.0.1:9")
         XCTAssertTrue(app.buttons["screen.retry"].waitForExistence(timeout: 30))
-        XCTAssertTrue(element(labelled: "서버에 연결하지 못했어요", in: app).exists)
+        XCTAssertTrue(element(labelled: "지금 연결이 안 돼요", in: app).exists)
         XCTAssertFalse(element(labelled: "도자기 원데이 클래스", in: app).exists)
     }
 
@@ -210,8 +210,9 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testMissingServerAddressExplainsConfiguration() throws {
         let app = XCUIApplication()
         app.launchEnvironment["ROUNDUP_API_URL"] = ""
+        app.skipOnboarding()
         app.launch()
-        XCTAssertTrue(element(labelled: "서버 주소가 설정되지 않았어요", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "앱이 어디로 이어질지 정해 두지 않았네요. ROUNDUP_API_URL이나 RoundupAPIURL에 주소를 채워야 해요.", in: app).waitForExistence(timeout: 10))
     }
 
     @MainActor

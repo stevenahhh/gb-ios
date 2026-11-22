@@ -118,7 +118,7 @@ def metric(key: str, label: str, value: int, detail: str | None = None) -> Metri
 
 def channel_metric(value: int) -> Metric:
     """Build the registered-channel metric, counted in places rather than cases."""
-    return Metric(key="channels", label="등록 채널", value=value, display=f"{value:,}개")
+    return Metric(key="channels", label="저장한 채널", value=value, display=f"{value:,}개")
 
 
 def money_metric(key: str, label: str, value: int) -> Metric:

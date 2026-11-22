@@ -7,7 +7,7 @@ import os
 /// The server could not be reached, or answered that it is briefly unavailable (502-504).
 /// Screens retry these by themselves; HTTP answers such as 401, 404, 409, or 422 are never retried.
 struct ConnectionError: LocalizedError, TransientFailure {
-    var errorDescription: String? { "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." }
+    var errorDescription: String? { "지금 연결이 안 돼요. 조금 기다렸다가 다시 시도해 주세요." }
 }
 
 /// App-wide connection state: whether the device has a network path, and whether the last request reached the server.
@@ -107,10 +107,11 @@ struct AutoReconnect: ViewModifier {
             }
             handledRestorations = connection.pathRestorations
             ServerConnection.logger.info("reconnect.attempt failures=\(failures, privacy: .public)")
-            // Inquiries go first: a screen retry that fails again changes `screenFailures`, which cancels this task
-            // and restarts it with a longer delay.
+            // Inquiries go first: a screen retry changes `screenFailures` as soon as its first request ends, which
+            // cancels this task and restarts it with a longer delay or not at all. The retry runs on its own, so what
+            // the screen loads after that request still arrives.
             if inquiriesFailing { await store.loadInquiries() }
-            if screenFailures > 0 { await retry() }
+            if screenFailures > 0 { await Task { await retry() }.value }
             if Task.isCancelled { return }
             failures += 1
         }

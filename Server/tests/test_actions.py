@@ -26,11 +26,11 @@ class Action:
 
 ACTIONS: Final = (
     Action("/bookings/booking-jieun/confirm-deposit", {}, "확정"),
-    Action("/orders/order-1042/confirm", {}, "포장 대기"),
-    Action("/shipments/shipment-order-1040/pack", {}, "송장 대기"),
+    Action("/orders/order-1042/confirm", {}, "포장 전"),
+    Action("/shipments/shipment-order-1040/pack", {}, "송장 넣기 전"),
     Action("/shipments/shipment-order-1041/invoice", INVOICE, "배송 중"),
     Action("/shipments/shipment-order-1038/deliver", {}, "배송 완료"),
-    Action("/content-drafts/draft-weekend-class/review", {"body": "검토한 글"}, "검토 완료"),
+    Action("/content-drafts/draft-weekend-class/review", {"body": "검토한 글"}, "다 읽어 봄"),
     Action("/tasks/task-keyring/completion", {"done": True}, "완료"),
     Action("/recommendations/recommendation-weekend/acknowledge", {}, "확인함"),
 )
@@ -82,7 +82,7 @@ async def test_action_is_visible_to_the_next_read(database: AsyncEngine, client:
 async def test_order_confirmation_opens_fulfilment(database: AsyncEngine, client: AsyncClient) -> None:
     assert (await act(client, ACTIONS[1])).status_code == 200
     shipments = (await client.get("/shipments", params={"q": "#1042"})).json()["items"]
-    assert [item["status"]["text"] for item in shipments] == ["포장 대기"]
+    assert [item["status"]["text"] for item in shipments] == ["포장 전"]
     assert shipments[0]["deadline"] == "오늘 16:00 택배 수거"
 
 
@@ -131,7 +131,7 @@ async def test_created_booking_waits_for_deposit_and_takes_seats(
     created = await client.post("/bookings", json=booking(3))
     assert created.status_code == 201
     assert created.json()["status"]["text"] == "예약금 대기"
-    assert created.json()["deadline"] == "입금 기한 내일 11:00"
+    assert created.json()["deadline"] == "입금 마감 내일 11:00"
     assert (await client.post("/bookings", json=booking(1))).status_code == 409
 
 
@@ -244,6 +244,6 @@ async def test_assistant_activities_list_only_work_it_did(
     assert pickup["targetId"] == "shipment-order-1040"
     assert pickup["status"] == "확인 필요"
     reply = next(item for item in body if item["kind"] == "inquiryReply")
-    assert reply["summary"].endswith("님 문의에 답변을 써 뒀어요")
-    assert reply["evidence"][0].startswith("손님 문의 · ")
+    assert reply["summary"].endswith("님께 보낼 답장, 준비해 놨어요")
+    assert reply["evidence"][0].startswith("손님이 물어본 내용 · ")
     assert [item["at"] for item in body] == sorted((item["at"] for item in body), reverse=True)

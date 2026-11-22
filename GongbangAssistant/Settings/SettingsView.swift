@@ -26,7 +26,7 @@ struct SettingsView: View {
             CardSection {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(data.workshop?.name ?? "공방 정보를 입력해 주세요")
+                        Text(data.workshop?.name ?? "공방 이름, 주소부터 채워 주세요")
                             .font(.headline)
                         if let owner = data.workshop?.ownerTitle {
                             Text(owner)
@@ -56,17 +56,17 @@ struct SettingsView: View {
                 NavigationLink {
                     BK25FactCardListView()
                 } label: {
-                    Label { Text("수업 사실 카드") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
+                    Label { Text("수업 정보") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
                 }
                 .accessibilityIdentifier("settings.factCards")
                 rows(sections["공방"] ?? [])
                 NavigationLink {
-                    ChannelStatusView(channels: data.channels)
+                    ConnectionsView()
                 } label: {
                     Label { Text("채널 연결") } icon: { MenuIcon(systemName: "link") }
                 }
                 NavigationLink {
-                    AssistantDelegationView()
+                    AgentAutonomyView()
                 } label: {
                     Label { Text("\(AssistantIdentity.name)에게 맡길 일") } icon: { MenuIcon(systemName: "hand.raised") }
                 }
@@ -78,6 +78,17 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.activities")
                 OutreachCostLink()
+            }
+
+            CardSection {
+                CurrentPlanRow()
+                Button {
+                    OnboardingState.shared.restart()
+                } label: {
+                    Label { Text("처음 안내 다시 보기") } icon: { MenuIcon(systemName: "arrow.counterclockwise") }
+                }
+                .tint(.primary)
+                .accessibilityIdentifier("settings.onboarding")
             }
 
             if let support = sections["지원"] {
@@ -96,24 +107,6 @@ struct SettingsView: View {
                 Label { Text(item.title) } icon: { MenuIcon(systemName: item.symbol) }
             }
         }
-    }
-}
-
-struct ChannelStatusView: View {
-    let channels: [WorkItem]
-
-    var body: some View {
-        List {
-            CardSection {
-                ForEach(channels) { WorkCard(item: $0) }
-            } header: {
-                if channels.allChannelsUnconnected { UnconnectedChannelsNote() }
-            }
-            .environment(\.hidesCardStatus, channels.allChannelsUnconnected)
-        }
-        .cardList()
-        .navigationTitle("채널 연결")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

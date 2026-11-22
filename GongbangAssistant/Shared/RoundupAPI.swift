@@ -4,6 +4,8 @@ import RoundupCore
 struct RoundupAPIError: LocalizedError {
     let message: String
     var isConflict = false
+    /// The server has no such route or row.
+    var isMissing = false
     var errorDescription: String? { message }
 }
 
@@ -27,7 +29,7 @@ enum RoundupConfiguration {
         guard let value = candidates.map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: { !$0.isEmpty }),
               let url = URL(string: value), let host = url.host(),
               url.scheme == "https" || (url.scheme == "http" && loopbackHosts.contains(host)) else {
-            throw RoundupAPIError(message: "서버 주소가 설정되지 않았어요. ROUNDUP_API_URL 또는 RoundupAPIURL을 설정해 주세요.")
+            throw RoundupAPIError(message: "앱이 어디로 이어질지 정해 두지 않았네요. ROUNDUP_API_URL이나 RoundupAPIURL에 주소를 채워야 해요.")
         }
         return url
     }
@@ -40,7 +42,7 @@ enum RoundupConfiguration {
         if let key = ProcessInfo.processInfo.environment["ROUNDUP_API_KEY"], !key.isEmpty { return key }
         #endif
         guard let key = secrets?["APIKey"] as? String, !key.isEmpty else {
-            throw RoundupAPIError(message: "서버 인증 키가 설정되지 않았어요. RoundupSecrets.plist를 확인해 주세요.")
+            throw RoundupAPIError(message: "RoundupSecrets.plist 파일 안의 서버 인증 키가 비어 있어요. 파일을 열어 채워 주세요.")
         }
         return key
     }
@@ -50,6 +52,7 @@ enum RoundupAPI {
     private struct Revisioned: Encodable { let expectedRevision: Int }
     private struct Completion: Encodable { let done: Bool; let expectedRevision: Int }
     private struct Acknowledged: Decodable {}
+    private struct NoFields: Encodable {}
 
     // MARK: Screens
 
@@ -329,6 +332,123 @@ enum RoundupAPI {
         try await get("geocode", query: ["query": query])
     }
 
+    // MARK: Assistant agent
+
+    /// A run may use the model for 45 seconds and then take up to six steps, so it waits longer than other writes.
+    private static let agentRunTimeout: TimeInterval = 70
+
+    static func agentSettings() async throws -> AgentSettings { try await get("agent/settings") }
+
+    static func saveAgentSettings(_ change: AgentSettingsChange, revision: Int) async throws -> AgentSettings {
+        struct Body: Encodable {
+            let change: AgentSettingsChange
+            let expectedRevision: Int
+
+            enum CodingKeys: String, CodingKey {
+                case expectedRevision, mode, proactive, perTool, dailyCap, quietHours
+            }
+
+            func encode(to encoder: any Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(expectedRevision, forKey: .expectedRevision)
+                switch change {
+                case .mode(let mode): try container.encode(mode, forKey: .mode)
+                case .proactive(let isOn): try container.encode(isOn, forKey: .proactive)
+                case .tool(let tool, let mode): try container.encode([tool: mode], forKey: .perTool)
+                case .dailyCap(let cap): try container.encode(cap, forKey: .dailyCap)
+                // A null turns the quiet window off; leaving the key out would keep the stored one.
+                case .quietHours(let hours): try container.encode(hours, forKey: .quietHours)
+                }
+            }
+        }
+        return try await send(method: "PUT", path: "agent/settings", body: Body(change: change, expectedRevision: revision))
+    }
+
+    /// `background` leaves the run to the server: the answer comes back queued and `agentRun(id:)` follows it.
+    /// `requestID` names this one send, and the same id always returns the same run, so a send whose answer was
+    /// lost may be repeated without running anything twice.
+    static func agentRun(question: String, history: [ChatTurn], source: AgentRunSource, background: Bool,
+                         requestID: String) async throws -> AgentRunReply {
+        struct Body: Encodable {
+            let question: String
+            let requestId: String
+            let history: [ChatTurn]
+            let source: AgentRunSource
+            let background: Bool
+        }
+        // The server refuses an earlier turn longer than 2,000 characters, so a long answer is cut there.
+        let turns = history.suffix(6).map { ChatTurn(role: $0.role, text: String($0.text.unicodeScalars.prefix(2000))) }
+        return try await send(method: "POST", path: "agent/run", body: Body(
+            question: question, requestId: requestID, history: turns, source: source, background: background),
+            timeout: agentRunTimeout)
+    }
+
+    static func agentRun(id: String) async throws -> AgentRun { try await get("agent/runs/\(id)") }
+
+    static func agentRuns(limit: Int = 50) async throws -> [AgentRun] {
+        let list: AgentList<AgentRun> = try await get("agent/runs", query: ["limit": String(limit)])
+        return list.items
+    }
+
+    static func agentProposals() async throws -> [AgentProposal] {
+        let list: AgentList<AgentProposal> = try await get("agent/proposals")
+        return list.items
+    }
+
+    /// Approves exactly what the card showed: the proposal's own revision goes back unchanged.
+    @discardableResult
+    static func approve(_ proposal: AgentProposal) async throws -> AgentProposal {
+        struct Body: Encodable { let expectedRevision: Int? }
+        return try await post("agent/proposals/\(proposal.id)/approve", Body(expectedRevision: proposal.expectedRevision))
+    }
+
+    @discardableResult
+    static func dismiss(_ proposal: AgentProposal) async throws -> AgentProposal {
+        try await post("agent/proposals/\(proposal.id)/dismiss", NoFields())
+    }
+
+    static func undo(_ step: AgentStep) async throws -> AgentUndoResult {
+        try await post("agent/steps/\(step.id)/undo", NoFields())
+    }
+
+    static func agentMemories() async throws -> [AgentMemory] {
+        let list: AgentList<AgentMemory> = try await get("agent/memories")
+        return list.items
+    }
+
+    static func forget(_ memory: AgentMemory) async throws {
+        var request = try request("agent/memories/\(memory.id)")
+        request.httpMethod = "DELETE"
+        _ = try await sendRaw(request)
+    }
+
+    /// Sends a carrier export as it is. The server reads it, answers with its rows, and keeps nothing.
+    static func importInvoices(file: Data, named name: String) async throws -> AgentInvoiceImport {
+        try decode(try await sendRaw(try invoiceUpload("agent/invoices/import", file: file, named: name)))
+    }
+
+    /// Registers a file's clean rows, and the rows on `acceptedLines` whose format warning the owner accepted,
+    /// all together or none. The same file goes along again, because the server kept only its fingerprint.
+    static func approveImportedInvoices(proposalID: String, file: Data, named name: String,
+                                        acceptedLines: [Int]) async throws -> AgentInvoiceOutcome {
+        var query: [URLQueryItem] = []
+        if !acceptedLines.isEmpty {
+            let lines = acceptedLines.map(String.init).joined(separator: ",")
+            query.append(URLQueryItem(name: "acceptFormat", value: lines))
+        }
+        let upload = try invoiceUpload("agent/invoices/\(proposalID)/approve", file: file, named: name, query: query)
+        return try decode(try await sendRaw(upload, timeout: agentRunTimeout))
+    }
+
+    private static func invoiceUpload(_ path: String, file: Data, named name: String,
+                                      query: [URLQueryItem] = []) throws -> URLRequest {
+        var upload = try request(path, query: [URLQueryItem(name: "filename", value: name)] + query)
+        upload.httpMethod = "POST"
+        upload.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        upload.httpBody = file
+        return upload
+    }
+
     // MARK: Transport
 
     private static let session = URLSession(configuration: .ephemeral, delegate: PinnedServerTrust(), delegateQueue: nil)
@@ -355,19 +475,30 @@ enum RoundupAPI {
         try await send(method: "POST", path: path, body: body)
     }
 
-    static func send<T: Decodable, Body: Encodable>(method: String, path: String, body: Body) async throws -> T {
+    static func send<T: Decodable, Body: Encodable>(method: String, path: String, body: Body,
+                                                    timeout: TimeInterval? = nil) async throws -> T {
         var request = try request(path)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        return try decode(try await sendRaw(request))
+        return try decode(try await sendRaw(request, timeout: timeout))
+    }
+
+    /// The agent and connection routes word each refusal for the owner, so that sentence is shown as it is.
+    private static func ownerSentence(in data: Data, for request: URLRequest) -> String? {
+        struct Refusal: Decodable { let detail: String }
+        guard let path = request.url?.pathComponents, path.contains("agent") || path.contains("connections") else { return nil }
+        guard let detail = (try? JSONDecoder().decode(Refusal.self, from: data))?.detail else { return nil }
+        // The server cannot know where this app keeps the switch.
+        return detail == "지금 비서는 꺼져 있는 상태예요."
+            ? "\(detail) 다시 켜려면 설정 메뉴 ‘\(AssistantIdentity.name)에게 맡길 일’로 가 보세요." : detail
     }
 
     private static func decode<T: Decodable>(_ data: Data, with decoder: JSONDecoder = JSONDecoder()) throws -> T {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
-            throw RoundupAPIError(message: "서버 응답을 읽지 못했어요. 앱을 최신 버전으로 업데이트해 주세요.")
+            throw RoundupAPIError(message: "지금 버전에서는 읽을 수 없는 내용이에요. 앱을 업데이트해 주세요.")
         }
     }
 
@@ -376,10 +507,11 @@ enum RoundupAPI {
 
     /// `idempotent` requests (GETs) get one quick retry; writes never repeat, since a lost response can follow a
     /// committed change.
-    private static func sendRaw(_ request: URLRequest, idempotent: Bool = false) async throws -> Data {
+    private static func sendRaw(_ request: URLRequest, idempotent: Bool = false,
+                                timeout: TimeInterval? = nil) async throws -> Data {
         guard ResponseCache.probe == nil else { throw ResponseCache.Miss() }
         var request = request
-        request.timeoutInterval = idempotent ? 12 : 25
+        request.timeoutInterval = timeout ?? (idempotent ? 12 : 25)
         request.setValue(try RoundupConfiguration.apiKey(), forHTTPHeaderField: "X-Roundup-Key")
         let started = Date.now
         let route = request.url?.path() ?? ""
@@ -410,7 +542,7 @@ enum RoundupAPI {
         }
         ServerConnection.shared.requestReachedServer()
         guard let http = response as? HTTPURLResponse else {
-            throw RoundupAPIError(message: "서버가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.")
+            throw RoundupAPIError(message: "공도리 쪽에 문제가 생겼어요. 조금 기다렸다가 다시 시도해 주세요.")
         }
         if request.url?.pathComponents.contains("inquiries") == true {
             switch http.statusCode {
@@ -421,12 +553,16 @@ enum RoundupAPI {
             }
         }
         switch http.statusCode {
-        case 200, 201: return data
-        case 401, 403: throw RoundupAPIError(message: "서버 인증을 확인하지 못했어요. 연결 설정을 확인해 주세요.")
-        case 404: throw RoundupAPIError(message: "찾을 수 없는 항목이에요. 목록을 새로 불러와 주세요.", isConflict: true)
-        case 409: throw RoundupAPIError(message: "다른 곳에서 먼저 바뀌었거나 지금은 할 수 없는 작업이에요. 최신 내용을 불러왔어요.", isConflict: true)
-        case 413, 422: throw RoundupAPIError(message: "입력한 내용을 다시 확인해 주세요.")
-        default: throw RoundupAPIError(message: "서버가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.")
+        case 200, 201, 204: return data
+        case 401, 403: throw RoundupAPIError(message: "이 앱의 연결 정보가 맞지 않아요. 연결 설정을 살펴봐 주세요.")
+        case 404:
+            throw RoundupAPIError(message: "목록에서 이미 사라진 항목이에요. 화면을 끌어내리면 새로 받아 와요.", isConflict: true, isMissing: true)
+        case 409:
+            throw RoundupAPIError(message: ownerSentence(in: data, for: request)
+                ?? "그사이 내용이 달라졌거나 이 단계에선 못 하는 일이에요. 화면을 새로 고쳐서 한 번 봐 주세요.", isConflict: true)
+        case 413, 422:
+            throw RoundupAPIError(message: ownerSentence(in: data, for: request) ?? "넣으신 값을 한 번 더 살펴봐 주세요.")
+        default: throw RoundupAPIError(message: "공도리 쪽에 문제가 생겼어요. 조금 기다렸다가 다시 시도해 주세요.")
         }
     }
 }

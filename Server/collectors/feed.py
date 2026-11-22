@@ -14,7 +14,7 @@ from collectors.http import SourceError
 from collectors.robots import may_read
 from collectors.text import MAX_BODY, MAX_TITLE, bounded_id, plain_text, safe_url
 
-REFUSED: Final = "사이트 정책에서 자동으로 읽는 것을 허용하지 않아 글을 가져오지 않았어요."
+REFUSED: Final = "이 사이트가 자동 읽기를 막아 둬서 글을 못 가져왔어요."
 MAX_ITEMS: Final = 100
 
 

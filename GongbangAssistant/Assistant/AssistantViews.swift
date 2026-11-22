@@ -1,3 +1,4 @@
+import RoundupCore
 import SwiftUI
 
 struct AssistantAccessory: View {
@@ -29,9 +30,10 @@ struct AssistantAccessory: View {
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
             .padding(.trailing, 8)
-            .accessibilityLabel("말로 물어보기")
+            .accessibilityLabel("음성으로 질문하기")
             .accessibilityIdentifier("assistant.voice")
         }
+        .tutorialAnchor(.assistantBar)
     }
 }
 
@@ -47,7 +49,14 @@ struct AssistantSheet: View {
     @State private var composerFrame: CGRect = .zero
     private let store = ConversationStore.shared
 
-    private let suggestions = ["오늘 발송할 주문 알려줘", "예약금 안 낸 손님 알려줘", "주말 클래스 홍보 글 써 줘"]
+    /// The newest answer asks for a decision, so its card must not sit under the keyboard.
+    private var newestAnswerWaits: Bool {
+        store.current?.turns.last?.agent?.proposals.contains {
+            AgentCenter.shared.standing(of: $0, at: .now) == .open
+        } ?? false
+    }
+
+    private let suggestions = ["오늘 택배 보낼 주문이 뭐야?", "예약금 아직 입금 안 한 사람 누구야?", "이번 주말 수업 홍보하는 글 하나 부탁해"]
 
     var body: some View {
         NavigationStack {
@@ -70,6 +79,7 @@ struct AssistantSheet: View {
             .navigationTitle("비서")
             .navigationBarTitleDisplayMode(.inline)
             .appDestinations()
+            .assistantAgent()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("닫기", systemImage: "xmark") {
@@ -79,18 +89,18 @@ struct AssistantSheet: View {
                             isConfirmingDiscard = true
                         }
                     }
-                    .confirmationDialog("작성 중인 질문을 버릴까요?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
-                        Button("버리기", role: .destructive) {
+                    .confirmationDialog("쓰다 만 질문은 지울까요?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+                        Button("지울게요", role: .destructive) {
                             dismiss()
                         }
-                        Button("계속 쓰기", role: .cancel) {}
+                        Button("마저 쓸게요", role: .cancel) {}
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     NavigationLink {
                         AssistantHistoryView()
                     } label: {
-                        Label("지난 대화", systemImage: "clock.arrow.circlepath")
+                        Label("이전 대화 목록", systemImage: "clock.arrow.circlepath")
                     }
                     .accessibilityIdentifier("assistant.history")
                     // The way back from a conversation to the start; the conversation stays in 지난 대화.
@@ -119,15 +129,18 @@ struct AssistantSheet: View {
         .task {
             isFieldFocused = true
         }
+        .onChange(of: newestAnswerWaits) { _, waits in
+            if waits { isFieldFocused = false }
+        }
     }
 
     private var welcome: some View {
         // Top-aligned so the suggestions sit above the composer when the sheet opens at half height.
         VStack(alignment: .leading, spacing: 10) {
-            Text("무엇을 맡기실래요?")
+            Text("오늘은 어떤 일을 도와드릴까요?")
                 .font(.title3.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
-            Text("예약, 주문, 배송, 홍보를 물어보세요.")
+            Text("오늘 들어온 주문이나 예약, 배송, 홍보 뭐든 편하게 말 걸어 보세요.")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
             ForEach(suggestions, id: \.self) { suggestion in
@@ -152,7 +165,7 @@ struct AssistantSheet: View {
     /// Bold and lists render instead of showing raw ** marks; anything unparsable stays plain text.
     static func rendered(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        return (try? AttributedString(markdown: SpokenTurn.escapingMaskedNames(text), options: options)) ?? AttributedString(text)
     }
 
     private func send(_ text: String) {

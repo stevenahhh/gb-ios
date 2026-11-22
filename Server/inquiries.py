@@ -66,14 +66,19 @@ async def list_inquiries(
     return [Inquiry.model_validate(row) for row in rows]
 
 
+def save_reply_text(row: InquiryRow, text: str) -> None:
+    """Keep a locked inquiry's working text without trimming it; a completed reply stays non-blank."""
+    if row.status == "approved" and not text.strip():
+        raise HTTPException(422, "completed reply cannot be blank")
+    row.draft = text
+    row.revision += 1
+
+
 @router.patch("/inquiries/{inquiry_id}/draft")
 async def edit_draft(inquiry_id: InquiryId, body: DraftEdit, db: Session) -> Inquiry:
     """Persist an edit without trimming the working text; a completed reply stays non-blank."""
     row = await locked_inquiry(inquiry_id, body.expected_revision, db)
-    if row.status == "approved" and not body.draft.strip():
-        raise HTTPException(422, "completed reply cannot be blank")
-    row.draft = body.draft
-    row.revision += 1
+    save_reply_text(row, body.draft)
     await db.flush()
     return Inquiry.model_validate(row)
 

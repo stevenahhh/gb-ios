@@ -111,15 +111,15 @@ def test_the_inquiry_hours_change_the_outreach_side_only() -> None:
     assert result.baseline_krw == 94_500 * 300 // 180
     assert result.net_per_hour_outreach == 1_390_000 * 60 // 300
     assert result.outreach_basis == (
-        "출강 40명, 5시간 (수업 4시간, 준비·정리 1시간, 왕복 이동은 입력 전이라 0분)"
+        "출장 수업 40명, 5시간 (수업 4시간, 준비와 정리 1시간, 왕복 이동 시간을 안 넣어서 0분)"
     )
-    assert result.oneday_basis == "원데이 최근 2회 예약 평균 4.5명, 3시간 (수업 2시간, 준비·정리 1시간)"
+    assert result.oneday_basis == "최근 원데이 2번 평균 예약 4.5명, 3시간 (수업 2시간, 준비와 정리 1시간)"
 
 
 def test_prep_and_round_trip_travel_count_in_the_outreach_hours() -> None:
     result = calculate(BUDGETED)
-    assert result.outreach_basis == "출강 40명, 6시간 (수업 2시간, 준비·정리 1시간, 왕복 이동 3시간)"
-    assert result.oneday_basis == "원데이는 예약 기록이 없어 1인 순수익끼리 비교"
+    assert result.outreach_basis == "출장 수업 40명, 6시간 (수업 2시간, 준비와 정리 1시간, 오가는 시간 3시간)"
+    assert result.oneday_basis == "원데이 예약 기록이 없어요. 그래서 1인당 남는 돈끼리 비교했어요"
 
 
 def test_price_below_material_has_no_minimum_headcount() -> None:
@@ -590,7 +590,7 @@ async def test_follow_up_reminder_reaches_today_and_an_outcome_closes_it(
     at = {"followUpAt": "2026-11-18T10:00:00+09:00"}
     sent = (await client.post(f"{path}/sent", json=at)).json()
     assert sent["status"] == "follow_up"
-    title = "시청 총무과 출강 견적 다시 연락"
+    title = "시청 총무과 출장 수업 견적 다시 연락하기"
     assert title in (await client.get("/today")).text
     assert (await client.post(f"{path}/outcome", json={"outcome": "accepted_adjusted"})).status_code == 422
     adjusted = {"outcome": "accepted_adjusted", "finalTotalKrw": 1_900_000}

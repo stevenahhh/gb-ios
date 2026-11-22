@@ -11,7 +11,7 @@ struct BK25VoiceField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 8) {
-                TextField(isTranscribing ? "받아쓰는 중이에요" : prompt, text: $text, axis: .vertical)
+                TextField(isTranscribing ? "듣고 바로 글자로 옮기는 중이에요" : prompt, text: $text, axis: .vertical)
                     .lineLimit(1...4)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 12)
@@ -21,10 +21,10 @@ struct BK25VoiceField: View {
                 Button {
                     Task { await toggleRecording() }
                 } label: {
-                    Label(recorder.isRecording ? "녹음 끝내기" : "말로 입력",
+                    Label(recorder.isRecording ? "녹음 멈추기" : "음성으로 말하기",
                           systemImage: recorder.isRecording ? "stop.fill" : "mic.fill")
                         .labelStyle(.iconOnly)
-                        .frame(minWidth: 28, minHeight: 28)
+                        .frame(minWidth: 30, minHeight: 30)
                         .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isTranscribing)
                 }
                 .buttonStyle(.bordered)
@@ -50,7 +50,7 @@ struct BK25VoiceField: View {
                 defer { isTranscribing = false }
                 let spoken = try await RoundupAPI.transcribe(wav: wav)
                 if spoken.isEmpty {
-                    errorMessage = "다시 말하거나 글로 써 주세요"
+                    errorMessage = "한 번 더 말씀하시거나 키보드로 적어 보세요"
                 } else {
                     text = text.isEmpty ? spoken : "\(text) \(spoken)"
                 }

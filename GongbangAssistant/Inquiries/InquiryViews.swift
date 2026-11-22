@@ -2,9 +2,9 @@ import SwiftUI
 import RoundupCore
 
 private enum RewriteStyle: String, CaseIterable, Identifiable {
-    case shorter = "더 짧게"
-    case friendlier = "더 친근하게"
-    case politer = "더 정중하게"
+    case shorter = "짧게"
+    case friendlier = "다정하게"
+    case politer = "공손하게"
 
     var id: Self { self }
 
@@ -19,7 +19,7 @@ private enum RewriteStyle: String, CaseIterable, Identifiable {
 
 extension Inquiry {
     var badge: Status {
-        status == .approved ? Status(text: "답변 준비됨", tone: .done) : Status(text: "답변 대기", tone: .attention)
+        status == .approved ? Status(text: "답장 다 됐어요", tone: .done) : Status(text: "답장 전", tone: .attention)
     }
 }
 
@@ -51,14 +51,14 @@ struct InquiryDetailView: View {
                 detail(inquiry)
             } else {
                 ContentUnavailableView {
-                    Label("문의를 찾을 수 없어요", systemImage: "bubble.left")
+                    Label("사라진 문의예요", systemImage: "bubble.left")
                 } description: {
-                    Text(verbatim: "목록으로 돌아가 다시 골라 주세요.")
+                    Text(verbatim: "목록으로 돌아가 다른 문의를 골라 주세요.")
                         .foregroundStyle(Color.secondaryText)
                 }
             }
         }
-        .navigationTitle(store.inquiry(id: id)?.subject ?? "문의 답변")
+        .navigationTitle(store.inquiry(id: id)?.subject ?? "문의 답장")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: store.inquiry(id: id)?.revision, initial: true) {
             if editorRevision == nil || draft == savedDraft {
@@ -80,7 +80,7 @@ struct InquiryDetailView: View {
 
     private func detail(_ inquiry: Inquiry) -> some View {
         List {
-            CardSection("손님 문의") {
+            CardSection("손님이 보낸 문의") {
                 VStack(alignment: .leading, spacing: 4) {
                     StatusBadge(inquiry.badge)
                     Text(verbatim: inquiry.subject)
@@ -100,11 +100,11 @@ struct InquiryDetailView: View {
                     // The reply about to be replaced is dimmed while the assistant writes.
                     .opacity(isGenerating ? 0.4 : 1)
                     .animation(.default, value: isGenerating)
-                    .accessibilityLabel("답변 작성")
+                    .accessibilityLabel("답장 쓰기")
                     .accessibilityIdentifier("inquiry.draft")
                     .disabled(isEditingLocked)
                 if editorRevision != inquiry.revision {
-                    Button("서버 답변으로 되돌리기") {
+                    Button("비서가 처음 쓴 답장으로") {
                         loadEditorFromStore()
                         errorMessage = nil
                     }
@@ -128,22 +128,22 @@ struct InquiryDetailView: View {
                 // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
                 if inquiry.status == .approved && draft == inquiry.draft {
                     DraftShareActions(share: .inquiry, text: inquiry.draft)
-                    Button("답변 완료 되돌리기", systemImage: "arrow.uturn.backward") { undoCompletion(inquiry) }
+                    Button("완료 표시 풀기", systemImage: "arrow.uturn.backward") { undoCompletion(inquiry) }
                         .buttonStyle(.bordered)
                         .frame(maxWidth: .infinity)
                         .disabled(store.isInquiryBusy)
                         .accessibilityIdentifier("inquiry.undoCompletion")
                 }
             } header: {
-                Text("답변 작성")
+                Text("답장 쓰기")
             } footer: {
-                Text("비서가 틀릴 수 있어요. 답변 완료를 눌러도 손님께 자동으로 보내지지는 않아요. 고친 내용은 화면을 나갈 때 저장해요.")
+                Text("비서도 실수할 때가 있어요. 어색한 곳은 편하게 고쳐 주세요. 답장 완료는 다 썼다는 표시일 뿐이라 손님께 저절로 나가지 않아요. 손보신 글은 이 화면을 벗어날 때 저장해요.")
             }
 
             BK25GroundingSection(grounding: grounding, inquiryID: id, draft: $draft, approve: complete,
                                  showDraft: show(generated:))
 
-            CardSection("비서가 참고한 공방 안내", footer: "공방에 등록해 둔 안내만 근거로 비서가 써요.") {
+            CardSection("비서가 읽은 공방 안내", footer: "비서는 사장님이 적어 두신 공방 안내만 보고 답을 써요.") {
                 ForEach(inquiry.facts, id: \.self) { Text($0) }
             }
         }
@@ -158,7 +158,7 @@ struct InquiryDetailView: View {
     @ViewBuilder
     private func replyActions(_ inquiry: Inquiry) -> some View {
         Menu {
-            Button("새로 쓰기") {
+            Button("처음부터 다시 쓰기") {
                 Task { await generateDraft(for: inquiry) }
             }
             ForEach(RewriteStyle.allCases) { style in
@@ -170,9 +170,9 @@ struct InquiryDetailView: View {
         } label: {
             Group {
                 if isGenerating {
-                    GeneratingIndicator(label: "쓰는 중이에요")
+                    GeneratingIndicator(label: "쓰고 있어요")
                 } else {
-                    Text("비서로 다시 쓰기")
+                    Text("비서에게 다시 맡기기")
                         .lineLimit(1)
                         .fixedSize()
                 }
@@ -187,7 +187,7 @@ struct InquiryDetailView: View {
         .accessibilityIdentifier("inquiry.generate")
 
         Button(action: complete) {
-            BusyLabel(title: "답변 완료", isBusy: store.isSavingInquiry, isProminent: true)
+            BusyLabel(title: "답장 완료", isBusy: store.isSavingInquiry, isProminent: true)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 30)
         }
@@ -234,7 +234,7 @@ struct InquiryDetailView: View {
         draft = text
         isDraftFresh = true
         errorMessage = nil
-        AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 다 썼어요. 내용을 확인해 주세요.").post()
+        AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 글을 마무리했어요. 한 번 훑어보세요.").post()
     }
 
     /// The owner has no save button, so edits persist when the screen or app is left.
@@ -267,7 +267,7 @@ struct InquiryDetailView: View {
                 completionCount += 1
                 app.dataDidChange()
                 if let inquiry = store.inquiry(id: id), inquiry.status == .approved {
-                    app.showToast("답변을 완료했어요", seconds: 6) { undoCompletion(inquiry) }
+                    app.showToast("답장 다 했다고 표시했어요", seconds: 6) { undoCompletion(inquiry) }
                 }
             } catch {
                 errorMessage = error.localizedDescription

@@ -1,3 +1,5 @@
+import AVFAudio
+import RoundupCore
 import SwiftUI
 import UIKit
 
@@ -7,6 +9,10 @@ struct LiveTurn: Sendable {
     let role: Role
     let text: String
     let items: [WorkItem]
+    /// What the agent did or proposed for an answer; nil for the owner's words and for an answer `/ask` gave.
+    var agent: AgentRecord?
+    /// True for a turn that reports an undo, which changes a row without a run of its own.
+    var undidStep = false
 }
 
 /// Full-screen voice conversation: the owner talks, the assistant answers aloud with subtitles.
@@ -15,6 +21,8 @@ struct AssistantLiveView: View {
     private let onTurn: @MainActor (LiveTurn) -> Void
     @State private var conversation = LiveConversation()
     @State private var showsTranscript = false
+    @State private var center = AgentCenter.shared
+    @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -33,6 +41,14 @@ struct AssistantLiveView: View {
                         .padding(.vertical, 12)
                     LiveTranscript(turns: conversation.turns)
                         .transition(.opacity)
+                } else if !shownProposals.isEmpty {
+                    LiveOrb(conversation: conversation, diameter: 96)
+                        .padding(.vertical, 12)
+                    // Above the caption, so a caption that changes height never moves a button under a finger.
+                    proposalCards
+                    captions
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .padding(.horizontal, 28)
                 } else {
                     Spacer(minLength: 24)
                     LiveOrb(conversation: conversation, diameter: 220)
@@ -62,33 +78,75 @@ struct AssistantLiveView: View {
             }
         }
         .task {
-            await conversation.start(history: history(), onTurn: onTurn)
+            await conversation.start(history: history()) { turn in
+                onTurn(turn)
+                // A spoken request can change a row too, so the screens behind this one reload.
+                if turn.agent?.changedData == true || turn.undidStep { app.dataDidChange() }
+            }
+        }
+        // A locked screen would pause the conversation while a run is still at work.
+        .onChange(of: conversation.keepsScreenOn, initial: true) { _, isOn in
+            UIApplication.shared.isIdleTimerDisabled = isOn
+        }
+        .onChange(of: conversation.undoChoices) { showsTranscript = true }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notice in
+            let type = notice.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            if type == AVAudioSession.InterruptionType.began.rawValue { conversation.pause() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { conversation.pause() }
         }
-        .onDisappear { conversation.end() }
+        .onDisappear {
+            conversation.end()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .failureAlert()
+    }
+
+    // MARK: Proposals
+
+    /// Every proposal of this conversation that still waits, and the latest answer's with what became of them.
+    private var shownProposals: [AgentProposal] {
+        let latest = Set((conversation.turns.last?.agent?.proposals ?? []).map(\.id))
+        return conversation.proposals.filter { latest.contains($0.id) || center.standing(of: $0, at: .now) == .open }
+    }
+
+    private var proposalCards: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(shownProposals) { proposal in
+                    AgentProposalCard(proposal: proposal, isPrimary: false)
+                        .padding(16)
+                        .background(AppPalette.card, in: .card)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .accessibilityIdentifier("assistant.live.proposals")
     }
 
     // MARK: Status and captions
 
     private var statusText: String {
         switch conversation.phase {
-        case .starting: "준비하고 있어요"
-        case .listening: "듣고 있어요"
-        case .thinking: "생각하고 있어요"
-        case .speaking: "말하고 있어요"
+        case .starting: "잠깐만요, 곧 시작해요"
+        case .listening: "말씀하세요, 듣고 있어요"
+        case .thinking: "어떻게 할지 고민 중이에요"
+        case .speaking: "답을 말씀드리는 중이에요"
         case .paused: "일시정지"
-        case .failed: "대화를 이어 가지 못했어요"
+        case .failed: "대화가 중간에 끊겼어요"
         }
     }
 
     private var hintText: String {
         switch conversation.phase {
-        case .listening: "말씀이 끝나면 바로 답해 드려요"
-        case .speaking: "원을 누르면 말을 멈추고 들을게요"
-        case .paused: "마이크를 켜거나 원을 누르면 다시 들어요"
-        case .starting, .thinking, .failed: "\(AssistantIdentity.name)가 틀릴 수 있어요"
+        case .listening: "말씀을 마치시면 그때 바로 답할게요"
+        case .speaking: "가운데 원을 누르면 말을 끊고 귀 기울일게요"
+        case .paused where conversation.isAnswerPending: "부탁하신 일은 멈추지 않아요. 원을 누르면 진행 상황을 말씀드릴게요"
+        case .paused: "원을 누르시거나 마이크를 켜시면 다시 귀 기울일게요"
+        case .starting, .thinking, .failed: "\(AssistantIdentity.name)도 가끔 실수해요. 중요한 건 한 번 더 봐 주세요"
         }
     }
 
@@ -176,7 +234,7 @@ struct AssistantLiveView: View {
                 .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("assistant.live.retry")
                 if failure.kind == .microphone {
-                    Button("설정 열기") {
+                    Button("아이폰 설정으로 가기") {
                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                     }
                     .buttonStyle(.bordered)
@@ -190,7 +248,7 @@ struct AssistantLiveView: View {
 
     private var controls: some View {
         HStack(alignment: .top, spacing: 36) {
-            control(conversation.isMuted ? "마이크 켜기" : "마이크 끄기",
+            control(conversation.isMuted ? "마이크 다시 켜기" : "마이크 잠시 끄기",
                     caption: conversation.isMuted ? "음소거됨" : "마이크",
                     symbol: conversation.isMuted ? "mic.slash.fill" : "mic.fill",
                     id: "assistant.live.mute", isOn: conversation.isMuted, action: conversation.toggleMute)
@@ -198,7 +256,7 @@ struct AssistantLiveView: View {
                     caption: "대화 내용",
                     symbol: showsTranscript ? "text.bubble.fill" : "text.bubble",
                     id: "assistant.live.transcript", isOn: showsTranscript) { showsTranscript.toggle() }
-            control("대화 끝내기", caption: "끝내기", symbol: "xmark", id: "assistant.live.end", isOn: false) {
+            control("대화 그만하기", caption: "그만하기", symbol: "xmark", id: "assistant.live.end", isOn: false) {
                 dismiss()
             }
         }
@@ -263,20 +321,21 @@ private struct LiveOrb: View {
     private var accessibilityValue: String {
         switch conversation.phase {
         case .listening: "듣는 중"
-        case .thinking: "생각하는 중"
-        case .speaking: "말하는 중"
+        case .thinking: "고민하는 중"
+        case .speaking: "답하는 중"
         case .paused: "일시정지"
-        case .starting: "준비 중"
-        case .failed: "오류"
+        case .starting: "시작하는 중"
+        case .failed: "문제가 생겼어요"
         }
     }
 
     private var accessibilityHint: String {
         switch conversation.phase {
-        case .speaking: "말을 멈추고 다시 들어요"
-        case .listening: "지금까지 들은 말로 물어봐요"
+        case .speaking: "말을 끊고 다시 귀 기울여요"
+        case .listening: "여기까지 듣고 바로 질문 넘기기"
         case .paused: "다시 들어요"
-        case .failed: "다시 시도해요"
+        case .failed: "한 번 더 해 볼게요"
+        case .thinking where conversation.isAnswerPending: "답을 기다리지 않아도 돼요. 부탁하신 일은 멈추지 않아요"
         case .starting, .thinking: ""
         }
     }
@@ -357,7 +416,7 @@ private struct LiveTranscript: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     if turns.isEmpty {
-                        Text("아직 나눈 대화가 없어요. 말씀하시면 여기에 글자로 남아요.")
+                        Text("말씀을 시작하시면 나눈 이야기가 여기에 자막처럼 적혀요.")
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                             .frame(maxWidth: .infinity)
@@ -370,7 +429,7 @@ private struct LiveTranscript: View {
                     }
                     if showsVoiceHint {
                         Label {
-                            Text(verbatim: "설정 > 손쉬운 사용 > 읽기 및 말하기 > 음성 > 한국어에서 유나(프리미엄)를 받으면 목소리가 더 자연스러워져요")
+                            Text(verbatim: "유나(프리미엄) 목소리를 내려받으면 훨씬 사람처럼 들려요. 아이폰 설정 > 손쉬운 사용 > 읽기 및 말하기 > 음성 > 한국어로 가 보세요")
                         } icon: {
                             Image(systemName: "info.circle")
                         }
@@ -378,7 +437,7 @@ private struct LiveTranscript: View {
                         .foregroundStyle(Color.secondaryText)
                         .accessibilityIdentifier("assistant.live.voiceHint")
                     }
-                    Text("\(AssistantIdentity.name)가 틀릴 수 있어요")
+                    Text("\(AssistantIdentity.name)도 가끔 실수해요. 중요한 건 한 번 더 봐 주세요")
                         .font(.footnote)
                         .foregroundStyle(Color.secondaryText)
                         .frame(maxWidth: .infinity)
@@ -418,10 +477,13 @@ private struct LiveTranscript: View {
                 Text(text)
                     .textSelection(.enabled)
                     .accessibilityLabel(Text("\(AssistantIdentity.name): \(Text(text))"))
+                if let agent = turn.agent, agent.hasDetail(showingStatus: true) {
+                    AgentRunDetail(record: agent, isLive: true)
+                }
                 ForEach(turn.items) { item in
                     WorkCard(item: item, isPrimary: false)
                         .padding(12)
-                        .background(.fill.quaternary, in: .inner)
+                        .background(AppPalette.card, in: .inner)
                 }
             }
         }
@@ -429,6 +491,7 @@ private struct LiveTranscript: View {
 
     private static func rendered(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        return (try? AttributedString(markdown: SpokenTurn.escapingMaskedNames(text), options: options))
+            ?? AttributedString(text)
     }
 }

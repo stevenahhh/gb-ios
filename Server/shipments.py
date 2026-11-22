@@ -1,10 +1,11 @@
 """Fulfilment: packing, invoice registration, and manual delivery confirmation."""
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Annotated, Final, Literal, assert_never
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import Field
 from sqlalchemy import ColumnElement, Select, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ from orders import MAX_BATCH, PARCEL_STATES, Batch, BatchItem, lock_order, order
 
 router = APIRouter()
 ESTIMATED_TRANSIT: Final = timedelta(days=2)
+INVOICE_LOCK: Final = 0x696E766F
 TAG_SCHEDULED: Final = "발송 예정"
 type ShipmentFilter = Literal["all", "scheduled", "in_transit", "delivered"]
 type ShipmentSort = Literal["soonest", "latest"]
@@ -77,9 +79,9 @@ def shipment_records() -> Select[ShipmentRecord]:
 def arrival_text(arrival: date | None, today: date) -> str:
     """Describe the estimated arrival honestly when it has passed."""
     if arrival is None:
-        return "도착 예정일 미정"
+        return "도착일 아직 모름"
     if arrival < today:
-        return f"도착 예정일 지남 · {relative_day(arrival, today)}"
+        return f"도착일 지남 · {relative_day(arrival, today)}"
     return f"{relative_day(arrival, today)} 도착 예정"
 
 
@@ -97,10 +99,10 @@ def shipment_card(record: ShipmentRecord, today: date) -> Card:
     status, action = PARCEL_STATES[shipment.status]
     match shipment.status:
         case "packing":
-            lines = [summary, shipment.handling_note or "포장 후 송장을 등록해 주세요"]
+            lines = [summary, shipment.handling_note or "포장이 끝나면 송장번호를 넣어 주세요"]
             tag, deadline = TAG_SCHEDULED, pickup
         case "invoice_pending":
-            lines = [summary, "포장 완료 · 송장 등록 필요"]
+            lines = [summary, "포장 끝 · 이제 송장 넣을 차례"]
             tag, deadline = TAG_SCHEDULED, pickup
         case "in_transit":
             lines = [summary, tracking, arrival_text(shipment.expected_arrival_on, today)]
@@ -192,6 +194,24 @@ async def cards_for(db: AsyncSession, shipment_ids: list[str], now: datetime) ->
     return CardList(items=[cards[shipment_id] for shipment_id in shipment_ids])
 
 
+async def hold_invoice_lock(db: AsyncSession) -> None:
+    """Serialize every writer of tracking numbers, so one number never serves two parcels."""
+    _ = await db.execute(select(func.pg_advisory_xact_lock(INVOICE_LOCK)))
+
+
+async def require_unused_number(db: AsyncSession, number: str, shipment_id: str) -> None:
+    """Refuse a tracking number another parcel already carries, ignoring separators."""
+    digits = re.sub(r"\D", "", number)
+    if not digits:
+        return
+    stored = func.regexp_replace(ShipmentRow.tracking_number, "[^0-9]", "", "g")
+    taken = await db.scalar(
+        select(ShipmentRow.id).where(stored == digits, ShipmentRow.id != shipment_id).limit(1),
+    )
+    if taken is not None:
+        raise HTTPException(409, "tracking number is already used")
+
+
 def pack_parcel(shipment: ShipmentRow, now: datetime) -> None:
     """Record that a locked parcel is packed."""
     if shipment.status != "packing":
@@ -237,8 +257,10 @@ async def pack_many(body: Batch, db: Session, now: Now) -> CardList:
 @router.post("/shipments/invoice")
 async def register_many(body: InvoiceBatch, db: Session, now: Now) -> CardList:
     """Register one carrier's tracking numbers for several packed parcels at once."""
+    await hold_invoice_lock(db)
     for item in lock_order(body.items):
         shipment = await locked(db, ShipmentRow, item.id, item.expected_revision)
+        await require_unused_number(db, item.tracking_number, shipment.id)
         send_parcel(shipment, body.carrier, item.tracking_number, now)
     await db.flush()
     return await cards_for(db, [item.id for item in body.items], now)
@@ -264,7 +286,9 @@ async def pack(shipment_id: str, body: ExpectedRevision, db: Session, now: Now) 
 @router.post("/shipments/{shipment_id}/invoice")
 async def register_invoice(shipment_id: str, body: InvoiceRegistration, db: Session, now: Now) -> Card:
     """Attach carrier details and move the parcel into transit."""
+    await hold_invoice_lock(db)
     shipment = await locked(db, ShipmentRow, shipment_id, body.expected_revision)
+    await require_unused_number(db, body.tracking_number, shipment.id)
     send_parcel(shipment, body.carrier, body.tracking_number, now)
     await db.flush()
     return await card_for(db, shipment_id, now)

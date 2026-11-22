@@ -26,8 +26,8 @@ from collectors.http import OK, HttpSession, Reply, parsed
 from collectors.text import MAX_BODY, MAX_TITLE, bounded_id, plain_text, safe_url
 
 API: Final = "https://graph.instagram.com/v27.0"
-MISSING: Final = "인스타그램 계정을 연결해 주세요."
-EXPIRED: Final = "인스타그램 연결이 만료됐어요. 다시 연결해 주세요."
+MISSING: Final = "인스타그램이 아직 안 이어져 있어요. 먼저 연결해 주세요."
+EXPIRED: Final = "연결 기간이 끝났어요. 인스타그램을 한 번 더 연결해 주세요."
 USER_ID: Final = re.compile(r"[0-9]{1,30}")
 TOKEN_CODES: Final = frozenset({102, 190})
 DENIED: Final = frozenset({401, 403})

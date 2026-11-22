@@ -4,9 +4,9 @@ import RoundupCore
 extension ReplyStatus {
     var badge: Status {
         switch self {
-        case .pending: Status(text: "검토 대기", tone: .attention)
-        case .approved: Status(text: "승인함", tone: .done)
-        case .rejected: Status(text: "반려함", tone: .neutral)
+        case .pending: Status(text: "확인 전", tone: .attention)
+        case .approved: Status(text: "수락했어요", tone: .done)
+        case .rejected: Status(text: "쓰지 않기로 함", tone: .neutral)
         }
     }
 }
@@ -16,7 +16,7 @@ struct AssistantDraftLabel: View {
     let isReply: Bool
 
     var body: some View {
-        Text(isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
+        Text(isReply ? "\(AssistantIdentity.name)가 쓴 답장" : "\(AssistantIdentity.name)가 써 둔 글")
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(Color.assistantAccent)
     }
@@ -77,7 +77,7 @@ struct AssistantDraftRow: View {
                 DraftHeader(badge: badge, isReply: isReply)
                 Text(verbatim: title)
                     .font(.headline)
-                Text(verbatim: text.isEmpty ? "내용을 비운 초안이에요." : text)
+                Text(verbatim: text.isEmpty ? "텅 빈 초안이에요." : text)
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
                     .lineLimit(2)
@@ -101,9 +101,9 @@ struct DraftShare {
     let openLabel: String
     let url: URL
 
-    static let inquiry = DraftShare(copyLabel: "답변 복사하기", openLabel: "네이버 스마트스토어 열기",
+    static let inquiry = DraftShare(copyLabel: "답장 복사", openLabel: "스마트스토어 앱 열기",
                                     url: URL(string: "https://sell.smartstore.naver.com/")!)
-    static let content = DraftShare(copyLabel: "글 복사하기", openLabel: "Instagram 열기",
+    static let content = DraftShare(copyLabel: "글 복사", openLabel: "Instagram 열기",
                                     url: URL(string: "https://www.instagram.com/")!)
 }
 
@@ -115,12 +115,12 @@ struct DraftShareActions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("채널이 아직 연결되지 않아 직접 보내야 해요.")
+            Text("채널이 연결돼 있지 않아서 손님께는 사장님이 직접 보내셔야 해요.")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
             Button {
                 UIPasteboard.general.string = text
-                app.showToast("복사했어요")
+                app.showToast("복사 끝!")
             } label: {
                 Text(share.copyLabel)
                     .foregroundStyle(Color(.systemBackground))
@@ -194,7 +194,7 @@ struct AssistantDraftCard: View {
                 .accessibilityIdentifier("draft.error")
             }
             if isOwnerEdited && !isEditing {
-                hint("사장님이 고친 내용이에요.")
+                hint("사장님이 손보셨어요.")
             }
         }
         .padding(.vertical, 4)
@@ -204,7 +204,7 @@ struct AssistantDraftCard: View {
     private var draftText: some View {
         Group {
             if text.isEmpty {
-                Text(status == .pending ? "내용이 비어 있어요." : "내용을 비운 채 반려했어요.")
+                Text(status == .pending ? "아무것도 안 적혀 있어요." : "내용을 비우고 이 초안은 보내지 않기로 했어요.")
                     .foregroundStyle(Color.secondaryText)
             } else {
                 Text(text).textSelection(.enabled)
@@ -225,7 +225,7 @@ struct AssistantDraftCard: View {
                 .frame(minHeight: 160)
                 .padding(8)
                 .background(.fill.tertiary, in: .inner)
-                .accessibilityLabel("초안 수정")
+                .accessibilityLabel("초안 고치기")
                 .accessibilityIdentifier("draft.editor")
             HStack(spacing: 8) {
                 secondaryButton("취소", identifier: "draft.cancel") {
@@ -245,7 +245,7 @@ struct AssistantDraftCard: View {
 
     private var pendingActions: some View {
         VStack(alignment: .leading, spacing: 8) {
-            primaryButton("승인하기", identifier: "draft.approve") {
+            primaryButton("수락하기", identifier: "draft.approve") {
                 run("draft.approve") {
                     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                         throw ReplyError.emptyDraft
@@ -254,11 +254,11 @@ struct AssistantDraftCard: View {
                 }
             }
             HStack(spacing: 8) {
-                secondaryButton("수정", identifier: "draft.edit") { beginEditing(with: text) }
+                secondaryButton("고치기", identifier: "draft.edit") { beginEditing(with: text) }
                 Button(action: rewrite) {
                     Group {
                         if isRewriting {
-                            GeneratingIndicator(label: "쓰는 중")
+                            GeneratingIndicator(label: "쓰고 있어요")
                         } else {
                             Text("다시 쓰기")
                         }
@@ -272,7 +272,7 @@ struct AssistantDraftCard: View {
                 Button {
                     run("draft.reject") { try await actions.decide(.reject, revision) }
                 } label: {
-                    BusyLabel(title: "반려", isBusy: runningID == "draft.reject")
+                    BusyLabel(title: "쓰지 않기", isBusy: runningID == "draft.reject")
                         .foregroundStyle(.primary)
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 30)
@@ -289,7 +289,7 @@ struct AssistantDraftCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Label {
-                    Text(status == .approved ? "승인했어요" : "반려했어요").foregroundStyle(.primary)
+                    Text(status == .approved ? "수락했어요" : "쓰지 않기로 했어요").foregroundStyle(.primary)
                 } icon: {
                     Image(systemName: status == .approved ? "checkmark.circle.fill" : "xmark.circle")
                         .foregroundStyle(Color.secondaryText)
@@ -359,7 +359,7 @@ struct AssistantDraftCard: View {
             defer { isRewriting = false }
             do {
                 beginEditing(with: try await actions.rewrite(), isFresh: true)
-                AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 다 썼어요. 내용을 확인해 주세요.").post()
+                AccessibilityNotification.Announcement("\(AssistantIdentity.name)가 글을 마무리했어요. 한 번 훑어보세요.").post()
             } catch {
                 show(error)
             }
@@ -406,7 +406,7 @@ struct AssistantDraftDetailView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                CardSection("초안 검토", footer: "비서가 틀릴 수 있어요. 내용을 확인해 주세요.") {
+                CardSection("초안 살펴보기", footer: "비서 글에도 틀린 곳이 있을 수 있어요. 손님께 가기 전에 꼭 훑어보세요.") {
                     card(draft)
                 }
             }

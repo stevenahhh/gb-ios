@@ -33,12 +33,12 @@ struct BK25JudgmentSection: View {
                     LabeledContent {
                         Button("다시 시도") { Task { await inbox.load() } }
                     } label: {
-                        Text("판단 필요 목록을 불러오지 못했어요")
+                        Text("사장님께 여쭤볼 질문 목록이 안 열려요")
                             .foregroundStyle(Color.secondaryText)
                     }
                 }
             } header: {
-                Text("판단 필요 \(inbox.items.count)건")
+                Text("사장님께 여쭤볼 질문 \(inbox.items.count)건")
                     .font(.headline)
                     .foregroundStyle(Color.primary)
                     .textCase(nil)
@@ -96,7 +96,7 @@ struct BK25JudgmentRow: View {
             }
         }
         app.dataDidChange()
-        app.showToast("답장 초안을 다시 썼어요")
+        app.showToast("초안을 고쳐 썼어요")
     }
 }
 
@@ -133,25 +133,25 @@ struct BK25JudgmentSheet: View {
                     }
                     .padding(.vertical, 4)
                 }
-                CardSection("한 줄로 답해 주세요") {
-                    BK25VoiceField(text: $text, prompt: "예: 6명부터 1인 3만 원")
+                CardSection("짧게 한 줄이면 돼요") {
+                    BK25VoiceField(text: $text, prompt: "예시 6명 이상 오시면 1인당 3만 원 받아요")
                         .onChange(of: text) { preview = nil }
                     if let preview {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("이 규칙을 다음 답장에도 쓸까요?")
+                            Text("앞으로 오는 답장에도 이 규칙을 적용할까요?")
                                 .font(.subheadline.weight(.semibold))
                             GeneratedText(AttributedString(preview.ruleText), isFresh: $isPreviewFresh)
                                 .font(.body)
                                 .accessibilityIdentifier("bk25.rule.preview")
-                            Text(preview.className.map { "\($0)에 쓰는 규칙" } ?? "공방 전체에 쓰는 규칙")
+                            Text(preview.className.map { "\($0) 전용 규칙" } ?? "모든 수업 공통 규칙")
                                 .font(.subheadline)
                                 .foregroundStyle(Color.secondaryText)
                         }
                         .padding(.vertical, 4)
                     } else if isWorking {
-                        GeneratingIndicator(label: "답을 규칙으로 다듬는 중이에요")
+                        GeneratingIndicator(label: "말씀하신 내용을 규칙 한 줄로 바꾸고 있어요")
                     } else {
-                        Button("규칙 문장으로 보기") { Task { await previewRule() } }
+                        Button("한 줄 규칙으로 보기") { Task { await previewRule() } }
                             .buttonStyle(.bordered)
                             .disabled(isAnswerBlank)
                             .accessibilityIdentifier("bk25.rule.show")
@@ -166,7 +166,7 @@ struct BK25JudgmentSheet: View {
                         Button {
                             Task { await answer(scope: .rule) }
                         } label: {
-                            BusyLabel(title: "다음 답장에도 쓰기", isBusy: isWorking, isProminent: true)
+                            BusyLabel(title: "앞으로 계속 쓰기", isBusy: isWorking, isProminent: true)
                                 .frame(maxWidth: .infinity, minHeight: 30)
                         }
                         .buttonStyle(.borderedProminent)
@@ -175,7 +175,7 @@ struct BK25JudgmentSheet: View {
                         Button {
                             Task { await answer(scope: .once) }
                         } label: {
-                            Text("이번 답장에만 쓰기")
+                            Text("이번 한 번만")
                                 .font(.subheadline.weight(.semibold))
                                 .frame(maxWidth: .infinity, minHeight: 30)
                         }
@@ -186,19 +186,19 @@ struct BK25JudgmentSheet: View {
                     .disabled(isWorking)
                 }
                 CardSection {
-                    Button("답하지 않고 닫기") { Task { await dismissJudgment() } }
+                    Button("답 안 하고 닫기") { Task { await dismissJudgment() } }
                         .font(.subheadline)
                         .disabled(isWorking)
                         .accessibilityIdentifier("bk25.judgment.dismiss")
                 } header: {
                     EmptyView()
                 } footer: {
-                    Text("닫으면 이 문의는 지금처럼 초안을 직접 써요.")
+                    Text("닫으시면 이 문의 초안은 예전처럼 사장님이 손수 쓰시게 돼요.")
                 }
             }
             .cardList()
             .scrollDismissesKeyboard(.immediately)
-            .navigationTitle("판단 필요")
+            .navigationTitle("사장님 답 필요")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

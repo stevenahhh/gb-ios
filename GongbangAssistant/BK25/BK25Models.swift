@@ -143,9 +143,9 @@ enum BK25FactField: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .durationMinutes: "소요 시간"
+        case .durationMinutes: "걸리는 시간"
         case .capacity: "정원"
-        case .includedMaterials: "포함 재료와 준비물"
+        case .includedMaterials: "들어 있는 재료, 챙길 것"
         case .parking: "주차"
         case .refundPolicy: "환불 규정"
         }
@@ -153,21 +153,21 @@ enum BK25FactField: String, CaseIterable, Identifiable, Codable {
 
     var question: String {
         switch self {
-        case .durationMinutes: "수업은 얼마나 걸려요?"
-        case .capacity: "한 회에 몇 명까지 받아요?"
-        case .includedMaterials: "가격에 포함된 재료는 무엇이고, 손님이 가져올 것은 있나요?"
-        case .parking: "주차는 어떻게 안내하나요?"
-        case .refundPolicy: "환불과 취소 규정은 어떻게 되나요?"
+        case .durationMinutes: "한 번 수업하면 몇 시간 걸려요?"
+        case .capacity: "수업 하나에 손님을 최대 몇 분 받으세요?"
+        case .includedMaterials: "수업료에 어떤 재료가 들어 있나요? 손님이 따로 챙겨 와야 할 게 있을까요?"
+        case .parking: "손님께 주차 자리는 어디라고 알려 드릴까요?"
+        case .refundPolicy: "취소하거나 환불받고 싶을 땐 어떻게 하나요?"
         }
     }
 
     var hint: String {
         switch self {
-        case .durationMinutes: "예: 두 시간 정도요"
-        case .capacity: "예: 최대 여섯 명이요"
-        case .includedMaterials: "예: 앞치마와 도구는 다 있고, 편한 신발만 신고 오세요"
-        case .parking: "예: 건물 뒤 공영주차장에 세우면 돼요"
-        case .refundPolicy: "예: 수업 2일 전까지는 전액 환불해요"
+        case .durationMinutes: "예시 두 시간쯤 걸려요"
+        case .capacity: "예시 한 번에 여섯 분까지 받아요"
+        case .includedMaterials: "예시 앞치마며 도구며 저희가 다 챙겨 둬요. 신발만 편한 걸로 오세요"
+        case .parking: "예시 공영주차장이 건물 바로 뒤에 있어요"
+        case .refundPolicy: "예시 시작 2일 전에 취소하시면 낸 돈을 다 돌려드려요"
         }
     }
 }

@@ -1,0 +1,1080 @@
+[
+ {
+  "id": "E01",
+  "kind": "deposit",
+  "turn": "박지은 님 예약금 20,000원 들어왔어요",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_deposit",
+     "target": [
+      "booking-jieun"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "booking": "박지은"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E02",
+  "kind": "deposit",
+  "turn": "최민우 님 물레 체험 예약금 3만 원 방금 통장에 찍혔어",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_deposit",
+     "target": [
+      "booking-minwoo"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "booking": "최민우"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E03",
+  "kind": "deposit",
+  "turn": "최민우 님 예약금 들어온 거 맞아? 3만 원이던데",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E04",
+  "kind": "deposit",
+  "turn": "지은 님 예약금 20,000원 통장에 찍혔네",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_deposit",
+     "target": [
+      "booking-jieun"
+     ],
+     "values": {},
+     "decision": [
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "booking": "지은"
+     }
+    }
+   ]
+  },
+  "note": "이름의 일부만 적혀 있어 확신이 낮다"
+ },
+ {
+  "id": "E05",
+  "kind": "deposit",
+  "turn": "박지은 님이 오늘 저녁까지 2만 원 보내 주신대",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "손님의 예정만 전했다"
+ },
+ {
+  "id": "E06",
+  "kind": "packing",
+  "turn": "1040 포장 끝났어",
+  "expect": {
+   "calls": [
+    {
+     "tool": "mark_packed",
+     "target": [
+      "shipment-order-1040",
+      "order-1040"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "order": "1040"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E07",
+  "kind": "packing",
+  "turn": "김서연 님 머그컵 2종 세트 포장 다 했어요",
+  "expect": {
+   "calls": [
+    {
+     "tool": "mark_packed",
+     "target": [
+      "shipment-order-1040",
+      "order-1040"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "order": "김서연"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E08",
+  "kind": "packing",
+  "turn": "포장 끝",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "대상이 없다"
+ },
+ {
+  "id": "E09",
+  "kind": "packing",
+  "turn": "오늘 포장할 거 뭐야?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E10",
+  "kind": "invoice",
+  "turn": "1041 CJ대한통운 682100042841",
+  "expect": {
+   "calls": [
+    {
+     "tool": "register_invoice",
+     "target": [
+      "shipment-order-1041",
+      "order-1041"
+     ],
+     "values": {
+      "tracking_number": "682100042841",
+      "carrier": "CJ대한통운"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "tracking_number": "682100042841",
+      "order": "1041",
+      "carrier": "CJ대한통운"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E11",
+  "kind": "invoice",
+  "turn": "[오늘 출력한 송장]\n주문번호 | 받는분 | 택배사 | 운송장번호\n1041 | 이수진 | CJ대한통운 | 682100042842",
+  "expect": {
+   "calls": [
+    {
+     "tool": "register_invoice",
+     "target": [
+      "shipment-order-1041",
+      "order-1041"
+     ],
+     "values": {
+      "tracking_number": "682100042842",
+      "carrier": "CJ대한통운"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "tracking_number": "682100042842",
+      "order": "1041",
+      "carrier": "CJ대한통운"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E12",
+  "kind": "invoice",
+  "turn": "1041 송장 번호는 나중에 알려 줄게",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E13",
+  "kind": "invoice",
+  "turn": "로젠택배로 보냈어 운송장 12345678901",
+  "expect": {
+   "calls": [
+    {
+     "tool": "register_invoice",
+     "target": [
+      "shipment-order-1041",
+      "order-1041"
+     ],
+     "values": {
+      "tracking_number": "12345678901",
+      "carrier": "로젠택배"
+     },
+     "decision": [
+      "proposed",
+      "clarify",
+      "auto"
+     ],
+     "args": {
+      "tracking_number": "12345678901",
+      "order": "1041",
+      "carrier": "로젠택배"
+     }
+    }
+   ]
+  },
+  "note": "송장 대기 주문이 하나뿐이지만 번호를 말하지 않았다"
+ },
+ {
+  "id": "E14",
+  "kind": "invoice",
+  "turn": "1041 한진택배 410233987711 보냈어요",
+  "expect": {
+   "calls": [
+    {
+     "tool": "register_invoice",
+     "target": [
+      "shipment-order-1041",
+      "order-1041"
+     ],
+     "values": {
+      "tracking_number": "410233987711",
+      "carrier": "한진택배"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "tracking_number": "410233987711",
+      "order": "1041",
+      "carrier": "한진택배"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E15",
+  "kind": "delivered",
+  "turn": "1038 배송 완료됐어",
+  "expect": {
+   "calls": [
+    {
+     "tool": "mark_delivered",
+     "target": [
+      "shipment-order-1038",
+      "order-1038"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "order": "1038"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E16",
+  "kind": "delivered",
+  "turn": "최하서 님 커피잔 잘 받으셨대",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "손님 말을 전했다"
+ },
+ {
+  "id": "E17",
+  "kind": "delivered",
+  "turn": "1039 언제 도착해?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E18",
+  "kind": "order",
+  "turn": "1043 주문 확인해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_order",
+     "target": [
+      "order-1043"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed"
+     ],
+     "args": {
+      "order": "1043"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E19",
+  "kind": "order",
+  "turn": "정태우 님 미니 화병 주문 받아 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_order",
+     "target": [
+      "order-1043"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed"
+     ],
+     "args": {
+      "order": "정태우"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E20",
+  "kind": "order",
+  "turn": "1042랑 1044 주문 확인해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_order",
+     "target": [
+      "order-1042"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed"
+     ],
+     "args": {
+      "order": "1042"
+     }
+    },
+    {
+     "tool": "confirm_order",
+     "target": [
+      "order-1044"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed"
+     ],
+     "args": {
+      "order": "1044"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E21",
+  "kind": "order",
+  "turn": "새로 들어온 주문 전부 확인해 줘",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "여러 주문을 한꺼번에 가리킨다"
+ },
+ {
+  "id": "E22",
+  "kind": "booking",
+  "turn": "이도윤 님 이번 주 토요일 주말 도자기 클래스 2명 예약 넣어 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "create_booking",
+     "target": [
+      "session-weekend"
+     ],
+     "values": {
+      "customer_name": "이도윤",
+      "party_size": 2
+     },
+     "decision": [
+      "auto",
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "session": "주말 도자기 클래스",
+      "day": "2026-11-21",
+      "customer_name": "이도윤",
+      "party_size": 2
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E23",
+  "kind": "booking",
+  "turn": "김하늘 님 다음 주 수요일 10시 원데이 클래스 1명 예약해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "create_booking",
+     "target": [
+      "session-next-oneday"
+     ],
+     "values": {
+      "customer_name": "김하늘",
+      "party_size": 1
+     },
+     "decision": [
+      "auto",
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "session": "도자기 원데이 클래스",
+      "day": "2026-11-25",
+      "time": "10:00",
+      "customer_name": "김하늘",
+      "party_size": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E24",
+  "kind": "booking",
+  "turn": "내일 머그컵 수업 남은 자리 있어?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E25",
+  "kind": "cancellation",
+  "turn": "임도현 님 25일 원데이 취소하신대 규정대로 처리해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "decide_cancellation",
+     "target": [
+      "booking-dohyun"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "booking": "임도현",
+      "decision": "by_rule"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E26",
+  "kind": "reply",
+  "turn": "김하늘 님 준비물 문의 답장 초안 써 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "save_reply_draft",
+     "target": [
+      "inquiry-clay"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "inquiry": "김하늘"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E27",
+  "kind": "reply",
+  "turn": "이도윤 님 둘이 참여하는 문의 답장 미리 써 둬",
+  "expect": {
+   "calls": [
+    {
+     "tool": "save_reply_draft",
+     "target": [
+      "inquiry-group"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "inquiry": "이도윤"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E28",
+  "kind": "reply",
+  "turn": "박서연 님 일정 변경 문의에 답장 초안 부탁해",
+  "expect": {
+   "calls": [
+    {
+     "tool": "save_reply_draft",
+     "target": [
+      "inquiry-change"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "inquiry": "박서연"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E29",
+  "kind": "reply",
+  "turn": "김하늘 님한테 답장 바로 보내 줘",
+  "expect": {
+   "calls": [],
+   "no_auto": true,
+   "allow_tools": [
+    "save_reply_draft"
+   ],
+   "answer": "nothing_sent"
+  },
+  "note": "보내기는 사장님이 하므로 초안 저장까지만 하고 보낸 것처럼 말하지 않는다"
+ },
+ {
+  "id": "E30",
+  "kind": "calendar",
+  "turn": "금요일 오후 2시에 유약 테스트 일정 추가해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "add_event",
+     "target": [],
+     "values": {
+      "title": "유약 테스트",
+      "starts_at": "2026-11-20T14:00:00+09:00"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "title": "유약 테스트",
+      "day": "2026-11-20",
+      "time": "14:00"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E31",
+  "kind": "calendar",
+  "turn": "가마 소성 일정을 모레 오전 10시로 옮겨 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "move_event",
+     "target": [
+      "event-firing"
+     ],
+     "values": {
+      "starts_at": "2026-11-20T10:00:00+09:00"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "event": "가마 소성",
+      "day": "2026-11-20",
+      "time": "10:00"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E32",
+  "kind": "calendar",
+  "turn": "점토 입고는 25일 오전 11시로 미뤄 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "move_event",
+     "target": [
+      "event-clay-delivery"
+     ],
+     "values": {
+      "starts_at": "2026-11-25T11:00:00+09:00"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "event": "점토 입고",
+      "day": "2026-11-25",
+      "time": "11:00"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E33",
+  "kind": "calendar",
+  "turn": "토요일 오후 1시에 단체 수업 준비 일정 잡아 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "add_event",
+     "target": [],
+     "values": {
+      "starts_at": "2026-11-21T13:00:00+09:00"
+     },
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "title": "단체 수업 준비",
+      "day": "2026-11-21",
+      "time": "13:00"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E34",
+  "kind": "calendar",
+  "turn": "내일 가마 소성 일정 지워 줘",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "삭제는 제공하지 않는다"
+ },
+ {
+  "id": "E35",
+  "kind": "task",
+  "turn": "점토 50kg 주문 끝났어 할 일 완료로 바꿔 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "complete_task",
+     "target": [
+      "task-clay"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "task": "도자기용 점토 50kg"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E36",
+  "kind": "task",
+  "turn": "플리마켓 조건 확인 다 했어 할 일 체크해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "complete_task",
+     "target": [
+      "task-market"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "task": "플리마켓 모집 조건 확인"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E37",
+  "kind": "task",
+  "turn": "키링 결과 올린 거 실수였어 그 할 일 다시 열어 줘",
+  "setup": [
+   {
+    "op": "set",
+    "table": "tasks",
+    "id": "task-keyring",
+    "values": {
+     "status": "done",
+     "completed_at": {
+      "$dt": "2026-11-18T10:00:00+09:00"
+     }
+    }
+   }
+  ],
+  "expect": {
+   "calls": [
+    {
+     "tool": "reopen_task",
+     "target": [
+      "task-keyring"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "task": "행운의 거북이 도자기 키링 이벤트 결과 올리기"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E38",
+  "kind": "content",
+  "turn": "주말 클래스 홍보 인스타 글 하나 써서 저장해 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "save_content_draft",
+     "target": [
+      "draft-weekend-class"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed"
+     ],
+     "args": {
+      "draft": "주말 클래스 모집 글",
+      "text": "이번 주말 흙을 만지며 쉬어 가요. 주말 도자기 클래스에 아직 자리가 있어요. 프로필 링크에서 예약해 주세요."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E39",
+  "kind": "content",
+  "turn": "원데이 클래스 모집 글 초안 만들어 둬",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "원데이 모집 글 초안이 따로 없다"
+ },
+ {
+  "id": "E40",
+  "kind": "question",
+  "turn": "이번 주 예약 현황 알려 줘",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E41",
+  "kind": "question",
+  "turn": "1041 송장 번호 뭐였지?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E42",
+  "kind": "question",
+  "turn": "오늘 매출 얼마야?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E43",
+  "kind": "question",
+  "turn": "박지은 님 예약금 언제까지야?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E44",
+  "kind": "question",
+  "turn": "다음 주 원데이 몇 명 예약됐어?",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E45",
+  "kind": "unclear",
+  "turn": "그거 처리해 줘",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  }
+ },
+ {
+  "id": "E46",
+  "kind": "unclear",
+  "turn": "주문 확인해 줘",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "확인할 주문이 셋이다"
+ },
+ {
+  "id": "E47",
+  "kind": "unclear",
+  "turn": "포장 다 했어",
+  "expect": {
+   "calls": [],
+   "no_auto": true
+  },
+  "note": "대상이 적혀 있지 않다"
+ },
+ {
+  "id": "E48",
+  "kind": "memory",
+  "turn": "다음 달부터 원데이 클래스는 10분 일찍 시작해 기억해 둬",
+  "expect": {
+   "calls": [
+    {
+     "tool": "remember",
+     "target": [],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "kind": "rule_of_thumb",
+      "text": "다음 달부터 원데이 클래스는 10분 일찍 시작해",
+      "source_quote": "다음 달부터 원데이 클래스는 10분 일찍 시작해"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E49",
+  "kind": "several",
+  "turn": "1040 포장 끝났고 박지은 님 예약금 20,000원 들어왔어",
+  "expect": {
+   "calls": [
+    {
+     "tool": "mark_packed",
+     "target": [
+      "shipment-order-1040",
+      "order-1040"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "order": "1040"
+     }
+    },
+    {
+     "tool": "confirm_deposit",
+     "target": [
+      "booking-jieun"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "booking": "박지은"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E50",
+  "kind": "several",
+  "turn": "1043 주문 확인해 주고 점토 주문도 끝났어 할 일 완료로 바꿔 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_order",
+     "target": [
+      "order-1043"
+     ],
+     "values": {},
+     "decision": [
+      "auto",
+      "proposed"
+     ],
+     "args": {
+      "order": "1043"
+     }
+    },
+    {
+     "tool": "complete_task",
+     "target": [
+      "task-clay"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "task": "도자기용 점토 50kg"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E51",
+  "kind": "voice",
+  "source": "voice",
+  "turn": "1040 포장 끝났어",
+  "expect": {
+   "calls": [
+    {
+     "tool": "mark_packed",
+     "target": [
+      "shipment-order-1040",
+      "order-1040"
+     ],
+     "values": {},
+     "decision": [
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "order": "1040"
+     }
+    }
+   ]
+  },
+  "note": "음성은 되돌릴 수 없는 처리를 제안까지만 한다"
+ },
+ {
+  "id": "E52",
+  "kind": "voice",
+  "source": "voice",
+  "turn": "최민우 님 예약금 30,000원 들어왔어",
+  "expect": {
+   "calls": [
+    {
+     "tool": "confirm_deposit",
+     "target": [
+      "booking-minwoo"
+     ],
+     "values": {},
+     "decision": [
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "booking": "최민우"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E53",
+  "kind": "voice",
+  "source": "voice",
+  "turn": "1041 CJ대한통운 682100042841",
+  "expect": {
+   "calls": [
+    {
+     "tool": "register_invoice",
+     "target": [
+      "shipment-order-1041",
+      "order-1041"
+     ],
+     "values": {},
+     "decision": [
+      "proposed",
+      "clarify"
+     ],
+     "args": {
+      "order": "1041",
+      "carrier": "CJ대한통운",
+      "tracking_number": "682100042841"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "E54",
+  "kind": "voice",
+  "source": "voice",
+  "turn": "점토 주문 끝났어 할 일 완료로 바꿔 줘",
+  "expect": {
+   "calls": [
+    {
+     "tool": "complete_task",
+     "target": [
+      "task-clay"
+     ],
+     "values": {},
+     "decision": [
+      "auto"
+     ],
+     "args": {
+      "task": "도자기용 점토 50kg"
+     }
+    }
+   ]
+  }
+ }
+]

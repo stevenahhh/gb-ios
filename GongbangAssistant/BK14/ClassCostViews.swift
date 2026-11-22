@@ -56,13 +56,13 @@ struct ClassCostListView: View {
     var body: some View {
         LoadableContent(loader: loader, retry: load) { data in
             if data.classes.isEmpty {
-                ContentUnavailableView("등록된 수업이 없습니다", systemImage: "square.stack",
-                                       description: Text("캘린더에서 수업을 먼저 만들어 주세요"))
+                ContentUnavailableView("아직 만든 수업이 없어요", systemImage: "square.stack",
+                                       description: Text("수업부터 하나 캘린더에 만들어 주세요"))
             } else {
                 list(data)
             }
         }
-        .navigationTitle("수업별 원가")
+        .navigationTitle("수업마다 드는 돈")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: app.dataVersion) { await load() }
     }
@@ -73,7 +73,7 @@ struct ClassCostListView: View {
 
     private func list(_ data: OutreachCostSettings) -> some View {
         List {
-            CardSection("수업", footer: "원가를 넣은 수업만 출강 가부를 판단해요.") {
+            CardSection("수업", footer: "재료비와 시간을 채운 수업만 출장 수업을 맡아도 될지 따져 봐요.") {
                 ForEach(data.classes) { item in
                     NavigationLink {
                         ClassCostEditView(item: item)
@@ -83,19 +83,19 @@ struct ClassCostListView: View {
                     .accessibilityIdentifier("classCost.\(item.classId)")
                 }
             }
-            CardSection("출강 기본값") {
+            CardSection("출장 수업 기본 설정") {
                 NavigationLink {
                     OutreachDefaultsView(saved: data.defaults)
                 } label: {
                     Label {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("강사비와 출장비")
+                            Text("강사비, 출장비")
                             if let defaults = data.defaults {
-                                Text("시간당 강사비 \(OutreachFormat.won(defaults.instructorHourlyKrw))")
+                                Text("한 시간 강사비 \(OutreachFormat.won(defaults.instructorHourlyKrw))")
                                     .font(.subheadline)
                                     .foregroundStyle(Color.secondaryText)
                             } else {
-                                StatusBadge(Status(text: "입력 필요", tone: .attention))
+                                StatusBadge(Status(text: "채워 주세요", tone: .attention))
                             }
                         }
                     } icon: {
@@ -115,7 +115,7 @@ struct ClassCostListView: View {
             if item.isMissing {
                 StatusBadge(Status(text: "원가 없음", tone: .attention))
             } else {
-                PhraseText(text: "1인 재료비 \(OutreachFormat.won(item.materialPerPersonKrw)) · 원데이 \(OutreachFormat.won(item.onedayPriceKrw))")
+                PhraseText(text: "재료비 1인 \(OutreachFormat.won(item.materialPerPersonKrw)) · 원데이 클래스 가격 \(OutreachFormat.won(item.onedayPriceKrw))")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
             }
@@ -152,29 +152,29 @@ struct ClassCostEditView: View {
 
     // The server refuses the same ranges; checking here puts the reason under the field that caused it.
     private func moneyProblem(_ value: Int?, minimum: Int) -> String? {
-        value.flatMap { (minimum...1_000_000_000).contains($0) ? nil : "\(minimum)원부터 10억 원까지 넣을 수 있어요." }
+        value.flatMap { (minimum...1_000_000_000).contains($0) ? nil : "\(minimum)원에서 10억 원 사이로 적어 주세요." }
     }
 
     private func minuteProblem(_ value: Int?) -> String? {
-        value.flatMap { (0...1440).contains($0) ? nil : "하루(1,440분)를 넘을 수 없어요." }
+        value.flatMap { (0...1440).contains($0) ? nil : "1,440분, 그러니까 하루보다 긴 시간은 적을 수 없어요." }
     }
 
     private var headcountProblem: String? {
-        headcount.flatMap { (1...1000).contains($0) ? nil : "1명부터 1,000명까지 넣을 수 있어요." }
+        headcount.flatMap { (1...1000).contains($0) ? nil : "1명에서 1,000명 사이로 적어 주세요." }
     }
 
     var body: some View {
         List {
-            CardSection("한 사람 기준") {
+            CardSection("한 명당 드는 돈") {
                 OutreachNumberField(title: "1인 재료비", value: $material, unit: "원", identifier: "classCost.material",
                                     problem: moneyProblem(material, minimum: 0))
-                OutreachNumberField(title: "원데이 1인 가격", value: $price, unit: "원", identifier: "classCost.price",
+                OutreachNumberField(title: "원데이 클래스 1인 가격", value: $price, unit: "원", identifier: "classCost.price",
                                     problem: moneyProblem(price, minimum: 1))
             }
-            CardSection("시간과 정원", footer: "수업 시간은 등록한 수업의 \(item.classMinutes)분을 써요.") {
-                OutreachNumberField(title: "준비 시간", value: $prep, unit: "분", identifier: "classCost.prep",
+            CardSection("수업 시간, 정원", footer: "만들어 두신 수업대로 수업 시간은 \(item.classMinutes)분으로 잡아요.") {
+                OutreachNumberField(title: "수업 전 준비", value: $prep, unit: "분", identifier: "classCost.prep",
                                     problem: minuteProblem(prep))
-                OutreachNumberField(title: "뒷정리 시간", value: $cleanup, unit: "분", identifier: "classCost.cleanup",
+                OutreachNumberField(title: "수업 뒤 정리", value: $cleanup, unit: "분", identifier: "classCost.cleanup",
                                     problem: minuteProblem(cleanup))
                 OutreachNumberField(title: "최대 인원", value: $headcount, unit: "명", identifier: "classCost.headcount",
                                     problem: headcountProblem)
@@ -265,26 +265,26 @@ struct OutreachDefaultsView: View {
     var body: some View {
         List {
             CardSection("강사비") {
-                OutreachNumberField(title: "시간당 강사비", value: $hourly, unit: "원", identifier: "defaults.hourly")
-                OutreachNumberField(title: "보조 강사 일당", value: $assistant, unit: "원", identifier: "defaults.assistant")
+                OutreachNumberField(title: "한 시간 강사비", value: $hourly, unit: "원", identifier: "defaults.hourly")
+                OutreachNumberField(title: "보조 강사 하루치", value: $assistant, unit: "원", identifier: "defaults.assistant")
             }
             CardSection("출장비") {
-                Picker("출장비 방식", selection: $mode) {
+                Picker("출장비 계산 방법", selection: $mode) {
                     ForEach(OutreachTravelMode.allCases) { Text($0.label).tag($0) }
                 }
                 if mode == .flat {
-                    OutreachNumberField(title: "고정 출장비", value: $flat, unit: "원", identifier: "defaults.flat")
+                    OutreachNumberField(title: "한 번에 정해진 출장비", value: $flat, unit: "원", identifier: "defaults.flat")
                 } else {
-                    OutreachNumberField(title: "1km당 차량비", value: $perKm, unit: "원", identifier: "defaults.perKm")
+                    OutreachNumberField(title: "1km 갈 때마다 차비", value: $perKm, unit: "원", identifier: "defaults.perKm")
                 }
             }
-            CardSection("최소 금액", footer: "예산을 모르는 문의에 이 금액보다 낮은 견적을 내지 않아요.") {
-                OutreachNumberField(title: "출강 최소 금액", value: $minimum, unit: "원", identifier: "defaults.minimum")
+            CardSection("최소 금액", footer: "예산 이야기가 없는 문의라면 이보다 싸게는 안 불러요.") {
+                OutreachNumberField(title: "출장 수업 최저 금액", value: $minimum, unit: "원", identifier: "defaults.minimum")
             }
             OutreachSaveSection(errorMessage: errorMessage, isBusy: isSaving, isEnabled: isComplete, save: save)
         }
         .cardList()
-        .navigationTitle("출강 기본값")
+        .navigationTitle("출장 수업 기본 설정")
         .navigationBarTitleDisplayMode(.inline)
     }
 

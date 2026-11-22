@@ -70,12 +70,12 @@ def recommendation_lines(
         case "seat_promotion":
             if opening is None:
                 return None
-            fact = f"{weekday(opening.day)}요일 {opening.title}에 {opening.remaining}자리가 남아 있어요."
+            fact = f"{weekday(opening.day)}요일 {opening.title}에 {opening.remaining}자리가 비어 있어요."
             return [fact, row.body]
         case "deposit_reminder":
             if counts.deposit_pending == 0:
                 return None
-            return [f"예약금을 기다리는 예약이 {count(counts.deposit_pending)} 있어요.", row.body]
+            return [f"입금 전인 예약이 {count(counts.deposit_pending)} 있어요.", row.body]
         case _:
             return [line for line in (row.source_name, row.body) if line]
 
@@ -89,7 +89,7 @@ def recommendation_card(row: RecommendationRow, lines: list[str], draft: CardDra
         title=row.title,
         lines=lines,
         revision=row.revision,
-        status=None if is_open else Status(text="반려함", tone="neutral")
+        status=None if is_open else Status(text="쓰지 않기로 함", tone="neutral")
         if row.status == "rejected" else Status(text="확인함", tone="done"),
         action=CardAction(code="acknowledgeRecommendation", label="확인했어요") if is_open else None,
         draft=draft or draft_reference(row),
