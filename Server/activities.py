@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Final, Literal
 
 from fastapi import APIRouter
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from common import Now, Session
 from contracts import ApiModel
@@ -39,7 +39,9 @@ class Activity(ApiModel):
 
 async def reply_activities(db: Session, since: datetime) -> list[Activity]:
     """List reply drafts, written when an inquiry arrives from the workshop facts on it."""
-    rows = await db.scalars(select(InquiryRow).where(InquiryRow.received_at >= since))
+    rows = await db.scalars(
+        select(InquiryRow).where(InquiryRow.received_at >= since, func.btrim(InquiryRow.draft) != ""),
+    )
     return [
         Activity(
             id=f"inquiry:{row.id}", kind="inquiryReply",

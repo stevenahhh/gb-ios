@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "fastapi>=0.121", "uvicorn>=0.30", "httpx>=0.27", "alembic>=1.14", "tzdata>=2025.1",
-#     "sqlalchemy[asyncio]>=2.0,<2.1", "asyncpg>=0.30", "anyio>=4",
+#     "sqlalchemy[asyncio]>=2.0,<2.1", "asyncpg>=0.30", "anyio>=4", "defusedxml>=0.7.1", "bcrypt>=4.2",
 # ]
 # ///
 """Roundup API server: the iOS app calls this server; only this server holds NCP keys."""
@@ -18,6 +18,7 @@ from activities import router as activity_router
 from ai import router as ai_router
 from bookings import router as booking_router
 from channels import router as channel_router
+from collectors.routes import router as collector_router
 from common import Session
 from database import database_lifespan, schema_is_current
 from details import router as detail_router
@@ -58,6 +59,7 @@ for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
     detail_router, draft_router, undo_router, ai_router, activity_router, speech_router,
+    collector_router,
 ):
     app.include_router(router)
 

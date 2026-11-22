@@ -19,7 +19,7 @@ MAX_JSON_BYTES: Final = 64 * 1024
 MAX_AUDIO_BYTES: Final = 2 * 1024 * 1024
 LOG_FIELDS: Final = (
     "request_id", "method", "route", "status", "duration_ms", "error_type", "upstream_status",
-    "intent", "intent_source", "confidence",
+    "intent", "intent_source", "confidence", "source", "collected", "inserted", "mapped",
 )
 
 
@@ -44,7 +44,8 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
-    """Send application logs to stdout for the service manager."""
+    """Send application logs to stdout; httpx request lines are off because they hold query tokens."""
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
     logger = logging.getLogger("roundup")
