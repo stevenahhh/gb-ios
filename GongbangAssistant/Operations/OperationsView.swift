@@ -56,8 +56,6 @@ struct OperationsView: View {
                 }
             }
 
-            CollectionStatusSection()
-
             periodSection(data)
 
             CardSection("전체 업무 관리") {
@@ -106,6 +104,7 @@ struct OperationsView: View {
     private func periodSection(_ data: OperationsData) -> some View {
         let period = data.period
         return CardSection {
+            CollectionStatusRings()
             summaryGrid(period)
                 .padding(.vertical, 4)
             if period.total > period.handled {
@@ -134,7 +133,7 @@ struct OperationsView: View {
     }
 
     private func periodTitle(_ period: OperationsData.Period) -> some View {
-        Text("운영 현황")
+        Text(period.month.key == "custom" ? "운영 현황" : "\(period.month.title) 운영 현황")
             .tracking(0.6)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("operations.periodTitle")
@@ -145,7 +144,7 @@ struct OperationsView: View {
             isPickingPeriod = true
         } label: {
             HStack(spacing: 4) {
-                Text(period.month.key == "custom" ? period.month.range : period.month.title).monospacedDigit()
+                Text(period.month.range).monospacedDigit()
                 Image(systemName: "chevron.down").imageScale(.small)
             }
             .font(.subheadline.weight(.semibold))
@@ -163,7 +162,6 @@ struct OperationsView: View {
     /// Three tappable tiles laid out like the today numbers; each opens its filtered list.
     /// Buttons push the route themselves, because a List row with several links fires only one of them.
     private func attentionStrip(_ metrics: [Metric]) -> some View {
-        // Tiles share the tallest one's height, so every 보기 sits on the same line whatever the detail's length.
         HStack(alignment: .top, spacing: 0) {
             ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
                 if index > 0 {
@@ -176,7 +174,7 @@ struct OperationsView: View {
                 }
                 .buttonStyle(AttentionTileStyle())
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(metric.due?.isOverdue(at: .now) == true ? "기한 지남, " : "")\(metric.label) \(metric.display)\(metric.detail.map { ", \($0)" } ?? "")")
+                .accessibilityLabel("\(metric.due?.isOverdue(at: .now) == true ? "기한 지남, " : "")\(metric.label) \(metric.display)")
                 .accessibilityHint("목록을 열어요")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("operations.attention.\(metric.key)")
@@ -186,40 +184,20 @@ struct OperationsView: View {
         .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
     }
 
+    /// The count and its label, nothing under them. A passed deadline is only the red clock in the corner.
     private func attentionTile(_ metric: Metric) -> some View {
         VStack(spacing: 4) {
             Text(metric.display)
                 .font(.title3.bold())
                 .monospacedDigit()
-            // A label such as "답변 기다리는 문의" takes two lines; every tile reserves both, so the 보기 buttons line up.
             let chevron = Text(Image(systemName: "chevron.forward")).font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
             Text("\(Text(verbatim: metric.label))\u{00A0}\(chevron)")
                 .font(.subheadline.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .lineLimit(2, reservesSpace: true)
+                .lineLimit(1)
                 .minimumScaleFactor(0.8)
-            Group {
-                if let due = metric.due {
-                    DueLabel(due: due)
-                } else if let detail = metric.detail {
-                    // A name keeps its 님 on the same line; alone on the next line it reads as a stray word.
-                    Text(detail.replacingOccurrences(of: " 님", with: "\u{00A0}님"))
-                }
-            }
-            .font(.subheadline)
-            .foregroundStyle(Color.secondaryText)
-            .lineLimit(3)
-            .multilineTextAlignment(.center)
-            Spacer(minLength: 0)
-            Text("보기")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.tint)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 4)
-                .background(.tint.opacity(0.12), in: .capsule)
         }
         .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .padding(.horizontal, 4)
         // The corner keeps the mark out of the centered column, so the number stays put when a deadline passes.
         .overlay(alignment: .topLeading) {
@@ -240,12 +218,6 @@ struct OperationsView: View {
             } label: {
                 Text(metric.label)
                     .overdueMark(for: metric.due)
-                if let due = metric.due {
-                    DueLabel(due: due)
-                } else if let detail = metric.detail {
-                    Text(detail)
-                        .foregroundStyle(Color.secondaryText)
-                }
             }
         }
     }
