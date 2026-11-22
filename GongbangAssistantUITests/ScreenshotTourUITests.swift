@@ -128,7 +128,7 @@ final class ScreenshotTourUITests: RoundupUITestCase {
         XCTAssertTrue(app.descendants(matching: .any)["today.empty"].waitForExistence(timeout: 10))
         capture("state-empty-today")
         selectTab("운영")
-        // 실시간 수집 현황 sits above the work areas, so their rows start below the fold here as well.
+        // The collection rings and the period numbers sit above the work areas, so their rows start below the fold.
         XCTAssertTrue(app.buttons["operations.period"].waitForExistence(timeout: 10))
         let row = app.buttons["operations.bookings"]
         if reveal(row) {

@@ -169,21 +169,25 @@ final class TabNavigationUITests: RoundupUITestCase {
     func testOperationsShowsLiveCollectionInPlaceOfTheRate() throws {
         let app = try launch()
         app.tabBars.buttons["운영"].tap()
-        XCTAssertTrue(app.navigationBars["운영"].waitForExistence(timeout: 10))
-        XCTAssertTrue(scrollTo(app.staticTexts["operations.collection.title"], in: app), "실시간 수집 현황 is missing")
+        let tile = app.buttons["operations.attention.depositPending"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 10))
+        XCTAssertNotNil(tile.label.wholeMatch(of: /(기한 지남, )?예약금 미확인 \d+건/), "the tile ends at its label: \(tile.label)")
+        keepScreenshot(of: app, named: "operations-tiles")
+
+        let rings = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "operations.collection.source."))
+        let first = rings.firstMatch
+        XCTAssertTrue(scrollTo(first, in: app), "운영 현황 shows no ring")
+        XCTAssertEqual(rings.count, 3)
         XCTAssertFalse(element(labelled: "처리율", in: app).exists)
 
-        let sources = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "operations.collection.source."))
-        let first = sources.firstMatch
-        XCTAssertTrue(first.waitForExistence(timeout: 10), "the card shows no source")
-        let value = first.value as? String ?? ""
         let start = Date()
+        let still = first.screenshot().pngRepresentation
         keepScreenshot(of: app, named: "collection-motion-0s")
-        // A server without collector routes gets sample rows, tagged as such, and they move without a touch.
+        // With nothing connected the rings are a sample, tagged as such, and they turn without a touch. Each capture
+        // takes a moment, so a turning ring cannot look the same in all of them.
         if app.descendants(matching: .any)["operations.collection.sample"].exists {
-            XCTAssertEqual(sources.count, 4)
-            wait(for: [expectation(for: NSPredicate(format: "value != %@", value), evaluatedWith: first)], timeout: 10)
+            XCTAssertTrue((0..<5).contains { _ in first.screenshot().pngRepresentation != still }, "the rings do not move")
         }
         // Motion is what this pair of captures shows, so the second one waits until two real seconds have passed.
         Thread.sleep(until: start.addingTimeInterval(2))
