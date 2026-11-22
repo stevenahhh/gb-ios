@@ -163,7 +163,7 @@ struct InquiryDetailView: View {
         } label: {
             Group {
                 if isGenerating {
-                    GeneratingIndicator(label: "쓰는 중이에요", showsFace: false)
+                    GeneratingIndicator(label: "쓰는 중이에요")
                 } else {
                     HStack(spacing: 6) {
                         AssistantFace(size: .card)

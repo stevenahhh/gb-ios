@@ -280,7 +280,7 @@ struct BK06QuoteView: View {
             if isWriting || usedFixedText {
                 Text("답장 초안")
             } else {
-                Label { Text("비서가 쓴 답변") } icon: { AssistantFace(size: .card) }
+                Text("비서가 쓴 답변")
                     .foregroundStyle(Color.assistantAccent)
             }
         } footer: {

@@ -127,7 +127,7 @@ struct ApprovalListView: View {
     }
 }
 
-/// Head (face, who wrote it, customer), title, two preview lines, then 답변 완료 or 승인 · 고치기.
+/// Head (who wrote it, customer), title, two preview lines, then 답변 완료 or 승인 · 고치기.
 /// Once decided the card stays and shows the F6 next step: copy, open the channel, or undo.
 struct ApprovalCard: View {
     let item: ApprovalItem
