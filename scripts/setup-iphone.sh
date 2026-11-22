@@ -31,7 +31,7 @@ fi
 } > "$signing"
 
 if [[ ! -f "$secrets" ]]; then
-  read -r -p "README의 서버 연결 설정에 적힌 앱 키를 붙여 넣으세요: " key
+  read -r -p "팀장에게 받은 앱 키를 붙여 넣으세요: " key
   if [[ -z "$key" ]]; then
     echo "앱 키가 비어 있습니다." >&2
     exit 1

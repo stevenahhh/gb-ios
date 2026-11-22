@@ -39,9 +39,9 @@ Xcode 없이 화면 시안만 보려면 [웹 버전으로 보기](#웹-버전으
 
 ## 팀원 안내
 
-이 저장소는 비공개입니다. 초대받은 GitHub 계정만 코드를 볼 수 있습니다.
+이 저장소는 공개되어 있어 누구나 코드를 볼 수 있습니다. 운영 서버에 접속하는 앱 키는 저장소에 넣지 않으며 팀원에게 따로 전합니다.
 
-1. GitHub 초대를 수락합니다. 초대는 <https://github.com/stevenahhh/gb-ios/invitations>에서 확인합니다. 초대는 7일 뒤 만료되므로 그 전에 수락해 주세요.
+1. 코드를 push할 팀원은 GitHub 초대를 수락합니다. 초대는 <https://github.com/stevenahhh/gb-ios/invitations>에서 확인합니다. 초대는 7일 뒤 만료되므로 그 전에 수락해 주세요.
 2. Mac에서 GitHub에 로그인합니다. [GitHub CLI](https://cli.github.com)를 쓴다면 `gh auth login`을 실행합니다.
 3. [서버 연결 설정](#서버-연결-설정)대로 설정 파일에 앱 키를 넣고 Xcode에서 실행합니다.
 
@@ -198,13 +198,11 @@ cp Config/RoundupSecrets.example.plist GongbangAssistant/RoundupSecrets.plist
 open GongbangAssistant/RoundupSecrets.plist
 ```
 
-`APIKey` 값을 아래 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다.
+`APIKey` 값을 팀장에게 받은 앱 키로 바꿉니다. `APIURL`은 운영 서버 주소가 이미 들어 있으니 그대로 둡니다.
 
-```text
-NaapiKp6n7_Y0qcWC2rOI3W1_aqUXD5d5939eJWDDp0
-```
+이 키가 있으면 운영 데이터를 읽고 바꿀 수 있습니다. 그래서 키를 커밋, 이슈, PR에 적지 않습니다. 키가 밖으로 나갔다면 서버의 `ROUNDUP_API_KEY`를 교체하고 팀원에게 새 키를 전합니다.
 
-이 키가 있으면 운영 데이터를 읽고 바꿀 수 있습니다. 키가 README와 Git 기록에 들어 있으므로 저장소를 공개로 바꾸면 안 됩니다. 저장소 밖으로 키가 나갔다면 서버의 `ROUNDUP_API_KEY`를 교체하고 이 값도 함께 바꿉니다.
+2026년 11월 22일까지 README에 적혀 있던 키는 2026년 11월 23일에 교체했습니다. Git 기록에는 옛 키가 들어 있지만 서버가 받지 않습니다.
 
 운영 서버는 HTTPS 443번 포트로 어느 네트워크에서나 접속할 수 있습니다. 모든 요청에는 앱 키가 필요합니다.
 
@@ -260,7 +258,7 @@ Xcode를 처음 여는 분도 아래 순서를 그대로 따라 하면 됩니다
 ### 처음 한 번 준비하기
 
 1. **Xcode > Settings… > Accounts**에서 **+**를 눌러 본인 Apple Account를 추가합니다. 개발자 프로그램에 가입하지 않아도 됩니다.
-2. 저장소 최상위 폴더에서 설정 스크립트를 실행합니다. 앱 키를 물으면 [서버 연결 설정](#서버-연결-설정)에 적힌 값을 붙여 넣습니다.
+2. 저장소 최상위 폴더에서 설정 스크립트를 실행합니다. 앱 키를 물으면 팀장에게 받은 값을 붙여 넣습니다.
 
    ```bash
    scripts/setup-iphone.sh
