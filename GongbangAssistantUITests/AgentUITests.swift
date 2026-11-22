@@ -194,12 +194,11 @@ final class AgentUITests: RoundupUITestCase {
         XCTAssertTrue(named("assistant.writing", in: app).waitForNonExistence(timeout: 30), "the answer never settled")
     }
 
-    /// Pulls across most of the screen, because a swipe on one row is too short, and waits for the request it starts.
+    /// Pulls the page down and waits for the request it starts.
     @MainActor
     private func pullToRefresh(_ app: XCUIApplication, asking path: String) async throws {
         let before = try await requests().filter { $0.method == "GET" && $0.path == path }.count
-        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
-        top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)), withVelocity: 500, thenHoldForDuration: 0.2)
+        pullDown(app)
         try await arrival("GET", path, count: before + 1)
     }
 

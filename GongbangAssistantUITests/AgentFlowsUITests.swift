@@ -136,7 +136,8 @@ class AgentFlowCase: RoundupUITestCase {
     @MainActor
     func scrollBack(to target: XCUIElement, in app: XCUIApplication) -> Bool {
         for _ in 0..<6 {
-            if target.waitForExistence(timeout: 2), target.isHittable { return true }
+            // One that slid under the bar still counts as hittable.
+            if target.waitForExistence(timeout: 2), target.isHittable, target.frame.minY > 150 { return true }
             let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
             start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
         }
@@ -544,7 +545,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         XCTAssertEqual(header.label, "비서의 확인 요청 2건")
 
         try await drop(true)
-        header.swipeDown()
+        pullDown(app)
         let notice = named("connection.notice", in: app)
         XCTAssertTrue(notice.waitForExistence(timeout: 30), "a refresh that failed says nothing")
         XCTAssertTrue(header.exists, "the last proposals were thrown away")
@@ -576,9 +577,11 @@ final class AgentFlowsUITests: AgentFlowCase {
         try capture(app, "offline-proposal-list")
         let id = try await raise(lasting: 3600)
 
+        let notice = named("connection.notice", in: app)
+        XCTAssertTrue(notice.waitForExistence(timeout: 20), "the list does not say the server is out of reach")
         try await drop(false)
-        XCTAssertTrue(named("agent.proposal.\(id)", in: app).waitForExistence(timeout: 60),
-                      "the proposal list did not reconnect by itself")
+        XCTAssertTrue(notice.waitForNonExistence(timeout: 60), "the proposal list did not reconnect by itself")
+        XCTAssertTrue(scrollTo(named("agent.proposal.\(id)", in: app), in: app), "the reconnected list misses what came meanwhile")
         try capture(app, "reconnected-proposal-list")
     }
 

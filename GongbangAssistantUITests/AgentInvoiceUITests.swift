@@ -532,7 +532,8 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(task, in: app))
         let shown = "\(task.label) \(task.value as? String ?? "")"
         XCTAssertTrue(shown.contains("알아서 하기"), shown)
-        XCTAssertTrue(scrollTo(element(labelled: "하루 19건까지", in: app), in: app))
+        XCTAssertTrue(scrollTo(app.steppers["agent.settings.cap"].buttons.element(boundBy: 0), in: app))
+        XCTAssertTrue(element(labelled: "하루 19건까지", in: app).exists, "the saved daily cap was not read back")
         let quietAgain = app.switches["agent.settings.quiet"]
         XCTAssertTrue(scrollTo(quietAgain, in: app))
         XCTAssertEqual(quietAgain.value as? String, "0")

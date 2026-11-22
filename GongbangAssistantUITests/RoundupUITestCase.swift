@@ -29,6 +29,13 @@ class RoundupUITestCase: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
     }
 
+    /// Pulls the page down to refresh it, across most of the screen because a swipe on one row is too short.
+    @MainActor
+    func pullDown(_ app: XCUIApplication) {
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
+        top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)), withVelocity: 500, thenHoldForDuration: 0.2)
+    }
+
     @MainActor
     func openArea(_ area: String, in app: XCUIApplication) {
         app.tabBars.buttons["운영"].tap()

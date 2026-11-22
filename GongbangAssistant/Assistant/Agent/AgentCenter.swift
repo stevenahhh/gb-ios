@@ -96,6 +96,9 @@ final class AgentCenter {
     /// Open proposals as the server lists them, soonest to expire first.
     private(set) var proposals: [AgentProposal] = []
     private(set) var proposalsFailed = false
+    /// Bumped when the list could not be read because the server was out of reach, so an open list reads it itself
+    /// and reconnects like any other screen.
+    private(set) var missedLoads = 0
     private var hasLoadedProposals = false
     private var decided: [AgentProposal.ID: ProposalStanding] = [:]
     /// What the assistant answered when the owner gave a proposal its missing value and that did not settle it.
@@ -174,8 +177,7 @@ final class AgentCenter {
         } catch is CancellationError {
             return
         } catch is ConnectionError {
-            // The screen's own connection line already says so, and its reconnect loads these again.
-            return
+            missedLoads += 1
         } catch {
             proposalsFailed = true
         }

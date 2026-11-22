@@ -380,6 +380,7 @@ struct AgentProposalListView: View {
         .invoiceFilePicking(onPage: onPage)
         .task(id: app.dataVersion) { await load() }
         .onChange(of: center.waiting, initial: true) { _, listed in include(listed) }
+        .onChange(of: center.missedLoads) { Task { await load() } }
     }
 
     private func include(_ listed: [AgentProposal]) {

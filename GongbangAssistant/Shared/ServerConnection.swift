@@ -107,10 +107,11 @@ struct AutoReconnect: ViewModifier {
             }
             handledRestorations = connection.pathRestorations
             ServerConnection.logger.info("reconnect.attempt failures=\(failures, privacy: .public)")
-            // Inquiries go first: a screen retry that fails again changes `screenFailures`, which cancels this task
-            // and restarts it with a longer delay.
+            // Inquiries go first: a screen retry changes `screenFailures` as soon as its first request ends, which
+            // cancels this task and restarts it with a longer delay or not at all. The retry runs on its own, so what
+            // the screen loads after that request still arrives.
             if inquiriesFailing { await store.loadInquiries() }
-            if screenFailures > 0 { await retry() }
+            if screenFailures > 0 { await Task { await retry() }.value }
             if Task.isCancelled { return }
             failures += 1
         }
