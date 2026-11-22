@@ -37,8 +37,10 @@ public struct Inquiry: Identifiable, Codable, Equatable, Sendable {
     public internal(set) var draft: String
     public internal(set) var status: ReplyStatus
     public internal(set) var revision: Int = 0
+    /// The channel it came from; absent from an older server.
+    public internal(set) var channel: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, customer, subject, question, facts, draft, status, revision
+        case id, customer, subject, question, facts, draft, status, revision, channel
     }
 }

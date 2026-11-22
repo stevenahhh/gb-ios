@@ -16,9 +16,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    select,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from database import Base
 
@@ -300,6 +301,11 @@ class InquiryRow(Base):
     revision: Mapped[int] = mapped_column(Integer)
     customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"))
     channel_id: Mapped[str | None] = mapped_column(ForeignKey("channels.id", ondelete="SET NULL"))
+    channel: Mapped[str | None] = column_property(
+        select(ChannelRow.name).where(ChannelRow.id == channel_id)
+        .correlate_except(ChannelRow).scalar_subquery(),
+        expire_on_flush=False,
+    )
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

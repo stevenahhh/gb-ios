@@ -27,6 +27,7 @@ class Inquiry(BaseModel):
     draft: str
     status: Literal["pending", "approved"]
     revision: Revision
+    channel: str | None = None
 
 
 class DraftEdit(BaseModel):

@@ -34,6 +34,7 @@ async def test_seed_has_three_real_looking_inquiries(
     for row in rows:
         assert row.model_fields_set == {
             "id", "customer", "subject", "question", "facts", "draft", "status", "revision",
+            "channel",
         }
         assert row.status == "pending"
         assert row.revision == 0
