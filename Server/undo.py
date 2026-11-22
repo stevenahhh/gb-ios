@@ -1,5 +1,7 @@
 """Revision-checked reversals of owner actions, with no external side effects."""
 
+from datetime import datetime
+
 from fastapi import APIRouter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,15 +16,13 @@ from orders import card_for as order_card
 from orders import cards_for as order_cards
 from shipments import card_for as shipment_card
 from shipments import cards_for as shipment_cards
-from tasks import task_card
+from tasks import set_done, task_card
 
 router = APIRouter()
 
 
-@router.post("/bookings/{booking_id}/undo-deposit")
-async def undo_deposit(booking_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
-    """Restore deposit attention while preserving an existing deadline."""
-    booking = await locked(db, BookingRow, booking_id, body.expected_revision)
+async def reopen_deposit(db: AsyncSession, booking: BookingRow, now: datetime) -> None:
+    """Return a locked confirmed booking to waiting for its deposit, keeping an existing deadline."""
     if booking.status != "confirmed" or booking.deposit_won <= 0:
         raise invalid_transition()
     session = await db.get_one(ClassSessionRow, booking.session_id)
@@ -30,6 +30,13 @@ async def undo_deposit(booking_id: str, body: ExpectedRevision, db: Session, now
     booking.deposit_confirmed_at = None
     booking.deposit_due_at = booking.deposit_due_at or min(now + DEPOSIT_WINDOW, session.starts_at)
     booking.revision += 1
+
+
+@router.post("/bookings/{booking_id}/undo-deposit")
+async def undo_deposit(booking_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
+    """Restore deposit attention while preserving an existing deadline."""
+    booking = await locked(db, BookingRow, booking_id, body.expected_revision)
+    await reopen_deposit(db, booking, now)
     await db.flush()
     return await booking_card(db, booking.id, now)
 
@@ -111,10 +118,6 @@ async def undo_shipment(shipment_id: str, body: ExpectedRevision, db: Session, n
 async def undo_task(task_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
     """Restore an unfinished task without changing its due date."""
     task = await locked(db, TaskRow, task_id, body.expected_revision)
-    if task.status != "done":
-        raise invalid_transition()
-    task.status = "open"
-    task.completed_at = None
-    task.revision += 1
+    set_done(task, now, done=False)
     await db.flush()
     return task_card(task, now.date())

@@ -1,3 +1,5 @@
+import AVFAudio
+import RoundupCore
 import SwiftUI
 import UIKit
 
@@ -7,6 +9,10 @@ struct LiveTurn: Sendable {
     let role: Role
     let text: String
     let items: [WorkItem]
+    /// What the agent did or proposed for an answer; nil for the owner's words and for an answer `/ask` gave.
+    var agent: AgentRecord?
+    /// True for a turn that reports an undo, which changes a row without a run of its own.
+    var undidStep = false
 }
 
 /// Full-screen voice conversation: the owner talks, the assistant answers aloud with subtitles.
@@ -15,6 +21,8 @@ struct AssistantLiveView: View {
     private let onTurn: @MainActor (LiveTurn) -> Void
     @State private var conversation = LiveConversation()
     @State private var showsTranscript = false
+    @State private var center = AgentCenter.shared
+    @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -33,6 +41,14 @@ struct AssistantLiveView: View {
                         .padding(.vertical, 12)
                     LiveTranscript(turns: conversation.turns)
                         .transition(.opacity)
+                } else if !shownProposals.isEmpty {
+                    LiveOrb(conversation: conversation, diameter: 96)
+                        .padding(.vertical, 12)
+                    // Above the caption, so a caption that changes height never moves a button under a finger.
+                    proposalCards
+                    captions
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .padding(.horizontal, 28)
                 } else {
                     Spacer(minLength: 24)
                     LiveOrb(conversation: conversation, diameter: 220)
@@ -62,12 +78,59 @@ struct AssistantLiveView: View {
             }
         }
         .task {
-            await conversation.start(history: history(), onTurn: onTurn)
+            await conversation.start(history: history()) { turn in
+                onTurn(turn)
+                // A spoken request can change a row too, so the screens behind this one reload.
+                if turn.agent?.changedData == true || turn.undidStep { app.dataDidChange() }
+            }
+        }
+        // A locked screen would pause the conversation while a run is still at work.
+        .onChange(of: conversation.keepsScreenOn, initial: true) { _, isOn in
+            UIApplication.shared.isIdleTimerDisabled = isOn
+        }
+        .onChange(of: conversation.undoChoices) { showsTranscript = true }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notice in
+            let type = notice.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            if type == AVAudioSession.InterruptionType.began.rawValue { conversation.pause() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { conversation.pause() }
         }
-        .onDisappear { conversation.end() }
+        .onDisappear {
+            conversation.end()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        // The root's alert would close this screen, so it shows its own.
+        .alert("처리하지 못했어요", isPresented: Binding(get: { app.failureMessage != nil },
+                                                  set: { if !$0 { app.failureMessage = nil } })) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(app.failureMessage ?? "")
+        }
+    }
+
+    // MARK: Proposals
+
+    /// Every proposal of this conversation that still waits, and the latest answer's with what became of them.
+    private var shownProposals: [AgentProposal] {
+        let latest = Set((conversation.turns.last?.agent?.proposals ?? []).map(\.id))
+        return conversation.proposals.filter { latest.contains($0.id) || center.standing(of: $0, at: .now) == .open }
+    }
+
+    private var proposalCards: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(shownProposals) { proposal in
+                    AgentProposalCard(proposal: proposal, isPrimary: false)
+                        .padding(16)
+                        .background(AppPalette.card, in: .card)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .accessibilityIdentifier("assistant.live.proposals")
     }
 
     // MARK: Status and captions
@@ -87,6 +150,7 @@ struct AssistantLiveView: View {
         switch conversation.phase {
         case .listening: "말씀이 끝나면 바로 답해 드려요"
         case .speaking: "원을 누르면 말을 멈추고 들을게요"
+        case .paused where conversation.isAnswerPending: "맡긴 일은 계속 처리해요. 원을 누르면 이어서 알려 드려요"
         case .paused: "마이크를 켜거나 원을 누르면 다시 들어요"
         case .starting, .thinking, .failed: "\(AssistantIdentity.name)가 틀릴 수 있어요"
         }
@@ -277,6 +341,7 @@ private struct LiveOrb: View {
         case .listening: "지금까지 들은 말로 물어봐요"
         case .paused: "다시 들어요"
         case .failed: "다시 시도해요"
+        case .thinking where conversation.isAnswerPending: "기다리기를 멈춰요. 맡긴 일은 계속 처리해요"
         case .starting, .thinking: ""
         }
     }
@@ -418,10 +483,13 @@ private struct LiveTranscript: View {
                 Text(text)
                     .textSelection(.enabled)
                     .accessibilityLabel(Text("\(AssistantIdentity.name): \(Text(text))"))
+                if let agent = turn.agent, agent.hasDetail(showingStatus: true) {
+                    AgentRunDetail(record: agent, isLive: true)
+                }
                 ForEach(turn.items) { item in
                     WorkCard(item: item, isPrimary: false)
                         .padding(12)
-                        .background(.fill.quaternary, in: .inner)
+                        .background(AppPalette.card, in: .inner)
                 }
             }
         }
@@ -429,6 +497,7 @@ private struct LiveTranscript: View {
 
     private static func rendered(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        return (try? AttributedString(markdown: SpokenTurn.escapingMaskedNames(text), options: options))
+            ?? AttributedString(text)
     }
 }

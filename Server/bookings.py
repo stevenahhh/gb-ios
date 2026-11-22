@@ -247,8 +247,7 @@ async def customer_for(db: AsyncSession, name: str, phone: str | None) -> str:
     return customer_id
 
 
-@router.post("/bookings", status_code=201)
-async def create_booking(body: BookingCreate, db: Session, now: Now) -> Card:
+async def reserve_seats(db: AsyncSession, body: BookingCreate, now: datetime) -> BookingRow:
     """Reserve seats while holding the class lock, so capacity cannot be oversold."""
     session = await db.scalar(
         select(ClassSessionRow).where(ClassSessionRow.id == body.session_id).with_for_update(),
@@ -270,18 +269,30 @@ async def create_booking(body: BookingCreate, db: Session, now: Now) -> Card:
     )
     db.add(booking)
     await db.flush()
+    return booking
+
+
+@router.post("/bookings", status_code=201)
+async def create_booking(body: BookingCreate, db: Session, now: Now) -> Card:
+    """Reserve seats for a new booking."""
+    booking = await reserve_seats(db, body, now)
     return await card_for(db, booking.id, now)
+
+
+def confirm_paid(booking: BookingRow, now: datetime) -> None:
+    """Confirm a locked pending booking after the owner sees the deposit."""
+    if booking.status != "deposit_pending":
+        raise invalid_transition()
+    booking.status = "confirmed"
+    booking.deposit_confirmed_at = now
+    booking.revision += 1
 
 
 @router.post("/bookings/{booking_id}/confirm-deposit")
 async def confirm_deposit(booking_id: str, body: ExpectedRevision, db: Session, now: Now) -> Card:
     """Confirm a pending booking after the owner sees the deposit."""
     booking = await locked(db, BookingRow, booking_id, body.expected_revision)
-    if booking.status != "deposit_pending":
-        raise invalid_transition()
-    booking.status = "confirmed"
-    booking.deposit_confirmed_at = now
-    booking.revision += 1
+    confirm_paid(booking, now)
     await db.flush()
     return await card_for(db, booking.id, now)
 

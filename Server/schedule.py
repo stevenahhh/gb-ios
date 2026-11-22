@@ -284,9 +284,8 @@ async def calendar_range(
     )
 
 
-@router.post("/calendar/events", status_code=201)
-async def create_event(body: EventCreate, db: Session) -> AgendaItem:
-    """Persist an owner-added schedule entry."""
+async def add_owner_event(db: AsyncSession, body: EventCreate) -> CalendarEventRow:
+    """Store a schedule entry the owner asked for."""
     event = CalendarEventRow(
         id=f"event-{uuid4().hex}",
         kind=body.kind,
@@ -296,7 +295,13 @@ async def create_event(body: EventCreate, db: Session) -> AgendaItem:
     )
     db.add(event)
     await db.flush()
-    return event_item(event)
+    return event
+
+
+@router.post("/calendar/events", status_code=201)
+async def create_event(body: EventCreate, db: Session) -> AgendaItem:
+    """Persist an owner-added schedule entry."""
+    return event_item(await add_owner_event(db, body))
 
 
 class EventMove(ExpectedRevision):
@@ -305,12 +310,17 @@ class EventMove(ExpectedRevision):
     starts_at: Annotated[AwareDatetime, Field(strict=False)]
 
 
+def reschedule(event: CalendarEventRow, starts_at: datetime) -> None:
+    """Move a locked entry to a new moment, keeping everything else."""
+    event.starts_at = starts_at
+    event.revision += 1
+
+
 @router.post("/calendar/events/{event_id}/move")
 async def move_event(event_id: str, body: EventMove, db: Session) -> Moved:
     """Reschedule an owner-added entry, keeping everything else."""
     event = await locked(db, CalendarEventRow, event_id, body.expected_revision)
-    event.starts_at = body.starts_at
-    event.revision += 1
+    reschedule(event, body.starts_at)
     await db.flush()
     return Moved(revision=event.revision)
 

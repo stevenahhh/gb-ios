@@ -1,4 +1,5 @@
 import AVFoundation
+import RoundupCore
 import Speech
 import os
 
@@ -16,9 +17,18 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
     private struct State {
         var request: SFSpeechAudioBufferRecognitionRequest?
         var task: SFSpeechRecognitionTask?
+        /// True while an utterance is taken down; it outlives a recognition that broke off.
+        var isRecording = false
         /// The utterance as 16 kHz mono samples, sent to the server for the final transcript.
         var samples: [Int16] = []
+        /// What was heard just before an utterance began, which holds the first words of a barge-in.
+        var recent = RecentWindow<(buffer: AVAudioPCMBuffer, samples: [Int16])>(seconds: 1)
     }
+
+    /// The server takes about 65 seconds of audio. A recording this long has lost its end.
+    static let fullRecording = wavHeader + sampleLimit * 2
+    private static let wavHeader = 44
+    private static let sampleLimit = 60 * 16_000
 
     private static let recordingFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)!
@@ -71,7 +81,8 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
         isRunning = true
     }
 
-    func beginRecognition() -> AsyncStream<LiveRecognitionEvent> {
+    /// `includingRecent` starts the utterance with the second before it, for words spoken over the assistant.
+    func beginRecognition(includingRecent: Bool) -> AsyncStream<LiveRecognitionEvent> {
         endRecognition(cancel: true)
         let (stream, continuation) = AsyncStream.makeStream(of: LiveRecognitionEvent.self)
         guard let recognizer else {
@@ -94,8 +105,17 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
                 continuation.finish()
             }
         }
-        state.withLockUnchecked { $0 = State(request: request, task: task) }
+        state.withLockUnchecked { current in
+            let recent = includingRecent ? current.recent.elements : []
+            for chunk in recent { request.append(chunk.buffer) }
+            current = State(request: request, task: task, isRecording: true, samples: recent.flatMap(\.samples))
+        }
         return stream
+    }
+
+    /// The recognizer gave up in the middle of an utterance: its sound is still taken down for the server.
+    func recordWithoutRecognition() {
+        state.withLockUnchecked { $0.request = nil }
     }
 
     /// Hands over the utterance heard since `beginRecognition` as a WAV file.
@@ -108,11 +128,21 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
     }
 
     private func receive(_ buffer: AVAudioPCMBuffer) {
-        guard let request = state.withLockUnchecked({ $0.request }) else { return }
-        request.append(buffer)
-        guard let converter else { return }
+        let samples = samples(of: buffer)
+        state.withLockUnchecked { current in
+            if current.isRecording {
+                current.request?.append(buffer)
+                current.samples.append(contentsOf: samples.prefix(max(Self.sampleLimit - current.samples.count, 0)))
+            } else if let copy = buffer.copy() as? AVAudioPCMBuffer {
+                current.recent.append((copy, samples), duration: Double(buffer.frameLength) / buffer.format.sampleRate)
+            }
+        }
+    }
+
+    private func samples(of buffer: AVAudioPCMBuffer) -> [Int16] {
+        guard let converter else { return [] }
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * 16_000 / buffer.format.sampleRate) + 32
-        guard let output = AVAudioPCMBuffer(pcmFormat: Self.recordingFormat, frameCapacity: capacity) else { return }
+        guard let output = AVAudioPCMBuffer(pcmFormat: Self.recordingFormat, frameCapacity: capacity) else { return [] }
         var supplied = false
         var error: NSError?
         converter.convert(to: output, error: &error) { _, status in
@@ -124,9 +154,8 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
             status.pointee = .haveData
             return buffer
         }
-        guard error == nil, let channel = output.int16ChannelData?[0] else { return }
-        let samples = UnsafeBufferPointer(start: channel, count: Int(output.frameLength))
-        state.withLockUnchecked { $0.samples.append(contentsOf: samples) }
+        guard error == nil, let channel = output.int16ChannelData?[0] else { return [] }
+        return Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
     }
 
     private static func wav(_ samples: [Int16]) -> Data {
@@ -141,7 +170,7 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
 
     func endRecognition(cancel: Bool) {
         let old = state.withLockUnchecked { current in
-            defer { current = State() }
+            defer { current = State(recent: current.recent) }
             return current
         }
         old.request?.endAudio()
@@ -150,6 +179,7 @@ nonisolated final class LiveAudioCapture: @unchecked Sendable {
 
     func stop() {
         endRecognition(cancel: true)
+        state.withLockUnchecked { $0.recent.removeAll() }
         guard isRunning else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
@@ -261,7 +291,8 @@ enum LiveText {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return markdown.split(separator: "\n", omittingEmptySubsequences: true).map { line in
             let bare = line.replacing(/^\s*(#{1,6}|[-*•>]|\d+[.)])\s+/, with: "")
-            let plain = (try? AttributedString(markdown: String(bare), options: options)).map { String($0.characters) }
+            let source = SpokenTurn.escapingMaskedNames(String(bare))
+            let plain = (try? AttributedString(markdown: source, options: options)).map { String($0.characters) }
             return (plain ?? String(bare)).trimmingCharacters(in: .whitespaces)
         }
         .filter { !$0.isEmpty }
@@ -282,14 +313,15 @@ enum LiveText {
         return chunks
     }
 
-    /// Every sentence that has something to say, with its trailing space, in order.
+    /// Every sentence that has something to say, with its trailing space, in order. The server refuses a clip of
+    /// symbols only, and one refusal would move the rest of the answer to the device voice.
     static func sentences(of text: String) -> [NSRange] {
         let ns = text as NSString
         var sentences: [NSRange] = []
         ns.enumerateSubstrings(in: NSRange(location: 0, length: ns.length), options: .bySentences) { _, _, enclosing, _ in
             sentences.append(enclosing)
         }
-        return sentences.filter { !ns.substring(with: $0).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return sentences.filter { ns.substring(with: $0).contains { $0.isLetter || $0.isNumber } }
     }
 
     /// The sentence that holds `location` (UTF-16 offset), so captions show one subtitle at a time.

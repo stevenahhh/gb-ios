@@ -4,6 +4,8 @@ import SwiftUI
 struct AssistantComposer: View {
     /// The room above the field where messages fade out; the sheet's backdrop is half the page color at its top.
     static let fadeRoom: CGFloat = 28
+    /// The server takes a question of up to 1,000 characters.
+    static let questionLimit = 1000
 
     @Binding var message: String
     /// An answer is on its way: the owner can keep typing, and sending waits for it.
@@ -22,8 +24,10 @@ struct AssistantComposer: View {
             : AnyLayout(HStackLayout(alignment: .bottom, spacing: 8))
     }
 
+    private var isTooLong: Bool { message.unicodeScalars.count > Self.questionLimit }
+
     private var canSend: Bool {
-        !isAnswering && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isAnswering && !isTooLong && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -36,12 +40,12 @@ struct AssistantComposer: View {
                     .textFieldStyle(.plain)
                     .focused(isFocused)
                     .submitLabel(.send)
-                    .onSubmit(send)
+                    .onSubmit(submit)
                     // A wrapping field takes the keyboard's send key as a line break, so that break sends instead.
                     .onChange(of: message) {
                         guard message.last?.isNewline == true else { return }
                         message.removeLast()
-                        send()
+                        submit()
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 11)
@@ -66,7 +70,7 @@ struct AssistantComposer: View {
                     .tint(recorder.isRecording ? .red : nil)
                     .disabled(isTranscribing)
                     .accessibilityIdentifier("assistant.record")
-                    Button(action: send) {
+                    Button(action: submit) {
                         Label("보내기", systemImage: "arrow.up")
                             .labelStyle(.iconOnly)
                             .foregroundStyle(Color(.systemBackground))
@@ -82,6 +86,11 @@ struct AssistantComposer: View {
                 Label(voiceError, systemImage: "exclamationmark.circle")
                     .font(.footnote)
             }
+            if isTooLong {
+                Label("질문은 1,000자까지 보낼 수 있어요. 긴 목록은 파일로 불러와 주세요.", systemImage: "exclamationmark.circle")
+                    .font(.footnote)
+                    .accessibilityIdentifier("assistant.tooLong")
+            }
             // One line at every text size, so the suggestions above stay visible at half height.
             Text("\(AssistantIdentity.name)가 틀릴 수 있어요")
                 .font(.footnote)
@@ -91,6 +100,12 @@ struct AssistantComposer: View {
         .padding([.horizontal, .bottom])
         .padding(.top, Self.fadeRoom)
         .background(alignment: .top) { ComposerCover() }
+    }
+
+    /// The keyboard's send key reaches here too, so the length limit holds on every way of sending.
+    private func submit() {
+        guard !isTooLong else { return }
+        send()
     }
 
     private func toggleRecording() async {

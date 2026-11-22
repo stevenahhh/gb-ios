@@ -48,6 +48,8 @@ final class VoiceRecorder {
         recorder = nil
         isRecording = false
         if ownsSession { try? AVAudioSession.sharedInstance().setActive(false) }
+        // What was said can name customers, so the recording does not outlive its reading.
+        defer { try? FileManager.default.removeItem(at: fileURL) }
         return try Data(contentsOf: fileURL)
     }
 }

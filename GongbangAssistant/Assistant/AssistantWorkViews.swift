@@ -1,24 +1,19 @@
 import SwiftUI
 
-/// "비서가 한 일": what the assistant drafted or noticed this week, each with the facts it used.
+/// "비서가 한 일": each run of the assistant with its steps and their undo, and each draft or notice it wrote
+/// this week with the facts it used.
 struct AssistantActivityView: View {
-    @State private var loader = Loader<[AssistantActivity]>()
+    @State private var loader = Loader<ActivityFeed>()
+    @State private var filter = ActivityFilter.all
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        LoadableContent(loader: loader, retry: load) { activities in
-            if activities.isEmpty {
-                ContentUnavailableView("이번 주에 \(AssistantIdentity.name)가 한 일이 없어요", systemImage: "clock")
+        LoadableContent(loader: loader, retry: load) { feed in
+            if feed.entries.isEmpty {
+                ContentUnavailableView(ActivityFilter.all.emptyTitle, systemImage: "clock")
+                    .accessibilityIdentifier("activity.empty")
             } else {
-                List {
-                    ForEach(Self.days(activities), id: \.title) { day in
-                        CardSection(day.title) {
-                            ForEach(day.items) { ActivityRow(activity: $0) }
-                        }
-                    }
-                }
-                .cardList()
-                .refreshable { await load() }
+                ActivityFeedList(entries: feed.entries, filter: $filter, reload: load) { ActivityRow(activity: $0) }
             }
         }
         .navigationTitle("\(AssistantIdentity.name)가 한 일")
@@ -27,23 +22,10 @@ struct AssistantActivityView: View {
     }
 
     private func load() async {
-        await loader.load { try await RoundupAPI.assistantActivities() }
-    }
-
-    /// 오늘, 어제, then the rest of the week, keeping the server's newest-first order.
-    static func days(_ activities: [AssistantActivity], now: Date = .now) -> [(title: String, items: [AssistantActivity])] {
-        let calendar = Calendar.workshop
-        func title(_ activity: AssistantActivity) -> String {
-            guard let date = activity.date else { return "이번 주" }
-            if calendar.isDate(date, inSameDayAs: now) { return "오늘" }
-            if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
-                return "어제"
-            }
-            return "이번 주"
-        }
-        return ["오늘", "어제", "이번 주"].compactMap { name in
-            let items = activities.filter { title($0) == name }
-            return items.isEmpty ? nil : (name, items)
+        await loader.load {
+            async let runs = RoundupAPI.agentRuns()
+            async let records = RoundupAPI.assistantActivities()
+            return try await ActivityFeed(runs: runs, records: records)
         }
     }
 }

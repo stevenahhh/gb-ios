@@ -24,7 +24,7 @@ struct BK25VoiceField: View {
                     Label(recorder.isRecording ? "녹음 끝내기" : "말로 입력",
                           systemImage: recorder.isRecording ? "stop.fill" : "mic.fill")
                         .labelStyle(.iconOnly)
-                        .frame(minWidth: 28, minHeight: 28)
+                        .frame(minWidth: 30, minHeight: 30)
                         .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isTranscribing)
                 }
                 .buttonStyle(.bordered)

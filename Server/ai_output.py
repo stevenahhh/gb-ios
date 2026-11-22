@@ -36,9 +36,17 @@ COMMITMENTS: Final = (
 COMPLETION_CLAIM: Final = re.compile(
     (
         r"(?:처리|완료|반영|변경|확정|등록|취소|발송|전송|환불)(?:를|을|가|이|는|은|도)?\s*"
-        r"(?:했|해\s*(?:두었|뒀|놓았|놨|드렸)|되었|됐|되어\s*있|돼\s*있)|보냈"
+        r"(?:했|하였|해\s*(?:두었|뒀|놓았|놨|드렸)|되었|됐|되어\s*있|돼\s*있)|보냈"
     ),
 )
+# The same claim in plainer verbs; a customer may have done these, so a named doer is left alone.
+PLAIN_CLAIM: Final = re.compile(
+    (
+        r"바꿨|바꾸었|옮겼|넣었|잡았|지웠|남겼|마쳤|끝냈|(?:저장|추가|삭제|표시|기록|입력|기억|입금\s*확인)(?:을|를)?\s*(?:했|하였)"
+        r"|(?:바꿔|옮겨|넣어|잡아|지워|남겨|적어|(?:저장|추가|삭제|표시|기록|입력|기억)해)\s*(?:두었|뒀|놓았|놨|드렸)"
+    ),
+)
+OTHER_DOER: Final = re.compile(r"(?:님|씨|손님|고객|분)(?:이|가|께서|은|는)\s")
 NEGATION: Final = re.compile(r"수\s*(?:는\s*)?없|못|않|안\s*(?:했|됐|되었)|아직")
 SENTENCE_BREAK: Final = re.compile(r"((?<=[.!?])[ \t]+|\n+)")
 ACT_PATH: Final = "'운영' 화면에서 해당 카드를 열어 직접 처리해 주세요."
@@ -67,7 +75,10 @@ def normalize(raw: str) -> str:
 
 def claims_done(sentence: str) -> bool:
     """Tell when a sentence says something was processed without denying it."""
-    return COMPLETION_CLAIM.search(sentence) is not None and NEGATION.search(sentence) is None
+    if NEGATION.search(sentence) is not None:
+        return False
+    plain = PLAIN_CLAIM.search(sentence) is not None and OTHER_DOER.search(sentence) is None
+    return plain or COMPLETION_CLAIM.search(sentence) is not None
 
 
 def without_completion_claims(text: str) -> str:

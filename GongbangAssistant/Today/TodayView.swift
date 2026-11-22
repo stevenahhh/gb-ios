@@ -61,6 +61,7 @@ struct TodayView: View {
         await loader.load { try await RoundupAPI.today() }
         if let count = loader.value?.attentionCount { app.updateAttention(count) }
         await BK25JudgmentInbox.shared.load()
+        await AgentCenter.shared.loadProposals()
     }
 
     private var emptyState: some View {
@@ -81,6 +82,7 @@ struct TodayView: View {
             }
 
             BK06TodaySection()
+            AgentProposalSection()
             BK25JudgmentSection()
 
             ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))

@@ -1,3 +1,4 @@
+import RoundupCore
 import SwiftUI
 
 struct AssistantAccessory: View {
@@ -47,6 +48,13 @@ struct AssistantSheet: View {
     @State private var composerFrame: CGRect = .zero
     private let store = ConversationStore.shared
 
+    /// The newest answer asks for a decision, so its card must not sit under the keyboard.
+    private var newestAnswerWaits: Bool {
+        store.current?.turns.last?.agent?.proposals.contains {
+            AgentCenter.shared.standing(of: $0, at: .now) == .open
+        } ?? false
+    }
+
     private let suggestions = ["오늘 발송할 주문 알려줘", "예약금 안 낸 손님 알려줘", "주말 클래스 홍보 글 써 줘"]
 
     var body: some View {
@@ -70,6 +78,7 @@ struct AssistantSheet: View {
             .navigationTitle("비서")
             .navigationBarTitleDisplayMode(.inline)
             .appDestinations()
+            .assistantAgent()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("닫기", systemImage: "xmark") {
@@ -119,6 +128,9 @@ struct AssistantSheet: View {
         .task {
             isFieldFocused = true
         }
+        .onChange(of: newestAnswerWaits) { _, waits in
+            if waits { isFieldFocused = false }
+        }
     }
 
     private var welcome: some View {
@@ -152,7 +164,7 @@ struct AssistantSheet: View {
     /// Bold and lists render instead of showing raw ** marks; anything unparsable stays plain text.
     static func rendered(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        return (try? AttributedString(markdown: SpokenTurn.escapingMaskedNames(text), options: options)) ?? AttributedString(text)
     }
 
     private func send(_ text: String) {

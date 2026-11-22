@@ -770,6 +770,7 @@ struct LoadErrorView: View {
             Label("불러오지 못했어요", systemImage: "wifi.exclamationmark")
         } description: {
             Text(verbatim: message)
+                .foregroundStyle(Color.secondaryText)
         } actions: {
             Button(action: retry) {
                 Text("다시 시도")

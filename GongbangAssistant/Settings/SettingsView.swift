@@ -66,7 +66,7 @@ struct SettingsView: View {
                     Label { Text("채널 연결") } icon: { MenuIcon(systemName: "link") }
                 }
                 NavigationLink {
-                    AssistantDelegationView()
+                    AgentAutonomyView()
                 } label: {
                     Label { Text("\(AssistantIdentity.name)에게 맡길 일") } icon: { MenuIcon(systemName: "hand.raised") }
                 }

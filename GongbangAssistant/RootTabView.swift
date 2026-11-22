@@ -19,7 +19,7 @@ struct RootTabView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private var failureIsPresented: Binding<Bool> {
-        Binding(get: { app.failureMessage != nil }, set: { if !$0 { app.failureMessage = nil } })
+        Binding(get: { app.failureMessage != nil && !isLiveVoicePresented }, set: { if !$0 { app.failureMessage = nil } })
     }
 
     var body: some View {
@@ -67,7 +67,8 @@ struct RootTabView: View {
                 history: { ConversationStore.shared.currentAPIHistory },
                 onTurn: { turn in
                     ConversationStore.shared.recordLiveTurn(
-                        role: turn.role == .owner ? .owner : .assistant, text: turn.text, items: turn.items
+                        role: turn.role == .owner ? .owner : .assistant, text: turn.text, items: turn.items,
+                        agent: turn.agent
                     )
                 }
             )

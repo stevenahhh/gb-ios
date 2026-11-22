@@ -1,0 +1,45 @@
+[Unit]
+Description=Roundup assistant agent worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=gongbang
+Group=gongbang
+WorkingDirectory=/opt/gongbang/current
+EnvironmentFile=/opt/gongbang/server.env
+# No path is writable: the worker keeps no files and logs to the journal.
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/gongbang/current/.venv/bin/python agent_worker.py
+KillSignal=SIGTERM
+# A queued run may spend its 45 s of model time before it stops.
+TimeoutStopSec=90
+Restart=always
+RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=300
+MemoryMax=256M
+CPUQuota=40%
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -382,8 +382,9 @@ async def mark_for(db: AsyncSession, booking_id: str) -> BookingMarkRow:
     return mark
 
 
-@router.post("/cancellations/{booking_id}/decision")
-async def decide(booking_id: str, body: DecisionRequest, db: Session, now: Now) -> DecisionView:
+async def record_decision(
+    db: AsyncSession, booking_id: str, body: DecisionRequest, now: datetime,
+) -> DecisionView:
     """Record the owner's decision and free the seats; no money moves and nothing is sent."""
     parts = await one_booking(db, booking_id, lock=True)
     booking, session, _ = parts
@@ -418,6 +419,12 @@ async def decide(booking_id: str, body: DecisionRequest, db: Session, now: Now) 
         case_id=case.id, draft=case.draft, refund=amount, seat_opened=session.starts_at > now,
         session_id=session.id,
     )
+
+
+@router.post("/cancellations/{booking_id}/decision")
+async def decide(booking_id: str, body: DecisionRequest, db: Session, now: Now) -> DecisionView:
+    """Record the owner's decision and free the seats; no money moves and nothing is sent."""
+    return await record_decision(db, booking_id, body, now)
 
 
 async def cancel_case(
@@ -465,8 +472,7 @@ async def approve_reply(case_id: str, body: ApproveRequest, db: Session, now: No
     return Approval(approved_at=iso(now), edit_chars=edits)
 
 
-@router.post("/cancellations/cases/{case_id}/undo")
-async def undo_decision(case_id: str, db: Session) -> Removed:
+async def revert_decision(db: AsyncSession, case_id: str) -> Removed:
     """Give the booking its seats back when they are still free."""
     case, booking_id = await cancel_case(db, case_id)
     booking, session, _ = await one_booking(db, booking_id, lock=True)
@@ -484,6 +490,12 @@ async def undo_decision(case_id: str, db: Session) -> Removed:
     await db.delete(case)
     await db.flush()
     return Removed(removed=1)
+
+
+@router.post("/cancellations/cases/{case_id}/undo")
+async def undo_decision(case_id: str, db: Session) -> Removed:
+    """Give the booking its seats back when they are still free."""
+    return await revert_decision(db, case_id)
 
 
 @router.get("/cancellations/cases")

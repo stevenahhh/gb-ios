@@ -13,7 +13,7 @@ from alembic.script import ScriptDirectory
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import Text, column, select, table
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import ArgumentError, IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import ArgumentError, DBAPIError, IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -25,6 +25,7 @@ from sqlalchemy.orm import DeclarativeBase
 LOGGER: Final = logging.getLogger("roundup.database")
 MIGRATIONS: Final = Path(__file__).resolve().parent / "migrations"
 SCHEMA_NAME: Final = re.compile(r"[a-z_][a-z0-9_]{0,62}")
+UNSTORABLE_TEXT: Final = frozenset({"22021", "22P05"})  # a NUL in text or in JSON; not an outage
 
 
 class DatabaseConfigurationError(Exception):
@@ -111,6 +112,8 @@ async def transaction() -> AsyncGenerator[AsyncSession]:
         LOGGER.warning("database_constraint_rejected", extra={"error_type": type(error).__name__})
         raise HTTPException(409, "request conflicts with current data") from None
     except (SQLAlchemyError, OSError, TimeoutError) as error:
+        if isinstance(error, DBAPIError) and getattr(error.orig, "sqlstate", None) in UNSTORABLE_TEXT:
+            raise HTTPException(422, "text holds a character that cannot be stored") from None
         LOGGER.error("database_unavailable", extra={"error_type": type(error).__name__})  # noqa: TRY400
         raise HTTPException(503, "service unavailable") from None
 

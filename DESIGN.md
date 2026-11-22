@@ -45,6 +45,7 @@ Ranked jobs:
 - Primary action: the first state-changing card action of the selected segment (for example 포장 완료하기 on 배송).
 - Priorities: 1) the three numbers for today, 2) 확인해 주실 일, up to three assistant drafts to decide or fix in place, 3) the segment control (할 일 / 채널 / 배송 / 비서 추천), 4) the grouped rows with done toggles and status badges. A reply card's button is 답변 완료 and a post or suggestion card's is 승인; a decided card stays with 되돌리기, and replies and posts add copy and open-the-channel buttons. 예약 rows sit on a vertical timeline; checking any row strikes its title through in place.
 - Left out on purpose: monthly statistics, settings, a second prominent button.
+- 비서 제안 (`AgentProposalSection`) sits under the three numbers and the K06 cards: up to three waiting proposals, each row opening its card, and 모두 보기 when there are more. With none waiting it is hidden. A failed load keeps the list and adds 다시 시도.
 - Layout: List insetGrouped; scroll owner is the List; large title is a one-line headline of the most urgent work (`TodayHeadline`: overdue, class within two hours, waiting work, remaining today, all done, tomorrow/this week), always label-colored and at most 10 Hangul syllables, with a subtitle showing the date and the last update time; pull to refresh. Anti-patterns: nested segmented controls, card buttons that only navigate.
 
 ### 캘린더
@@ -79,15 +80,60 @@ Ranked jobs:
 - Primary action: open a settings row.
 - Priorities: 1) the studio profile, 2) studio settings, 3) help.
 - Left out on purpose: an in-app appearance setting.
-- Layout: List insetGrouped; scroll owner is the List; rows push the workshop form, editable policy text, channel status, 비서에게 맡길 일, and 비서가 한 일.
+- Layout: List insetGrouped; scroll owner is the List; rows push the workshop form, editable policy text, channel status, 비서에게 맡길 일, which opens 비서 자율성, and 비서가 한 일.
 
 ### 비서 sheet
 - Primary action: send a question.
 - Priorities: 1) the focused text field with the send button, 2) three suggested questions, 3) the reminder that the assistant can be wrong.
 - Left out on purpose: stacked sheets.
-- Layout: sheet with medium and large detents and a visible grabber, on the system's translucent sheet background, like Siri; scroll owner is the transcript scroll view. `AssistantBackdrop` adds the page color (black in dark mode) as one gradient: none at the grabber, 50% at the composer's top edge, and 100% from the question field down, so messages fade out above the field (solid page color under Reduce Transparency). The composer sits in the bottom safe area, and from the field's top edge down it covers the messages with the page color (a 12 pt soft edge above), so no text shows behind the field. Toolbar: 닫기 leading; 지난 대화 (`clock.arrow.circlepath`) and, on a conversation, 새 대화 (`square.and.pencil`) trailing. Anti-patterns: a decorative mic that does nothing different.
+- Layout: sheet with medium and large detents and a visible grabber, on the system's translucent sheet background, like Siri; scroll owner is the transcript scroll view. `AssistantBackdrop` adds the page color (black in dark mode) as one gradient: none at the grabber, 50% at the composer's top edge, and 100% from the question field down, so messages fade out above the field (solid page color under Reduce Transparency). The composer sits in the bottom safe area, and from the field's top edge down it covers the messages with the page color (a 12 pt soft edge above), so no text shows behind the field. Toolbar: 닫기 leading; 파일 불러오기 (`doc.badge.plus`), 지난 대화 (`clock.arrow.circlepath`) and, on a conversation, 새 대화 (`square.and.pencil`) trailing. Anti-patterns: a decorative mic that does nothing different.
 - Chats are saved on the device (`ConversationStore`, the last 100, one JSON file each) and reopen when used within 30 minutes. 지난 대화 lists them by day with swipe to delete; an opened chat pushes with the system back button and continuing it sends its history. Live voice turns are saved into the same chat.
 - A sent question moves to the top and its answer is written below it; one question is sent at a time; a failed question shows 다시 시도. Cards in answers are drawn boxes with the `.card` radius on `AppPalette.card`, and one tap opens one detail.
+
+- Under an answer, `AgentRunDetail` shows the run's status, its steps, then its proposal cards. Lookups share one 확인한 것 line. Proposals that aren't in the conversation on screen share one banner at the top, 승인을 기다리는 제안 N건.
+- A run states: 처리 중이에요, or 처리 중 · N건 끝냈어요 once something is done, with 화면을 닫아도 계속 처리해요 under it; stopped; failed, which says whether anything changed. A question over 1,000 characters can't be sent, and the line under the field says so.
+
+### 비서 제안 (proposal cards)
+- Primary action: 승인하기 on the first open proposal. Only that card is prominent on a screen; in live voice none is.
+- Priorities: 1) the state badge and the deadline, 2) the title and why it was raised, 3) the values it would write and 필요한 것, 4) 승인하기 and 하지 않기.
+- Left out on purpose: approving several proposals at once (invoice files are the one group approval), editing values in the card.
+- States: 승인 대기 says nothing has changed yet; 승인함 shows the step that ran, with undo when the server offers it; 하지 않기로 함; 만료; 닫힘 for one decided elsewhere. A decided card stays in place. The list also has an empty state (기다리는 제안이 없어요) and an error with 다시 시도.
+- Layout: one card per `CardSection`. At accessibility sizes the header, values, and buttons stack. Anti-patterns: a card that looks finished before a yes, a deadline in words the rest of the app doesn't use.
+- TODO: the app looks for an `auto` step after an approval, but the server leaves it `proposed`, so 승인함 has no undo against the real server.
+
+### 비서 단계 (steps and undo)
+- Primary action: 되돌리기, a bordered circle beside a step the server can still take back; full width at accessibility sizes.
+- Priorities: 1) what the step was, 2) its state word and target, 3) the owner's words it rested on, or why it stopped.
+- States: 완료, 되돌림, 승인 대기, 승인함, 하지 않기로 함, 만료, 닫힘, 하지 않음, 확인 필요. Only 승인 대기 and 확인 필요 carry the orange dot; the others are gray marks with a word.
+- Left out on purpose: tool names, confidence numbers, and raw arguments.
+
+### 비서 자율성
+- Primary action: 지금 모두 멈추기. While stopped it gives way to a bordered ‘물어보고’로 다시 맡기기.
+- Priorities: 1) whether the assistant is working and the stop control, 2) 맡기는 방식 (끔, 물어보고, 알아서) with one sentence on the chosen one, 3) proactive proposals, 4) a mode per tool in two groups: work that stays inside the studio, then money, parcels, and customer state, 5) 맡길 수 없는 일, locked rows, 6) the daily cap and quiet hours, then 비서가 기억하는 것.
+- States: loading and error with retry; stopped, where the proactive toggle and the tool pickers are disabled and say why; a refused change reverts and shows the server's reason on an orange-symbol line.
+- Left out on purpose: a save button. Every change saves at once.
+- Layout: List insetGrouped, pushed from 설정. Anti-patterns: the stop control below the fold, a switch for anything in 맡길 수 없는 일.
+
+### 비서가 한 일
+- Primary action: 되돌리기 on a step.
+- Priorities: 1) the filter (전체, 채팅, 음성, 먼저 챙김), 2) entries by day, newest first, 3) each run's question, source, answer, and steps; drafts and notices with their facts.
+- States: loading, error with retry, empty overall, empty for one filter with 전체 보기; on a run, 처리 중, stopped, and failed.
+- Left out on purpose: runs that found nothing and said nothing.
+- TODO: `GET /agent/runs` sends no steps, so steps and their undo don't appear here against the real server.
+
+### 비서가 기억하는 것
+- Primary action: forget one memory, after a confirmation.
+- Priorities: 1) what is remembered, 2) the owner's own sentence and its day, 3) the note that memories are context and never grounds for an action.
+- States: loading, error with retry, empty (기억해 달라고 말씀하신 내용이 여기에 모여요), deleting (the row's button is disabled).
+- Left out on purpose: typing or editing a memory here.
+
+### 송장 파일 확인
+- Primary action: N건 등록 승인 for every clean row.
+- Priorities: 1) the file name, how many numbers were read, and that nothing is registered yet, 2) clean rows with one approval, 3) warned rows, each with its reason and its own bordered approval, 4) rows that can't be registered and why, 5) 등록 결과.
+- States: loading; error with retry; approved rows; a format warning whose 이 건만 등록 승인 stays disabled until its switch is on; an alert for a file that is too large, can't be opened, or isn't CSV or XLSX.
+- Left out on purpose: names, phone numbers, and addresses from the file, and any copy of the file on the device.
+- Layout: List pushed inside the assistant sheet. Anti-patterns: approving a warned row with the group, a blocked row with a button.
+- TODO: the approval call doesn't match the server's route or answer yet, so 등록 결과 is only reachable against the test stub.
 
 ### 실시간 음성 (live voice)
 - Primary action: talk; the assistant answers aloud with subtitles.

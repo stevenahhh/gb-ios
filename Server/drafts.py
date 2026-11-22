@@ -102,16 +102,21 @@ async def detail(kind: DraftKind, draft_id: str, db: Session, now: Now) -> Assis
     return await present(row, db, now)
 
 
+def save_text(row: DraftRow, text: str) -> None:
+    """Replace a locked pending draft's working text."""
+    if STATUSES[row.status] != "pending":
+        raise invalid_transition()
+    row.body = required_text(text)
+    row.revision += 1
+
+
 @router.patch("/assistant-drafts/{kind}/{draft_id}/draft")
 async def edit(
     kind: DraftKind, draft_id: str, body: DraftEdit, db: Session, now: Now,
 ) -> AssistantDraft:
     """Save nonblank working text only while a draft is pending."""
     row = await locked(db, draft_model(kind), draft_id, body.expected_revision)
-    if STATUSES[row.status] != "pending":
-        raise invalid_transition()
-    row.body = required_text(body.draft)
-    row.revision += 1
+    save_text(row, body.draft)
     await db.flush()
     return await present(row, db, now)
 

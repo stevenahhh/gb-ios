@@ -686,8 +686,9 @@ async def remind(db: AsyncSession, row: OutreachQuoteRow, at: datetime) -> None:
     row.follow_up_task_id = task.id
 
 
-@router.post("/outreach/quotes/{quote_id}/outcome")
-async def record_outcome(quote_id: str, body: OutcomeRequest, db: Session, now: Now) -> QuoteView:
+async def save_outcome(
+    db: AsyncSession, quote_id: str, body: OutcomeRequest, now: datetime,
+) -> OutreachQuoteRow:
     """Record the institution's answer and close the reminder."""
     if body.outcome == "accepted_adjusted" and body.final_total_krw is None:
         raise HTTPException(422, "final_total_krw is required")
@@ -701,4 +702,10 @@ async def record_outcome(quote_id: str, body: OutcomeRequest, db: Session, now: 
         task.status, task.completed_at = "done", now
         task.revision += 1
     await db.flush()
-    return await view(db, row, now)
+    return row
+
+
+@router.post("/outreach/quotes/{quote_id}/outcome")
+async def record_outcome(quote_id: str, body: OutcomeRequest, db: Session, now: Now) -> QuoteView:
+    """Record the institution's answer and close the reminder."""
+    return await view(db, await save_outcome(db, quote_id, body, now), now)

@@ -11,6 +11,7 @@ from typing import Final, Literal
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
+from agent_mask import without_contacts
 from b_k25_claims import CardFact, Ledger
 from display import won
 from prompts import DRAFT_SYSTEM, NONE_GIVEN, ShopFacts
@@ -100,7 +101,7 @@ def mask_contacts(text: str) -> str:
 
 def masked_question(customer: str, subject: str, question: str) -> str:
     """Return the customer's words without the name or phone number the model must not see."""
-    text = mask_contacts(f"{subject}\n{question}")
+    text = mask_contacts(without_contacts(f"{subject}\n{question}"))
     return text.replace(customer, "손님") if len(customer.strip()) > 1 else text
 
 
