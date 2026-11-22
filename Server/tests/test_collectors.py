@@ -10,7 +10,7 @@ from collectors.feed import parse_feed
 from collectors.http import MAX_BYTES, USER_AGENT, SourceError
 from collectors.instagram import InstagramCollector
 from collectors.naver_blog import NaverBlogCollector
-from collectors.naver_smartstore import SmartStoreCollector, signature
+from collectors.naver_smartstore import REVIEW_FIRST, SmartStoreCollector, signature
 from collectors.registry import ALL_SOURCES, build
 from collectors.robots import allows
 from collectors.text import clean_raw, plain_text, safe_url
@@ -165,7 +165,7 @@ async def test_every_source_without_setup_needs_connection(
 ) -> None:
     for name in (
         "INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_USER_ID",
-        "NAVER_COMMERCE_CLIENT_ID", "NAVER_COMMERCE_CLIENT_SECRET",
+        "NAVER_COMMERCE_CLIENT_ID", "NAVER_COMMERCE_CLIENT_SECRET", "NAVER_COMMERCE_SELF_OPERATED",
     ):
         monkeypatch.delenv(name, raising=False)
     net = FakeNetwork()
@@ -224,6 +224,7 @@ async def test_instagram_without_insight_permission_keeps_media(monkeypatch: pyt
 
 
 def store(monkeypatch: pytest.MonkeyPatch, net: FakeNetwork) -> SmartStoreCollector:
+    monkeypatch.setenv("NAVER_COMMERCE_SELF_OPERATED", "true")
     monkeypatch.setenv("NAVER_COMMERCE_CLIENT_ID", "synthetic-id")
     monkeypatch.setenv("NAVER_COMMERCE_CLIENT_SECRET", "$2a$04$abcdefghijklmnopqrstuv")
     return SmartStoreCollector(net.gateway, {})
@@ -264,6 +265,34 @@ async def test_smartstore_reads_orders_inquiries_and_questions(monkeypatch: pyte
         request.headers["authorization"] == "Bearer synthetic-access" for request in net.requests[1:]
     )
     assert {request.headers["user-agent"] for request in net.requests} == {USER_AGENT}
+
+
+@pytest.mark.parametrize("switch", [None, "", "false", "1", "yes", "True", "TRUE", " true", "true "])
+async def test_smartstore_credentials_without_the_exact_switch_make_no_request(
+    monkeypatch: pytest.MonkeyPatch, switch: str | None,
+) -> None:
+    net = FakeNetwork()
+    collector = store(monkeypatch, net)
+    if switch is None:
+        monkeypatch.delenv("NAVER_COMMERCE_SELF_OPERATED")
+    else:
+        monkeypatch.setenv("NAVER_COMMERCE_SELF_OPERATED", switch)
+    assert collector.connection_problem() == REVIEW_FIRST
+    with pytest.raises(NeedsConnectionError, match="심사"):
+        _ = await collector.collect(WINDOW)
+    assert net.requests == []
+
+
+@pytest.mark.parametrize("missing", ["NAVER_COMMERCE_CLIENT_ID", "NAVER_COMMERCE_CLIENT_SECRET"])
+async def test_smartstore_switch_without_credentials_makes_no_request(
+    monkeypatch: pytest.MonkeyPatch, missing: str,
+) -> None:
+    net = FakeNetwork()
+    collector = store(monkeypatch, net)
+    monkeypatch.delenv(missing)
+    with pytest.raises(NeedsConnectionError, match="연결해"):
+        _ = await collector.collect(WINDOW)
+    assert net.requests == []
 
 
 @pytest.mark.parametrize("status", [400, 401, 403])

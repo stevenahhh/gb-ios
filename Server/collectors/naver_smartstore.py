@@ -5,6 +5,8 @@ https://apicenter.commerce.naver.com/docs/commerce-api/current/, exchange-seller
 seller-get-last-changed-status-pay-order-seller, seller-get-product-orders-pay-order-seller,
 get-customer-inquiry-pay-user, and get-comments-contents.
 Only fields the app shows are kept: addresses, phone numbers, and payment means are never stored.
+The operator of this server must be the owner of the store and say so with NAVER_COMMERCE_SELF_OPERATED=true;
+Server/README.md gives the reason. Without it the credentials are ignored and nothing is requested.
 """
 
 from base64 import b64encode
@@ -32,6 +34,8 @@ from collectors.text import MAX_BODY, MAX_TITLE, plain_text
 from display import local
 
 API: Final = "https://api.commerce.naver.com/external/v1"
+SELF_OPERATED: Final = "true"
+REVIEW_FIRST: Final = "스마트스토어 자동 수집은 네이버 심사를 받은 뒤에 연결할 수 있어요."
 MISSING: Final = "스마트스토어를 연결해 주세요."
 DENIED_MESSAGE: Final = "스마트스토어 연결 정보와 API 권한을 확인해 주세요."
 DENIED: Final = frozenset({401, 403})
@@ -255,11 +259,16 @@ class SmartStoreCollector(Collector[StoreConfig]):
 
     @override
     def connection_problem(self) -> str | None:
+        if environ.get("NAVER_COMMERCE_SELF_OPERATED") != SELF_OPERATED:
+            return REVIEW_FIRST
         ready = environ.get("NAVER_COMMERCE_CLIENT_ID") and environ.get("NAVER_COMMERCE_CLIENT_SECRET")
         return None if ready else MISSING
 
     @override
     async def collect(self, window: Window) -> list[CollectedItem]:
+        problem = self.connection_problem()
+        if problem is not None:
+            raise NeedsConnectionError(problem)
         async with self.gateway.connect(self.min_interval) as http:
             token = await self.issue_token(http, window.now)
             items = await self.orders(http, token, window)

@@ -32,7 +32,7 @@ def clock() -> datetime:
 def net(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeNetwork]:
     for name in (
         "INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_USER_ID",
-        "NAVER_COMMERCE_CLIENT_ID", "NAVER_COMMERCE_CLIENT_SECRET",
+        "NAVER_COMMERCE_CLIENT_ID", "NAVER_COMMERCE_CLIENT_SECRET", "NAVER_COMMERCE_SELF_OPERATED",
     ):
         monkeypatch.delenv(name, raising=False)
     network = FakeNetwork()
@@ -43,6 +43,7 @@ def net(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeNetwork]:
 
 @pytest.fixture
 def store_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NAVER_COMMERCE_SELF_OPERATED", "true")
     monkeypatch.setenv("NAVER_COMMERCE_CLIENT_ID", "synthetic-id")
     monkeypatch.setenv("NAVER_COMMERCE_CLIENT_SECRET", "$2a$04$abcdefghijklmnopqrstuv")
 
@@ -103,6 +104,24 @@ async def test_run_without_setup_makes_no_request(
         assert response.status_code == 200
         assert response.json()["source"]["state"] == "needs_connection"
     assert net.requests == []
+
+
+@pytest.mark.usefixtures("store_env")
+async def test_store_credentials_without_the_switch_act_like_no_credentials(
+    database: AsyncEngine, client: AsyncClient, net: FakeNetwork, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    serve_store(net)
+    monkeypatch.delenv("NAVER_COMMERCE_SELF_OPERATED")
+    with_keys = (await client.post("/collectors/naver_smartstore/run")).json()
+    shown = (await client.get("/collectors/status")).json()["sources"][1]
+    monkeypatch.delenv("NAVER_COMMERCE_CLIENT_ID")
+    monkeypatch.delenv("NAVER_COMMERCE_CLIENT_SECRET")
+    assert (await client.post("/collectors/naver_smartstore/run")).json() == with_keys
+    assert (await client.get("/collectors/status")).json()["sources"][1] == shown == with_keys["source"]
+    assert (shown["id"], shown["state"]) == ("naver_smartstore", "needs_connection")
+    assert shown["message"] == "스마트스토어 자동 수집은 네이버 심사를 받은 뒤에 연결할 수 있어요."
+    assert net.requests == []
+    assert await ids(database, "collector_runs") == set()
 
 
 async def test_robots_refusal_reaches_the_status_endpoint(
@@ -250,6 +269,7 @@ async def test_one_failing_source_does_not_stop_the_others(
 ) -> None:
     monkeypatch.setenv("INSTAGRAM_ACCESS_TOKEN", TOKEN)
     monkeypatch.setenv("INSTAGRAM_USER_ID", "17")
+    monkeypatch.setenv("NAVER_COMMERCE_SELF_OPERATED", "true")
     monkeypatch.setenv("NAVER_COMMERCE_CLIENT_ID", "synthetic-id")
     monkeypatch.setenv("NAVER_COMMERCE_CLIENT_SECRET", "$2a$04$abcdefghijklmnopqrstuv")
     serve_store(net)
@@ -316,6 +336,7 @@ async def test_live_run_is_refused_and_an_abandoned_one_is_replaced(
         ("naver_blog", {"blog_id": "studio", "enabled": "yes"}),
         ("instagram", {"access_token": "secret-value"}),
         ("naver_smartstore", {"client_secret": "secret-value"}),
+        ("naver_smartstore", {"self_operated": "true"}),
         ("unknown", {}),
     ],
 )

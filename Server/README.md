@@ -60,8 +60,9 @@ See [.env.example](.env.example). Keep real values out of version control.
 | `NCP_TTS_CLIENT_ID`, `NCP_TTS_CLIENT_SECRET` | no | CLOVA Voice Premium for `/tts` when it runs on its own NAVER API app |
 | `TTS_SPEAKER` | no | CLOVA Voice Premium speaker, default `vyuna` |
 | `NCP_MAPS_CLIENT_ID`, `NCP_MAPS_CLIENT_SECRET` | for `/geocode`, `/staticmap` | Naver Maps |
-| `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` | no | Instagram collector; the owner's own professional account |
-| `NAVER_COMMERCE_CLIENT_ID`, `NAVER_COMMERCE_CLIENT_SECRET` | no | Smart Store collector, Naver Commerce API |
+| `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` | no | Instagram collector; a professional account the operator of this server owns |
+| `NAVER_COMMERCE_CLIENT_ID`, `NAVER_COMMERCE_CLIENT_SECRET` | no | Smart Store collector, Naver Commerce API; ignored without the switch below |
+| `NAVER_COMMERCE_SELF_OPERATED` | no | Exactly `true` states that the operator of this server owns that store; see [Collectors](#collectors) |
 
 `allow` and `prefer` SSL modes are rejected, so there is no transport fallback.
 The current private NCP PostgreSQL endpoint requires `disable`.
@@ -211,8 +212,27 @@ Sources are `instagram`, `naver_smartstore`, `naver_blog`, `naver_booking`, `nav
   check both before turning it on.
 * Instagram and Smart Store use only the official APIs with environment credentials. There is no login
   automation and no stored login session. Addresses, phone numbers, and payment means of orders are not stored.
+* `naver_smartstore` runs only when `NAVER_COMMERCE_SELF_OPERATED` is exactly `true` and both credentials are
+  set. Without the switch, credentials count as absent: the state is `needs_connection` and no request is made,
+  the token call included. Set it only when the operator of this server is the owner of that store.
+* Instagram is for an account the operator owns. Meta's
+  [app review page](https://developers.facebook.com/documentation/instagram-platform/app-review.md) asks no review
+  of an app that serves only such accounts, while its
+  [webhook setup page](https://developers.facebook.com/documentation/instagram-platform/webhooks/setup.md) lists
+  Advanced Access and a live app for Instagram Login webhooks. Run a trial with a tester account before relying
+  on either. This adapter polls and receives no webhooks.
 * Requests are spaced per source; connection failures, 429, and 5xx are tried three times with backoff; bodies
   are limited to 4 MiB; text is stored without markup. Runs record short error codes, never response text.
+
+Why the Smart Store switch exists: Commerce API support answered on
+[2026-03-04](https://github.com/commerce-api-naver/api-agency/discussions/809) that providing, transferring, or
+entrusting an own-store application to a third party may breach the service terms. The answer of
+[2026-11-09](https://github.com/commerce-api-naver/commerce-api/discussions/3967) says the same of a seller who puts
+their own key into somebody else's program, because operation is then entrusted to that program. `type=SELF` is
+only for a seller who builds and runs the integration for their own store, and an individual business has no other
+route for now. 공도리 must not take another store owner's key. Its official route is to apply for a Commerce solution
+or API agency, and only a domestic corporation can apply. Both answers were read in the project's research notes
+on 2026-11-22; read them again before changing this rule.
 
 Mapping: an inquiry, or an Instagram comment that asks something, becomes a waiting inquiry with an empty draft.
 A store order becomes an order under a local order number. A collected row is updated only while its revision
