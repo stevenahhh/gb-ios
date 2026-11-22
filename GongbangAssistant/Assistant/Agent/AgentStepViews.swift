@@ -17,12 +17,12 @@ extension AgentStep {
             switch self {
             case .done: "완료"
             case .undone: "되돌림"
-            case .waiting: "승인 대기"
-            case .approved: "승인함"
-            case .dismissed: "하지 않기로 함"
-            case .expired: "만료"
-            case .closed: "끝난 제안"
-            case .refused: "하지 않음"
+            case .waiting: "확인 전"
+            case .approved: "수락했어요"
+            case .dismissed: "거절했어요"
+            case .expired: "기간 지남"
+            case .closed: "지난 확인 요청"
+            case .refused: "건너뜀"
             case .clarify: "확인 필요"
             }
         }
@@ -173,14 +173,14 @@ struct AgentUndoButton: View {
         .controlSize(.large)
         .disabled(isBusy)
         .accessibilityLabel("\(step.title) 되돌리기")
-        .accessibilityValue(isBusy ? "처리 중" : "")
-        .accessibilityHint("\(AssistantIdentity.name)가 한 이 일을 되돌려요.")
+        .accessibilityValue(isBusy ? "진행 중" : "")
+        .accessibilityHint("방금 \(AssistantIdentity.name)가 했던 일을 되돌려요.")
         .accessibilityIdentifier("agent.step.undo.\(step.id)")
-        .confirmationDialog("송장을 지우고 되돌릴까요?", isPresented: $isConfirming, titleVisibility: .visible) {
-            Button("송장 지우고 되돌리기", role: .destructive, action: undo)
+        .confirmationDialog("등록한 송장을 지우고 되돌릴까요?", isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("송장을 지우고 되돌릴게요", role: .destructive, action: undo)
             Button("그대로 두기", role: .cancel) {}
         } message: {
-            Text("등록한 택배사와 송장번호가 지워져요.")
+            Text("넣어 두신 택배사 이름, 번호가 다 사라져요.")
         }
     }
 
@@ -212,7 +212,7 @@ struct AgentStepList: View {
                 if !rows.isEmpty {
                     Divider()
                 }
-                PhraseText(text: (["확인한 것"] + lookupTitles).joined(separator: " · "))
+                PhraseText(text: (["살펴본 내용"] + lookupTitles).joined(separator: " · "))
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
             }

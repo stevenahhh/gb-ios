@@ -132,7 +132,7 @@ async def test_order_undo_refused_after_packing(database: AsyncEngine, client: A
 
 
 @pytest.mark.parametrize(("booking_id", "deadline"), [
-    ("booking-yuna", "입금 기한 오늘 14:00"), ("booking-sujin", "입금 기한 내일 11:00"),
+    ("booking-yuna", "입금 마감 오늘 14:00"), ("booking-sujin", "입금 마감 내일 11:00"),
 ])
 async def test_deposit_undo_requires_money_and_restores_missing_deadline(
     database: AsyncEngine, client: AsyncClient, booking_id: str, deadline: str,

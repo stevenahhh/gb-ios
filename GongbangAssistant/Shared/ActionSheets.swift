@@ -61,7 +61,7 @@ struct TrackingNumber: Equatable {
 /// each filled by typing, pasting the copied number, or scanning the label's barcode.
 struct InvoiceSheet: View {
     static let carriers = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배"]
-    private static let customCarrier = "직접 입력"
+    private static let customCarrier = "직접 쓰기"
 
     let items: [WorkItem]
     @AppStorage("invoice.lastCarrier") private var lastCarrier = "CJ대한통운"
@@ -106,7 +106,7 @@ struct InvoiceSheet: View {
                         .accessibilityIdentifier("invoice.carrier.custom")
                 }
             } footer: {
-                Text("마지막에 쓴 택배사를 기억해요.")
+                Text("지난번 고르신 택배 회사로 맞춰 둘게요.")
             }
             ForEach(items) { item in
                 Section {
@@ -133,7 +133,7 @@ struct InvoiceSheet: View {
 
     private func numberRow(_ item: WorkItem) -> some View {
         HStack(spacing: 8) {
-            TextField("운송장 번호 10~14자리", text: Binding(
+            TextField("번호 넣는 칸 (10~14자리)", text: Binding(
                 get: { number(item).grouped },
                 set: { numbers[item.id] = TrackingNumber($0) }
             ))
@@ -141,7 +141,7 @@ struct InvoiceSheet: View {
             .textContentType(.shipmentTrackingNumber)
             .monospacedDigit()
             .focused($focused, equals: item.id)
-            .accessibilityLabel("\(item.title) 운송장 번호")
+            .accessibilityLabel("\(item.title) 송장번호")
             .accessibilityIdentifier("invoice.number.\(item.actionTarget.id)")
             if number(item).isEmpty {
                 // The system paste control reads the clipboard only when tapped, so no permission prompt appears.
@@ -162,7 +162,7 @@ struct InvoiceSheet: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("\(item.title) 바코드 찍기")
+                .accessibilityLabel("\(item.title) 바코드 스캔")
                 .accessibilityIdentifier("invoice.scan.\(item.actionTarget.id)")
             }
         }
@@ -179,9 +179,9 @@ struct InvoiceSheet: View {
     private func footer(_ item: WorkItem) -> some View {
         let entered = number(item)
         if isDuplicate(item) {
-            Text("다른 소포와 같은 번호예요.")
+            Text("번호가 다른 택배랑 겹쳐요.")
         } else if !entered.isEmpty && !entered.isValid {
-            Text("운송장 번호는 숫자 10~14자리예요.")
+            Text("송장번호는 10~14자리 숫자로만 돼 있어요.")
         } else if let line = item.lines.first {
             Text(line)
         }
@@ -222,7 +222,7 @@ private struct BarcodeScanSheet: View {
             }
             .ignoresSafeArea()
             .safeAreaInset(edge: .bottom) {
-                Text("송장의 바코드를 화면 가운데에 맞춰 주세요.")
+                Text("카메라를 송장 바코드 위에 대고 화면 한가운데 맞춰 보세요.")
                     .font(.subheadline)
                     .padding(12)
                     .frame(maxWidth: .infinity)
@@ -292,16 +292,16 @@ struct BookingFormSheet: View {
 
     var body: some View {
         FormSheet(
-            title: "예약 등록", saveLabel: "등록", canSave: selected != nil && isFilled(customerName),
+            title: "예약 넣기", saveLabel: "등록", canSave: selected != nil && isFilled(customerName),
             isSaving: app.isRunning("booking.create"), save: save
         ) {
             if let options = sessions.value {
                 if options.isEmpty {
-                    Label("예약을 받을 수 있는 수업이 없어요", systemImage: "calendar")
+                    Label("지금 예약 받는 수업이 하나도 없어요", systemImage: "calendar")
                 } else {
                     Section("수업") {
                         Picker("수업", selection: $sessionID) {
-                            Text("선택해 주세요").tag(String?.none)
+                            Text("골라 주세요").tag(String?.none)
                             ForEach(options) { option in
                                 Text("\(option.title) · \(option.schedule)").tag(Optional(option.id))
                             }
@@ -316,7 +316,7 @@ struct BookingFormSheet: View {
                         TextField("이름", text: $customerName)
                             .textContentType(.name)
                             .accessibilityIdentifier("booking.name")
-                        TextField("연락처 (선택)", text: $phone)
+                        TextField("연락처 (안 적어도 돼요)", text: $phone)
                             .keyboardType(.phonePad)
                         Stepper("인원 \(partySize)명", value: $partySize, in: 1...max(selected?.remainingSeats ?? 1, 1))
                     }
@@ -376,7 +376,7 @@ struct EventFormSheet: View {
                 }
                 DatePicker("시작", selection: $startsAt)
                     .environment(\.timeZone, Calendar.workshop.timeZone)
-                TextField("메모 (선택)", text: $detail, axis: .vertical)
+                TextField("메모 (안 적어도 돼요)", text: $detail, axis: .vertical)
             }
         }
     }

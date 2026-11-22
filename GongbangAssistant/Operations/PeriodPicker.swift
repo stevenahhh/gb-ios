@@ -56,7 +56,7 @@ struct PeriodPickerSheet: View {
 
     private var summary: String {
         if let selection { return selection.rangeText }
-        return end == nil ? "끝나는 날짜를 골라 주세요" : "1년 안의 기간을 골라 주세요"
+        return end == nil ? "마지막 날을 고르세요" : "최대 1년까지만 고를 수 있어요"
     }
 
     var body: some View {

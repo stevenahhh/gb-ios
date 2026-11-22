@@ -35,9 +35,9 @@ from display import local
 
 API: Final = "https://api.commerce.naver.com/external/v1"
 SELF_OPERATED: Final = "true"
-REVIEW_FIRST: Final = "스마트스토어 자동 수집은 네이버 심사를 받은 뒤에 연결할 수 있어요."
-MISSING: Final = "스마트스토어를 연결해 주세요."
-DENIED_MESSAGE: Final = "스마트스토어 연결 정보와 API 권한을 확인해 주세요."
+REVIEW_FIRST: Final = "네이버 심사를 통과해야 스마트스토어 자동 가져오기를 연결할 수 있어요."
+MISSING: Final = "아직 이어진 스마트스토어가 없어요. 먼저 연결해 주세요."
+DENIED_MESSAGE: Final = "API 권한과 스마트스토어 연결 정보가 맞는지 봐 주세요."
 DENIED: Final = frozenset({401, 403})
 TOKEN_DENIED: Final = frozenset({400, 401, 403})
 CLOCK_MARGIN: Final = timedelta(seconds=3)

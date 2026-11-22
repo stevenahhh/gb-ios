@@ -86,6 +86,6 @@ extension RoundupAPI {
     /// Words for a failed connection write. The transport already words refusals; anything else did not reach
     /// the server.
     static func connectionFailureText(_ error: any Error) -> String {
-        (error as? RoundupAPIError)?.message ?? "서버에 연결하지 못했어요. 인터넷 연결을 확인한 뒤 다시 해 주세요."
+        (error as? RoundupAPIError)?.message ?? "지금 연결이 안 돼요. 와이파이나 데이터가 켜져 있는지 보신 뒤 다시 시도해 주세요."
     }
 }

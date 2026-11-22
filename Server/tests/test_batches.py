@@ -36,11 +36,11 @@ async def test_confirm_then_pack_then_invoice_then_deliver_in_batches(
     assert confirmed.status_code == 200, confirmed.text
     cards = confirmed.json()["items"]
     assert [card["id"] for card in cards] == ["order-1043", "order-1042"]
-    assert {card["status"]["text"] for card in cards} == {"포장 대기"}
+    assert {card["status"]["text"] for card in cards} == {"포장 전"}
 
     parcels = (("shipment-order-1042", 0), ("shipment-order-1043", 0))
     packed = (await client.post("/shipments/pack", json=rows(*parcels))).json()["items"]
-    assert [(card["status"]["text"], card["revision"]) for card in packed] == [("송장 대기", 1)] * 2
+    assert [(card["status"]["text"], card["revision"]) for card in packed] == [("송장 넣기 전", 1)] * 2
 
     invoice = {
         "carrier": "우체국택배",
@@ -113,7 +113,7 @@ async def test_batch_undo_restores_state_and_screen_counts(
         ("shipment-order-1040", 1), ("shipment-order-1038", 1),
     ))
     assert back.status_code == 200, back.text
-    assert [card["status"]["text"] for card in back.json()["items"]] == ["포장 대기", "배송 중"]
+    assert [card["status"]["text"] for card in back.json()["items"]] == ["포장 전", "배송 중"]
     restored = await snapshot(database, PARCELS)
     assert [row[:7] for row in restored] == [row[:7] for row in parcels]
     assert [row[:2] for row in await snapshot(database, ORDERS)] == [row[:2] for row in orders]
@@ -122,7 +122,7 @@ async def test_batch_undo_restores_state_and_screen_counts(
 
 async def test_order_card_offers_its_parcel_step(database: AsyncEngine, client: AsyncClient) -> None:
     order = (await client.get("/cards/order/order-1040")).json()
-    assert order["status"] == {"text": "포장 대기", "tone": "attention"}
+    assert order["status"] == {"text": "포장 전", "tone": "attention"}
     assert order["action"] == {
         "code": "pack", "label": "포장 완료하기",
         "target": {"kind": "shipment", "id": "shipment-order-1040", "revision": 0},
@@ -133,7 +133,7 @@ async def test_order_card_offers_its_parcel_step(database: AsyncEngine, client: 
     )
     assert packed.status_code == 200
     order = (await client.get("/cards/order/order-1040")).json()
-    assert (order["status"]["text"], order["action"]["code"]) == ("송장 대기", "registerInvoice")
+    assert (order["status"]["text"], order["action"]["code"]) == ("송장 넣기 전", "registerInvoice")
     assert order["action"]["target"]["revision"] == 1
     assert (await client.get("/cards/order/order-1042")).json()["action"] == {
         "code": "confirmOrder", "label": "주문 확인하기", "target": None,

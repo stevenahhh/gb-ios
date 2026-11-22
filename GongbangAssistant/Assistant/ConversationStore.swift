@@ -290,12 +290,12 @@ final class ConversationStore {
     private static func endNotice(for run: AgentRun) -> String {
         let asked = run.steps.filter { !$0.isRead }
         if run.status == .failed || run.status == .stopped {
-            return "\(AssistantIdentity.name)가 맡은 일을 끝까지 하지 못했어요"
+            return "\(AssistantIdentity.name)가 부탁하신 일을 중간에 멈췄어요"
         }
         if !asked.isEmpty, asked.allSatisfy(\.ran) {
-            return "\(AssistantIdentity.name)가 맡은 일을 끝냈어요"
+            return "\(AssistantIdentity.name)가 부탁하신 일을 모두 마쳤어요"
         }
-        return "\(AssistantIdentity.name)가 답을 준비했어요"
+        return "\(AssistantIdentity.name)의 답이 도착했어요"
     }
 
     /// Writes what the server knows of a run into the answer that belongs to it; false when nothing changed.

@@ -84,9 +84,9 @@ final class LiveConversation {
     private static let bargeInLevel = 0.6
     private static let followInterval: Duration = .milliseconds(1500)
     private static let followLimit: TimeInterval = 180
-    private static let unheardNotice = "잘 못 들었어요. 다시 말씀해 주세요."
-    private static let tooLongNotice = "한 번에 말씀하신 내용이 너무 길어요. 나눠서 말씀해 주세요."
-    private static let numberNotice = "번호가 다르게 들렸어요. 다시 말씀하시거나 글자로 적어 주세요."
+    private static let unheardNotice = "방금 말씀을 놓쳤어요. 한 번만 더 들려주세요."
+    private static let tooLongNotice = "말씀이 길어서 다 담지 못했어요. 조금씩 끊어서 들려주세요."
+    private static let numberNotice = "숫자를 잘못 들은 것 같아요. 천천히 다시 불러 주시거나 채팅창에 쳐 주세요."
 
     var keepsScreenOn: Bool {
         switch phase {
@@ -118,7 +118,7 @@ final class LiveConversation {
     private func prepare() async {
         phase = .starting
         guard await AVAudioApplication.requestRecordPermission() else {
-            fail(.microphone, "마이크 권한이 꺼져 있어요. 설정에서 마이크를 허용하면 말로 대화할 수 있어요.")
+            fail(.microphone, "공도리가 마이크를 쓸 수 없게 막혀 있어요. 아이폰 설정에서 마이크를 허용해 주시면 음성으로 대화해요.")
             return
         }
         do {
@@ -126,7 +126,7 @@ final class LiveConversation {
             try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
         } catch {
-            fail(.microphone, "마이크를 켜지 못했어요. 다른 앱이 마이크를 쓰고 있는지 확인해 주세요.")
+            fail(.microphone, "마이크가 안 켜져요. 통화 중이거나 다른 앱에서 쓰고 있지 않은지 봐 주세요.")
             return
         }
         let status = await LiveAudioCapture.speechAuthorization()
@@ -223,7 +223,7 @@ final class LiveConversation {
         do {
             try startCapture()
         } catch {
-            fail(.microphone, "마이크를 켜지 못했어요. 다시 시도해 주세요.")
+            fail(.microphone, "마이크가 안 켜져요. 조금 있다가 한 번 더 눌러 주세요.")
             return
         }
         let events = capture.beginRecognition(includingRecent: includingRecent)
@@ -447,11 +447,11 @@ final class LiveConversation {
 
     private func undone(_ steps: [AgentStep]) async throws -> LiveTurn {
         guard let step = steps.first else {
-            return LiveTurn(role: .assistant, text: "방금 답에는 되돌릴 일이 없어요.", items: [])
+            return LiveTurn(role: .assistant, text: "이번 답에선 바꾼 게 없으니 되돌릴 것도 없어요.", items: [])
         }
         guard steps.count == 1 else {
             undoChoices += 1
-            return LiveTurn(role: .assistant, text: "되돌릴 수 있는 일이 여러 건이에요. 화면에서 골라 주세요.", items: [])
+            return LiveTurn(role: .assistant, text: "되돌릴 게 몇 개 있어요. 원하시는 걸 화면에서 눌러 주세요.", items: [])
         }
         do {
             let result = try await RoundupAPI.undo(step)
@@ -473,7 +473,7 @@ final class LiveConversation {
         progressTask = Task {
             try? await Task.sleep(for: .seconds(6))
             guard !Task.isCancelled, phase == .thinking else { return }
-            _ = speaker.speak("처리하고 있어요.")
+            _ = speaker.speak("지금 하는 중이에요.")
         }
     }
 

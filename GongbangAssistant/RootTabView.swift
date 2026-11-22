@@ -19,10 +19,6 @@ struct RootTabView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.scenePhase) private var scenePhase
 
-    private var failureIsPresented: Binding<Bool> {
-        Binding(get: { app.failureMessage != nil && !isLiveVoicePresented }, set: { if !$0 { app.failureMessage = nil } })
-    }
-
     var body: some View {
         TabView(selection: $selection) {
             Tab("오늘", systemImage: "house", value: AppTab.today) {
@@ -62,6 +58,7 @@ struct RootTabView: View {
         .tutorialOverlay(selection: $selection)
         .sheet(isPresented: $isAssistantPresented) {
             AssistantSheet()
+                .failureAlert()
         }
         .fullScreenCover(isPresented: $onboarding.isPresented) {
             OnboardingFlow()
@@ -87,7 +84,7 @@ struct RootTabView: View {
         // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
         // Inquiries load on every tab, so their recovery is the app's "back online" moment.
         .onChange(of: store.inquiryLoadError == nil) { wasOK, isOK in
-            if isOK && !wasOK { app.showToast("다시 연결됐어요", seconds: 2) }
+            if isOK && !wasOK { app.showToast("연결이 돌아왔어요", seconds: 2) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             app.dataDidChange()
@@ -109,10 +106,7 @@ struct RootTabView: View {
             }
         }
         .sensoryFeedback(.success, trigger: app.successCount)
-        .alert("처리하지 못했어요", isPresented: failureIsPresented) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(app.failureMessage ?? "")
-        }
+        // An alert here would close a sheet or cover this view presents, so each of those shows its own.
+        .failureAlert(isActive: !isAssistantPresented && !isLiveVoicePresented)
     }
 }

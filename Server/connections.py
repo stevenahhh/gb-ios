@@ -22,14 +22,14 @@ from models import REVISION_CHECK, Audited, TableArgs
 router = APIRouter(prefix="/connections")
 MAX_VALUE: Final = 200
 EMPTY: Final = "값을 입력해 주세요."
-TOO_LONG: Final = "200자까지 저장할 수 있어요."
-SECRET: Final = "비밀번호나 토큰처럼 보이는 값은 저장하지 않아요. 공개 아이디나 주소만 입력해 주세요."  # noqa: S105
-BAD_HANDLE: Final = "아이디 형식이 맞지 않아요. 다시 확인해 주세요."
-BAD_LINK: Final = "주소 형식이 맞지 않아요. 다시 확인해 주세요."
-HTTPS_ONLY: Final = "https://로 시작하는 주소만 저장할 수 있어요."
-WRONG_HOST: Final = "이 서비스의 주소가 아니에요. 다시 확인해 주세요."
-UNKNOWN: Final = "저장할 수 없는 서비스예요."
-STALE: Final = "다른 곳에서 먼저 바뀌었어요. 새로 불러온 뒤 다시 시도해 주세요."
+TOO_LONG: Final = "200자가 넘으면 저장이 안 돼요."
+SECRET: Final = "공개 아이디나 주소만 넣어 주세요. 비밀번호나 토큰으로 보이면 저장 안 해요."  # noqa: S105
+BAD_HANDLE: Final = "아이디가 좀 이상해요. 한 번 더 봐 주세요."
+BAD_LINK: Final = "주소가 좀 이상해요. 다시 봐 주세요."
+HTTPS_ONLY: Final = "주소는 https://로 시작해야 저장돼요."
+WRONG_HOST: Final = "다른 서비스 주소 같아요. 주소를 한 번 더 봐 주세요."
+UNKNOWN: Final = "이 서비스는 저장 목록에 없어요."
+STALE: Final = "그사이 값이 달라졌어요. 새로고침하고 한 번 더 해 주세요."
 
 FORBIDDEN: Final = re.compile(r"[\s\\<>\"'`]")
 SECRET_PAIR: Final = re.compile(

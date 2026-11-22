@@ -40,9 +40,9 @@ OUTCOME_WORDS: Final = {
 
 OUTCOME_LABELS: Final = {
     "accepted": "수락",
-    "accepted_adjusted": "조정 후 수락",
+    "accepted_adjusted": "금액 바꿔 수락",
     "declined": "거절",
-    "no_reply": "답 없음",
+    "no_reply": "연락 없음",
 }
 
 
@@ -80,7 +80,7 @@ async def locate_cancel(db: AsyncSession, args: CancelArgs, env: ToolEnv) -> Loc
             break
     claims: list[Claim] = [Claim("취소", CANCEL_WORDS, "words")]
     if args.decision == "custom":
-        claims.append(Claim("환불 금액", str(args.refund_won or 0), "money"))
+        claims.append(Claim("돌려드릴 돈", str(args.refund_won or 0), "money"))
     else:
         claims.append(Claim("처리", DECISION_WORDS[args.decision], "words"))
     if args.reason:
@@ -88,18 +88,18 @@ async def locate_cancel(db: AsyncSession, args: CancelArgs, env: ToolEnv) -> Loc
     decisions = {
         "by_rule": "규정대로",
         "carry_over": "이월",
-        "full_refund": "환불할 금액을 전액으로 적기",
-        "custom": f"환불할 금액을 {won(args.refund_won or 0)}으로 적기",
+        "full_refund": "전액 환불로 적기",
+        "custom": f"돌려드릴 돈 {won(args.refund_won or 0)}으로 적어 두기",
     }
     preview = ()
     if len(matches) == 1:
         preview = (
-            ("할 일", "예약 취소"),
+            ("할 일", "예약 취소하기"),
             ("예약", matches[0].target.label),
             ("처리", decisions[args.decision]),
             *((("이유", args.reason),) if args.reason else ()),
         )
-    located = found_one(matches, "취소할 수 있는 예약을 찾지 못했어요.")
+    located = found_one(matches, "취소할 예약이 안 보여요.")
     return Located(located.resolution, claims_for(matches, *claims), preview=preview)
 
 
@@ -119,10 +119,12 @@ async def cancel(db: AsyncSession, args: CancelArgs, target: TargetRef, env: Too
     )
     revised = await db.get_one(BookingRow, target.id, populate_existing=True)
     refund = (
-        f"환불할 금액은 {won(view.refund)}으로 적었고 환불은 직접 해 주세요. " if view.refund > 0 else ""
+        f"돌려드릴 돈은 {won(view.refund)}으로 적어 뒀어요. 돈을 돌려드리는 건 사장님이 해 주세요. "
+        if view.refund > 0
+        else ""
     )
     return Outcome(
-        f"예약을 취소했어요. {refund}손님에게는 아무것도 보내지 않았어요.",
+        f"취소 끝. {refund}손님 쪽으로는 아무 연락도 안 갔어요.",
         TargetRef("booking", target.id, target.label, revised.revision),
         UndoTicket(f"/cancellations/cases/{view.case_id}/undo", {"case_id": view.case_id}),
     )
@@ -132,7 +134,7 @@ async def undo_cancel(db: AsyncSession, undo: UndoInput) -> Outcome:
     """Give a cancelled booking its seats back."""
     _ = await lock_row(db, BookingRow, undo.target.id, undo.target.revision)
     _ = await revert_decision(db, str(undo.data["case_id"]))
-    return Outcome("예약 취소를 되돌렸어요.")
+    return Outcome("취소했던 예약을 되살렸어요.")
 
 
 class QuoteArgs(ToolArgs):
@@ -150,7 +152,7 @@ class QuoteArgs(ToolArgs):
 def quote_title(row: OutreachQuoteRow) -> str:
     """Name a quote by its institution."""
     fields = QuoteFields.model_validate(row.fields)
-    return fields.org_name or f"{ORG_LABELS[fields.org_type]} 출강"
+    return fields.org_name or f"{ORG_LABELS[fields.org_type]} 출장 수업"
 
 
 async def locate_quote(db: AsyncSession, args: QuoteArgs, env: ToolEnv) -> Located:
@@ -183,11 +185,11 @@ async def locate_quote(db: AsyncSession, args: QuoteArgs, env: ToolEnv) -> Locat
     if len(matches) == 1:
         amount = "" if args.final_total_krw is None else f" · {won(args.final_total_krw)}"
         preview = (
-            ("할 일", "견적 결과 기록"),
+            ("할 일", "견적 답변 적기"),
             ("기관", matches[0].target.label),
             ("결과", OUTCOME_LABELS[args.outcome] + amount),
         )
-    located = found_one(matches, "답변을 기다리는 견적에서 찾지 못했어요.")
+    located = found_one(matches, "그런 견적은 답 기다리는 목록에 없어요.")
     return Located(located.resolution, claims_for(matches, *claims), preview=preview)
 
 
@@ -213,7 +215,7 @@ async def record_outcome(db: AsyncSession, args: QuoteArgs, target: TargetRef, e
         env.now,
     )
     return Outcome(
-        f"견적 답을 적었어요: {target.label} · {OUTCOME_LABELS[args.outcome]}",
+        f"기관 답변 기록: {target.label} · {OUTCOME_LABELS[args.outcome]}",
         TargetRef("quote", saved.id, target.label, saved.revision),
         UndoTicket("/agent/undo/record_quote_outcome", before),
     )
@@ -235,7 +237,7 @@ async def undo_outcome(db: AsyncSession, undo: UndoInput) -> Outcome:
         task.status, task.completed_at = "open", None
         task.revision += 1
     await db.flush()
-    return Outcome("견적 답변 기록을 되돌렸어요.")
+    return Outcome("적어 둔 견적 답변을 지웠어요.")
 
 
 CASES: Final[tuple[Tool, ...]] = (

@@ -175,7 +175,7 @@ async def test_stale_writer_gets_a_korean_conflict_and_changes_nothing(
     ]
     assert {response.status_code for response in stale} == {409}
     assert {response.json()["detail"] for response in stale} == {
-        "다른 곳에서 먼저 바뀌었어요. 새로 불러온 뒤 다시 시도해 주세요.",
+        "그사이 값이 달라졌어요. 새로고침하고 한 번 더 해 주세요.",
     }
     items = (await client.get("/connections")).json()["items"]
     assert [(row["value"], row["revision"]) for row in items if row["revision"]] == [("nolli", 1)]
@@ -204,7 +204,7 @@ async def test_refused_value_and_unknown_service_are_not_stored(
     assert refused.status_code == 422
     assert TOKEN not in refused.text
     for unknown in (await put(client, "calendar", "x", 0), await delete(client, "bank", 0)):
-        assert (unknown.status_code, unknown.json()["detail"]) == (404, "저장할 수 없는 서비스예요.")
+        assert (unknown.status_code, unknown.json()["detail"]) == (404, "이 서비스는 저장 목록에 없어요.")
     items = (await client.get("/connections")).json()["items"]
     assert {row["state"] for row in items} == {"none"}
 

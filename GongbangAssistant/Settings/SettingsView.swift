@@ -26,7 +26,7 @@ struct SettingsView: View {
             CardSection {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(data.workshop?.name ?? "공방 정보를 입력해 주세요")
+                        Text(data.workshop?.name ?? "공방 이름, 주소부터 채워 주세요")
                             .font(.headline)
                         if let owner = data.workshop?.ownerTitle {
                             Text(owner)
@@ -56,7 +56,7 @@ struct SettingsView: View {
                 NavigationLink {
                     BK25FactCardListView()
                 } label: {
-                    Label { Text("수업 사실 카드") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
+                    Label { Text("수업 정보") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
                 }
                 .accessibilityIdentifier("settings.factCards")
                 rows(sections["공방"] ?? [])

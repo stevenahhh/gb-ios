@@ -9,10 +9,10 @@ struct TutorialStep: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("화면을 같이 둘러봐요")
+                    Text("앱을 같이 둘러볼까요")
                         .font(.title2.bold())
                         .accessibilityAddTraits(.isHeader)
-                    Text("자주 쓰는 곳을 실제 화면에서 하나씩 짚어 드려요. 아직 내용이 없는 곳은 지나가요.")
+                    Text("매일 쓰게 될 메뉴를 진짜 앱 화면 위에서 차례로 짚어 볼게요. 아직 빈 메뉴는 그냥 지나가요.")
                         .font(.body)
                         .foregroundStyle(Color.secondaryText)
                 }
@@ -46,7 +46,7 @@ struct TutorialStep: View {
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("onboarding.tutorial.start")
                 Button(action: skip) {
-                    Text("나중에").frame(maxWidth: .infinity)
+                    Text("다음에 할게요").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("onboarding.tutorial.later")

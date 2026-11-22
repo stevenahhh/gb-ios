@@ -123,8 +123,8 @@ async def test_a_failed_run_stores_an_answer_and_a_late_retry_returns_it(
         requestId=SEND_ID,
     )
     assert body["status"] == "failed"
-    assert "나머지는 하지 못했어요" in body["answer"]
-    assert "처리했어요" in body["answer"]
+    assert "남은 건 이어서 부탁해 주세요" in body["answer"]
+    assert "끝낸 일" in body["answer"]
     replayed = await ask(client, chat_of(), PACKED, requestId=SEND_ID)
     assert replayed["answer"] == body["answer"]
     stored = await scalar(database, "SELECT answer FROM agent_runs")
@@ -138,8 +138,8 @@ async def test_a_run_that_uses_up_its_calls_says_so(database: AsyncEngine, clien
         wants("confirm_order", order="1042"),
     )
     body = await ask(client, chat, PACKED)
-    assert "나머지는 하지 못했어요" in body["answer"]
-    assert "처리했어요" in body["answer"]
+    assert "남은 건 이어서 부탁해 주세요" in body["answer"]
+    assert "끝낸 일" in body["answer"]
 
 
 async def test_a_plain_answer_mentions_the_open_proposals(database: AsyncEngine, client: AsyncClient) -> None:
@@ -149,7 +149,7 @@ async def test_a_plain_answer_mentions_the_open_proposals(database: AsyncEngine,
         "포장할 거 있어?",
     )
     assert body["status"] == "fallback"
-    assert "확인할 제안이 1건 있어요" in body["answer"]
+    assert "1건이 사장님 확인을 기다려요" in body["answer"]
 
 
 async def test_a_finished_run_never_has_an_empty_answer(database: AsyncEngine, client: AsyncClient) -> None:
@@ -237,7 +237,7 @@ async def test_an_expired_proposal_closes_and_can_not_be_approved(
         json={"expectedRevision": proposal["expectedRevision"]},
     )
     assert refused.status_code == 409
-    assert "시간" in refused.json()["detail"]
+    assert "기간이 끝난" in refused.json()["detail"]
 
 
 async def test_a_proposal_without_a_needed_value_answers_korean_and_stays_open(
@@ -349,7 +349,7 @@ async def test_a_step_that_changed_since_can_not_be_undone(
     await execute(database, "UPDATE shipments SET revision = revision + 1 WHERE id = :id", id=ORDER)
     refused = await client.post(f"/agent/steps/{step['id']}/undo")
     assert refused.status_code == 409
-    assert "바뀌" in refused.json()["detail"]
+    assert "달라져서" in refused.json()["detail"]
     missing = await client.post("/agent/steps/none/undo")
     assert missing.status_code == 404
 

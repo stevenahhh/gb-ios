@@ -126,7 +126,7 @@ async def add_event(db: AsyncSession, args: EventArgs, target: TargetRef, env: T
         ),
     )
     return Outcome(
-        f"일정을 넣었어요: {event.title} · {when_text(event.starts_at)}",
+        f"캘린더에 넣었어요: {event.title} · {when_text(event.starts_at)}",
         TargetRef("event", event.id, event.title, event.revision),
         UndoTicket("/calendar/events"),
     )
@@ -137,7 +137,7 @@ async def remove_event(db: AsyncSession, undo: UndoInput) -> Outcome:
     event = await lock_row(db, CalendarEventRow, undo.target.id, undo.target.revision)
     await db.delete(event)
     await db.flush()
-    return Outcome(f"일정을 지웠어요: {event.title}")
+    return Outcome(f"캘린더에서 지웠어요: {event.title}")
 
 
 class EventMoveArgs(ToolArgs):
@@ -184,10 +184,10 @@ async def locate_event(db: AsyncSession, args: EventMoveArgs, env: ToolEnv) -> L
         preview = (
             ("일정", found[0][0].title),
             ("지금", when_text(found[0][0].starts_at)),
-            ("옮길 때", when_text(moment)),
+            ("바꿀 시간", when_text(moment)),
         )
     return Located(
-        Resolution(candidates, confidence, "옮길 일정을 찾지 못했어요."),
+        Resolution(candidates, confidence, "어떤 일정을 말씀하시는지 모르겠어요."),
         claims=(
             *owner_claims(ASKS_MOVE, named_in("일정", args.event), only=len(rows) == 1),
             *moment_claims(args.day, args.time),
@@ -204,7 +204,7 @@ async def move_event(db: AsyncSession, args: EventMoveArgs, target: TargetRef, e
     reschedule(event, moved_moment(event, args))
     await db.flush()
     return Outcome(
-        f"일정을 옮겼어요: {event.title} · {when_text(event.starts_at)}",
+        f"일정 옮김: {event.title} · {when_text(event.starts_at)}",
         TargetRef("event", event.id, event.title, event.revision),
         UndoTicket(f"/calendar/events/{event.id}/move", {"starts_at": previous.isoformat()}),
     )
@@ -215,7 +215,7 @@ async def move_event_back(db: AsyncSession, undo: UndoInput) -> Outcome:
     event = await lock_row(db, CalendarEventRow, undo.target.id, undo.target.revision)
     reschedule(event, datetime.fromisoformat(str(undo.data["starts_at"])))
     await db.flush()
-    return Outcome(f"일정을 되돌렸어요: {event.title} · {when_text(event.starts_at)}")
+    return Outcome(f"일정을 원래 시간으로 돌렸어요: {event.title} · {when_text(event.starts_at)}")
 
 
 class TaskArgs(ToolArgs):
@@ -230,7 +230,7 @@ def task_targets(found: list[tuple[TaskRow, float]]) -> Resolution:
     return Resolution(
         candidates,
         max((score for _, score in found), default=BY_IDENTIFIER),
-        "그 할 일을 찾지 못했어요.",
+        "그런 할 일은 안 보여요.",
     )
 
 
@@ -263,7 +263,7 @@ async def complete_task(db: AsyncSession, args: TaskArgs, target: TargetRef, env
     set_done(task, env.now, done=True)
     await db.flush()
     return Outcome(
-        f"할 일을 완료로 바꿨어요: {task.title}",
+        f"끝낸 할 일로 표시했어요: {task.title}",
         TargetRef("task", task.id, task.title, task.revision),
         UndoTicket(f"/tasks/{task.id}/undo"),
     )
@@ -277,7 +277,7 @@ async def reopen_task(db: AsyncSession, args: TaskArgs, target: TargetRef, env: 
     set_done(task, env.now, done=False)
     await db.flush()
     return Outcome(
-        f"할 일을 다시 열었어요: {task.title}",
+        f"다시 하는 중으로 돌렸어요: {task.title}",
         TargetRef("task", task.id, task.title, task.revision),
         UndoTicket(f"/tasks/{task.id}/completion", {"completed_at": finished.isoformat()}),
     )
@@ -288,7 +288,7 @@ async def undo_complete(db: AsyncSession, undo: UndoInput) -> Outcome:
     task = await lock_row(db, TaskRow, undo.target.id, undo.target.revision)
     set_done(task, undo.now, done=False)
     await db.flush()
-    return Outcome(f"할 일을 다시 열었어요: {task.title}")
+    return Outcome(f"다시 하는 중으로 돌렸어요: {task.title}")
 
 
 async def undo_reopen(db: AsyncSession, undo: UndoInput) -> Outcome:
@@ -296,7 +296,7 @@ async def undo_reopen(db: AsyncSession, undo: UndoInput) -> Outcome:
     task = await lock_row(db, TaskRow, undo.target.id, undo.target.revision)
     set_done(task, datetime.fromisoformat(str(undo.data["completed_at"])), done=True)
     await db.flush()
-    return Outcome(f"할 일을 완료로 바꿨어요: {task.title}")
+    return Outcome(f"끝낸 할 일로 표시했어요: {task.title}")
 
 
 DESK: Final[tuple[Tool, ...]] = (

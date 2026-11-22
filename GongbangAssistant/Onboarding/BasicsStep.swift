@@ -12,13 +12,13 @@ struct BasicsStep: View {
 
     var body: some View {
         List {
-            OnboardingStepTitleRow(title: "\(AssistantIdentity.name)가 일하려면 필요한 것")
+            OnboardingStepTitleRow(title: "\(AssistantIdentity.name)가 일을 시작하려면")
             CardSection {
                 ForEach(BasicsItem.allCases) { item in
                     row(item)
                 }
             } footer: {
-                Text("지금 하지 않아도 돼요. 설정에서 같은 화면을 다시 열 수 있어요.")
+                Text("건너뛰셔도 괜찮아요. 이 화면은 설정 메뉴에 늘 있어요.")
             }
         }
         .cardList()
@@ -100,13 +100,13 @@ struct BasicsStep: View {
         switch item {
         case .policy:
             guard let versions = policies.value else { return nil }
-            guard let current = versions.first else { return .todo("아직 없음") }
-            return .done("\(current.version)판 저장됨")
+            guard let current = versions.first else { return .todo("하나도 없어요") }
+            return .done("\(current.version)번째 규정 저장됨")
         case .costs:
             guard let data = costs.value else { return nil }
             if data.classes.isEmpty { return .waiting("수업 먼저 필요") }
             let filled = data.classes.filter { !$0.isMissing }.count
-            if filled < data.classes.count { return .todo("수업 \(data.classes.count)개 중 \(filled)개 입력") }
+            if filled < data.classes.count { return .todo("\(filled)/\(data.classes.count) 수업 작성") }
             // The defaults screen stores an empty minimum as 0.
             if (data.defaults?.minimumFeeKrw ?? 0) <= 0 { return .todo("최소 금액 없음") }
             return .done("모두 입력")
@@ -114,8 +114,8 @@ struct BasicsStep: View {
             guard let list = cards.value else { return nil }
             if list.isEmpty { return .waiting("수업 먼저 필요") }
             let full = list.filter { $0.filledCount >= BK25FactField.allCases.count }.count
-            if full < list.count { return .todo("수업 \(list.count)개 중 \(full)개 채움") }
-            return .done("모두 채움")
+            if full < list.count { return .todo("\(full)/\(list.count) 수업 완성") }
+            return .done("다 채웠어요")
         }
     }
 }
@@ -148,17 +148,17 @@ private enum BasicsItem: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .policy: "취소 규정"
-        case .costs: "수업별 원가와 최소 금액"
-        case .factCards: "수업 사실 카드"
+        case .costs: "수업마다 원가, 최저가"
+        case .factCards: "수업 정보"
         }
     }
 
     /// One sentence: what the assistant cannot do without it.
     var reason: String {
         switch self {
-        case .policy: "없으면 취소 문자가 와도 환불액을 계산하지 못해요."
-        case .costs: "없으면 출강 문의에 견적을 내지 못해요."
-        case .factCards: "없으면 답장 초안에 소요 시간, 정원, 주차 같은 사실을 쓰지 못해요."
+        case .policy: "이 칸이 비면 손님이 취소할 때 돌려드릴 금액을 계산하지 못해요."
+        case .costs: "이 칸이 비면 출장 수업 문의가 와도 견적을 뽑지 못해요."
+        case .factCards: "수업 시간이나 정원, 주차 안내는 이 칸이 채워져야 답장 초안에 들어가요."
         }
     }
 }

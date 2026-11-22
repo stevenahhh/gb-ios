@@ -251,7 +251,7 @@ sudo systemctl disable --now roundup-agent
 sudo systemctl enable --now roundup-agent
 ```
 
-유닛을 끄면 먼저 올리는 제안과 `background` 실행이 멈추고 `queued` 실행은 다시 켤 때까지 기다립니다. `POST /agent/run`의 일반 실행은 계속됩니다. 비서 전체를 멈추려면 앱에서 "지금 모두 멈추기"를 누르거나 `PUT /agent/settings`로 `mode`를 `off`로 바꿉니다.
+유닛을 끄면 먼저 올리는 제안과 `background` 실행이 멈추고 `queued` 실행은 다시 켤 때까지 기다립니다. `POST /agent/run`의 일반 실행은 계속됩니다. 비서 전체를 멈추려면 앱에서 "전부 멈추기"를 누르거나 `PUT /agent/settings`로 `mode`를 `off`로 바꿉니다.
 
 한 번 점검하고 결과를 출력하려면 환경 변수를 넣고 실행합니다. 이 명령도 제안을 실제로 저장합니다.
 

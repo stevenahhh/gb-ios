@@ -76,7 +76,7 @@ class EventCreate(ApiRequest):
 def booker_text(name: str | None, seats: int) -> str:
     """Name the first booker and how many other people come."""
     if name is None:
-        return "아직 예약 없음"
+        return "아직 예약한 분이 없어요"
     others = f" 외 {seats - 1}명" if seats > 1 else ""
     return f"{masked(name)} 님{others}"
 

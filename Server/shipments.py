@@ -79,9 +79,9 @@ def shipment_records() -> Select[ShipmentRecord]:
 def arrival_text(arrival: date | None, today: date) -> str:
     """Describe the estimated arrival honestly when it has passed."""
     if arrival is None:
-        return "도착 예정일 미정"
+        return "도착일 아직 모름"
     if arrival < today:
-        return f"도착 예정일 지남 · {relative_day(arrival, today)}"
+        return f"도착일 지남 · {relative_day(arrival, today)}"
     return f"{relative_day(arrival, today)} 도착 예정"
 
 
@@ -99,10 +99,10 @@ def shipment_card(record: ShipmentRecord, today: date) -> Card:
     status, action = PARCEL_STATES[shipment.status]
     match shipment.status:
         case "packing":
-            lines = [summary, shipment.handling_note or "포장 후 송장을 등록해 주세요"]
+            lines = [summary, shipment.handling_note or "포장이 끝나면 송장번호를 넣어 주세요"]
             tag, deadline = TAG_SCHEDULED, pickup
         case "invoice_pending":
-            lines = [summary, "포장 완료 · 송장 등록 필요"]
+            lines = [summary, "포장 끝 · 이제 송장 넣을 차례"]
             tag, deadline = TAG_SCHEDULED, pickup
         case "in_transit":
             lines = [summary, tracking, arrival_text(shipment.expected_arrival_on, today)]

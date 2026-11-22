@@ -72,19 +72,19 @@ REQUEST: Final[TypeAdapter[RunRequest]] = TypeAdapter(RunRequest)
 STORED_REQUEST: Final = TypeAdapter(dict[str, JsonValue])
 MIN_MODEL_SECONDS: Final = 0.5
 QUEUED_FOR: Final = timedelta(minutes=10)
-SAY_AGAIN: Final = "시간이 지났거나 비서를 껐다 켜셔서 처리하지 않았어요. 다시 말씀해 주세요."
-UNFINISHED_NOTE: Final = "여기까지만 했고 나머지는 하지 못했어요. 이어서 말씀해 주세요."
-PROPOSALS_NOTE: Final = "확인할 제안이 {count}건 있어요. 제안 목록에서 확인해 주세요."
-NOT_DONE_NOTE: Final = "아직 처리하지 않았어요."
+SAY_AGAIN: Final = "비서를 껐다 켜셨거나 너무 오래 지나서 멈췄어요. 한 번 더 부탁해 주세요."
+UNFINISHED_NOTE: Final = "일부만 끝냈어요. 남은 건 이어서 부탁해 주세요."
+PROPOSALS_NOTE: Final = "{count}건이 사장님 확인을 기다려요. 확인 요청 목록을 열어 보세요."
+NOT_DONE_NOTE: Final = "아직 바꾼 건 없어요."
 # An order or booking the model says it took or checked; nothing else in a run without steps can be meant.
 TAKEN: Final = re.compile(
     r"(?:주문|예약|취소|입금)(?:을|를|은)?\s*(?:확인|접수|확정)?(?:을|를|은)?\s*(?:받았|했어|했습)",
 )
-STOPPED_NOTE: Final = "비서를 꺼 두셔서 여기까지만 했어요."
-REPEAT_NOTE: Final = "이번 요청에서 같은 일을 이미 했어요. 다시 하지 않았어요."
+STOPPED_NOTE: Final = "꺼진 상태라 여기서 멈췄어요."
+REPEAT_NOTE: Final = "같은 일을 방금 해서 또 하진 않았어요."
 HANGUL: Final = re.compile(r"[가-힣]")
 LATIN: Final = re.compile(r"[A-Za-z]")
-LIMIT_NOTE: Final = "한 번에 처리할 수 있는 일을 다 했어요. 나머지는 다시 말씀해 주세요."
+LIMIT_NOTE: Final = "이번 차례에 할 만큼 다 했어요. 남은 건 새로 부탁해 주세요."
 
 SYSTEM: Final = """\
 당신은 작은 공방 사장님의 업무 비서입니다. 사장님에게 해요체로 짧게 답합니다.
@@ -325,13 +325,13 @@ def summary_line(item: Performed) -> str:
     label = f" ({target.label})" if target is not None and target.label else ""
     match step.decision:
         case "auto":
-            return f"처리했어요 · {step.title}{label}" + (" · 되돌릴 수 있어요" if step.undoable else "")
+            return f"끝낸 일 · {step.title}{label}" + (" · 다시 되돌려도 돼요" if step.undoable else "")
         case "proposed":
-            return f"제안으로 올렸어요 · {step.title}{label} · {step.reason}"
+            return f"확인 요청을 보냈어요 · {step.title}{label} · {step.reason}"
         case "clarify":
-            return f"확인이 필요해요 · {step.title} · {step.reason}"
+            return f"한 번 봐 주세요 · {step.title} · {step.reason}"
         case "refused":
-            return f"하지 않았어요 · {step.title} · {step.reason}"
+            return f"건너뛴 일 · {step.title} · {step.reason}"
 
 
 def without_claims(text: str) -> str:
@@ -512,7 +512,7 @@ async def replay(run_id: str, now: datetime) -> RunResponse:
         await expire_proposals(db, now)
         row = await db.get(AgentRunRow, run_id)
         if row is None:
-            raise HTTPException(404, "그 기록을 찾지 못했어요.")
+            raise HTTPException(404, "찾는 기록이 안 보여요.")
         view = run_view(row, await steps_of(db, run_id), await proposals_of(db, run_id), now)
         mode = (await policy_settings(db)).mode
     return RunResponse(
@@ -678,7 +678,7 @@ async def run_detail(run_id: str, now: datetime) -> RunView:
         await expire_proposals(db, now)
         row = await db.get(AgentRunRow, run_id)
         if row is None:
-            raise HTTPException(404, "그 기록을 찾지 못했어요.")
+            raise HTTPException(404, "찾는 기록이 안 보여요.")
         return run_view(row, await steps_of(db, run_id), await proposals_of(db, run_id), now)
 
 
@@ -718,7 +718,7 @@ async def session_answer(run_id: str) -> str:
         steps = await steps_of(db, run_id)
     auto = sum(step.decision == "auto" and step.tier in {"T1", "T2"} for step in steps)
     proposed = sum(step.decision == "proposed" for step in steps)
-    return f"바로 처리한 일 {auto}건, 제안 {proposed}건"
+    return f"알아서 끝낸 일 {auto}건, 확인 요청 {proposed}건"
 
 
 async def act(session: AgentSession, call: ToolCall) -> StepView:

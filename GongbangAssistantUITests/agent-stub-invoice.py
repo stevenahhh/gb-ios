@@ -24,15 +24,15 @@ SPEC.loader.exec_module(base)
 Refused = base.Refused
 
 PROBLEM_TEXT = {
-    "duplicate_in_text": "같은 송장번호나 주문이 글에 두 번 나와요.",
-    "already_used": "이미 다른 주문에 등록된 송장번호예요.",
-    "already_shipped": "이미 발송한 주문이에요.",
-    "not_packed": "아직 포장 완료 전인 주문이에요.",
-    "wrong_format": "알려진 송장번호 자릿수와 달라요. 맞는 번호인지 확인해 주세요.",
-    "recipient_mismatch": "받는 분이 주문과 달라요.",
-    "columns_swapped": "주문번호와 송장번호 칸이 바뀐 것 같아요.",
+    "duplicate_in_text": "붙여 넣은 글에 같은 송장번호나 주문이 겹쳐요.",
+    "already_used": "이 번호는 벌써 다른 주문에 들어가 있어요.",
+    "already_shipped": "벌써 보낸 택배예요.",
+    "not_packed": "포장이 아직이라 송장을 못 넣어요.",
+    "wrong_format": "보통 송장번호보다 자릿수가 길거나 짧아요. 번호를 한 번 더 봐 주세요.",
+    "recipient_mismatch": "주문서와 받는 분 이름이 달라요.",
+    "columns_swapped": "두 번호가 칸을 바꿔 들어간 듯해요. 주문번호와 송장번호를 봐 주세요.",
 }
-CHANGED = "파일을 올린 뒤에 등록할 송장이 달라졌어요. 다시 가져와 주세요."
+CHANGED = "올리신 뒤 송장 내용이 바뀌었어요. 파일을 새로 불러와 주세요."
 CJ = "CJ대한통운"
 # line, number, order, match, carrier, carrier status, problems
 ROWS = (
@@ -109,8 +109,8 @@ class InvoiceWorkshop(base.Workshop):
         ready = len(self.shown)
         openable = ready or any(row[6] == ("wrong_format",) for row in self.rows)
         self.file_proposal = self.add_proposal(
-            "register_invoice", "송장 파일 가져오기", f"송장 {ready}건을 한 번에 등록해요.",
-            [("파일", filename), ("등록할 송장", f"{ready}건")], [], None,
+            "register_invoice", "송장 파일로 한 번에 넣기", f"송장 {ready}건을 한 번에 등록해요.",
+            [("파일", filename), ("넣을 송장", f"{ready}건")], [], None,
             base.timedelta(hours=24), ("file",), revision=None)[0] if openable else None
         return {"rows": views, "readyCount": ready, "proposalCount": 1 if openable else 0,
                 "proposalId": self.file_proposal["id"] if openable else None}
@@ -125,19 +125,19 @@ class InvoiceWorkshop(base.Workshop):
         base.only(query, {"filename", "acceptFormat"}, required={"filename"})
         view = self.open_proposal(proposal_id)["view"]
         if self.imported != (filename, data):
-            raise Refused(409, "처음에 올린 파일과 달라요. 같은 파일을 다시 보내 주세요.")
+            raise Refused(409, "아까와 다른 파일이에요. 처음에 쓰신 그 파일로 올려 주세요.")
         if self.clean_lines() != self.shown:
             raise Refused(409, CHANGED)
         accepted = {int(part) for part in query.get("acceptFormat", "").split(",") if part.strip()}
         chosen = [row for row in self.rows if row[0] in self.shown
                   or (row[0] in accepted and row[6] == ("wrong_format",))]
         if not chosen:
-            raise Refused(409, "등록할 수 있는 송장이 없어요. 확인한 행을 알려 주세요.")
+            raise Refused(409, "넣을 송장이 하나도 안 남았어요. 어느 줄을 보셨는지 알려 주세요.")
         steps = []
         for _, number, order, *_ in chosen:
             previous = self.set_order(order, "in_transit")
             steps.append(self.add_step(
-                "register_invoice", "송장 등록", "proposed", "파일 승인으로 등록했어요.",
+                "register_invoice", "송장 등록", "proposed", "파일을 수락하셔서 송장을 넣었어요.",
                 {"kind": "shipment", "id": f"shipment-order-{order}", "label": f"#{order}"},
                 undo=("order", order, previous)))
         view["state"] = "approved"

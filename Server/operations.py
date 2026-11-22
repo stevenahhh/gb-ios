@@ -150,7 +150,7 @@ def change(current: int, previous: int) -> str:
 def compared(current: int, previous: int, since: str) -> str:
     """Describe a count change in items, which reads better than a percentage."""
     diff = current - previous
-    return f"{since}보다 {diff:+d}건" if diff else f"{since}과 같아요"
+    return f"{since}보다 {diff:+d}건" if diff else f"{since}과 똑같아요"
 
 
 async def attention_details(
@@ -178,7 +178,7 @@ async def attention_details(
     pickup = await db.scalar(select(func.min(ShipmentRow.ship_by_at)).where(*to_send(today)))
     return (
         deposit,
-        f"비서 초안 {drafted}건 준비됨" if drafted else None,
+        f"비서가 쓴 초안 {drafted}건 있어요" if drafted else None,
         f"{relative_moment(pickup, today)} 택배 수거" if pickup else None,
         due(pickup, suffix=" 택배 수거", missed="수거 놓침") if pickup else None,
     )
@@ -203,7 +203,7 @@ async def operations(
     if (start is None) != (end is None) or (month is not None and start is not None):
         raise HTTPException(422, "provide either month or both start and end")
     option = month_option(selected)
-    comparison_period, since = "전월", "지난달"
+    comparison_period, since = "지난달", "지난달"
     if start is not None and end is not None:
         span = (end - start).days + 1
         if span < 1 or span > MAX_RANGE_DAYS or start.toordinal() <= span or end == date.max:
@@ -213,7 +213,7 @@ async def operations(
         option = MonthOption(
             key="custom", title="선택 기간", range=f"{start:%m.%d} – {end:%m.%d}",  # noqa: RUF001
         )
-        comparison_period, since = "이전 기간", "이전 기간"
+        comparison_period, since = "지난 기간", "지난 기간"
     else:
         numbers = await month_numbers(db, selected)
         baseline = await month_numbers(db, previous_month(selected))
@@ -222,7 +222,7 @@ async def operations(
     return Operations(
         attention_count=counts.attention,
         attention=[
-            metric("depositPending", "예약금 미확인", counts.deposit_pending, deposit),
+            metric("depositPending", "예약금 확인 전", counts.deposit_pending, deposit),
             metric("pendingInquiries", "답변 기다리는 문의", counts.pending_inquiries, drafted),
             Metric(
                 key="unshipped", label="발송 대기", value=counts.ship_due_today,
@@ -249,7 +249,7 @@ async def operations(
                 ),
                 metric(
                     "inquiries", "문의", numbers.inquiries,
-                    f"답변 기다리는 문의 {numbers.inquiries - numbers.inquiries_handled:,}건",
+                    f"답장 못 한 문의 {numbers.inquiries - numbers.inquiries_handled:,}건",
                 ),
             ],
             comparisons=[

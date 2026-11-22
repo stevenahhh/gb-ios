@@ -117,14 +117,14 @@ def switchable(name: str) -> ToolName:
         tool = TOOLS.validate_python(name)
     except ValidationError:
         raise HTTPException(
-            422, "설정에 없는 일이에요. 손님에게 보내기, 결제, 환불, 기록 삭제는 비서에게 맡길 수 없어요.",
+            422, "설정에 없는 일이에요. 손님 연락, 결제, 환불, 기록 지우기는 비서에게 못 맡겨요.",
         ) from None
     tier = TOOL_TIERS[tool]
     match tier:
         case "T1" | "T2":
             return tool
         case "T0":
-            raise HTTPException(422, "찾아보는 일은 따로 켜고 끌 수 없어요.")
+            raise HTTPException(422, "찾아보기는 언제나 켜져 있어요. 따로 끄지 못해요.")
         case _:
             assert_never(tier)
 
@@ -194,7 +194,7 @@ async def update_settings(db: AsyncSession, body: SettingsUpdate, now: datetime)
         )
         db.add(row)
     if row.revision != body.expected_revision:
-        raise HTTPException(409, "그사이에 설정이 바뀌었어요. 다시 불러온 뒤 저장해 주세요.")
+        raise HTTPException(409, "그사이 설정이 달라졌어요. 새로고침한 뒤에 저장해 주세요.")
     changes = apply_update(row, body)
     if changes:
         row.revision += 1

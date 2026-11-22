@@ -6,7 +6,7 @@ struct AgentRunStatusLine: View {
 
     private var progress: String {
         let finished = record.steps.filter { $0.decision == .auto && !$0.isRead }.count
-        return finished == 0 ? "처리 중이에요" : "처리 중 · \(finished)건 끝냈어요"
+        return finished == 0 ? "하는 중이에요" : "진행하는 중 · \(finished)건 마침"
     }
 
     var body: some View {
@@ -14,14 +14,14 @@ struct AgentRunStatusLine: View {
         case .queued, .running:
             VStack(alignment: .leading, spacing: 4) {
                 GeneratingIndicator(label: progress)
-                Text("화면을 닫아도 계속 처리해요.")
+                Text("나가셔도 하던 일은 마저 끝내 둘게요.")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
             }
         case .stopped:
-            notice("\(AssistantIdentity.name)를 멈춰서 남은 일은 하지 않았어요.", symbol: "pause.circle")
+            notice("멈추라고 하셔서 남은 건 \(AssistantIdentity.name)가 손대지 않았어요.", symbol: "pause.circle")
         case .failed:
-            notice(record.changedData ? "끝까지 처리하지 못했어요. 아래 일까지만 했어요." : "처리하지 못했어요. 바뀐 것은 없어요.",
+            notice(record.changedData ? "끝까지 못 갔어요. 아래에 보이는 데까지만 해 뒀어요." : "끝내지 못했어요. 그래서 바꾼 것도 없어요.",
                    symbol: "exclamationmark.circle")
         case .done, .fallback:
             EmptyView()

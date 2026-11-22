@@ -69,8 +69,8 @@ async def test_operations_rate_and_comparison_are_defined(database: AsyncEngine,
     assert period["handled"] == 9 + 5 + 3 + 0
     assert period["rateDisplay"] == "63%"
     assert period["comparisons"] == [
-        {"label": "예약 전월 대비", "display": "+267%"},
-        {"label": "주문 전월 대비", "display": "+300%"},
+        {"label": "예약 지난달 대비", "display": "+267%"},
+        {"label": "주문 지난달 대비", "display": "+300%"},
     ]
     empty = (await get(client, "/operations", month="2026-01"))["period"]
     assert empty["ratePercent"] is None
@@ -150,5 +150,5 @@ async def test_channels_report_real_connection_state(database: AsyncEngine, clie
     assert displays(page["metrics"])["channels"] == "3개"
     channel = next(item for item in page["items"] if item["id"] == "channel-naver-store")
     assert channel["status"] == {"text": "아직 연결 안 됨", "tone": "neutral"}
-    assert channel["lines"][1] == "오늘 주문 3건 · 결제금액 126,000원"
+    assert channel["lines"][1] == "오늘 들어온 주문 3건 · 받은 돈 126,000원"
     assert channel["deadline"] == "문의 3건이 답을 기다려요"

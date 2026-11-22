@@ -21,8 +21,8 @@ final class BK06Reminders: NSObject, UNUserNotificationCenterDelegate {
         for reminder in reminders {
             guard let date = BK06Format.date(reminder.fireAt), date > .now else { continue }
             let content = UNMutableNotificationContent()
-            content.title = "\(reminder.customerName) 님이 아직 안 오셨어요"
-            content.body = "출석 체크가 아직 없어요. 눌러서 확인해 주세요."
+            content.title = "\(reminder.customerName) 님 아직 도착 전"
+            content.body = "오셨는지 아직 체크 안 하셨어요. 눌러서 봐 주세요."
             content.sound = .default
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: date.timeIntervalSinceNow, repeats: false)
             try? await center.add(UNNotificationRequest(

@@ -26,8 +26,8 @@ async def test_draft_edit_decision_and_reopen(
     assert initial["canReopen"] is False
     assert initial["text"] not in initial["lines"]
     expected_after = (
-        "승인해도 자동으로 게시되지 않아요. 게시는 직접 해 주세요."
-        if kind == "content" else "승인해도 자동으로 신청되거나 발송되지 않아요."
+        "글은 사장님이 직접 올려 주세요. 수락하셔도 저절로 올라가지 않아요."
+        if kind == "content" else "수락하셔도 신청이나 발송이 저절로 되지는 않아요."
     )
     assert initial["afterApproval"] == expected_after
     edited = await client.patch(f"{path}/draft", json={"draft": " 수정 중 ", "expectedRevision": 0})
@@ -161,7 +161,7 @@ async def test_content_decision_updates_link_and_remains_visible(
     }
     assert card["action"] is None
     if decision == "reject":
-        assert card["status"] == {"text": "반려함", "tone": "neutral"}
+        assert card["status"] == {"text": "쓰지 않기로 함", "tone": "neutral"}
     assert next(m["value"] for m in today["suggestions"]["metrics"] if m["key"] == "openRecommendations") == 2
     content = (await client.get("/channels", params={"section": "content"})).json()
     card = next(card for card in content["items"] if card["id"] == "draft-weekend-class")

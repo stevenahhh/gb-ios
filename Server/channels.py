@@ -67,7 +67,7 @@ def channel_metrics(counts: Counts) -> list[Metric]:
     return [
         channel_metric(counts.channels),
         metric("pendingInquiries", "답변 기다리는 문의", counts.pending_inquiries),
-        metric("drafts", "홍보 초안", counts.drafts),
+        metric("drafts", "홍보 글 초안", counts.drafts),
     ]
 
 
@@ -95,11 +95,11 @@ async def channel_cards(db: AsyncSession, today: date, text: str = "") -> list[C
     posts = await recent_posts(db, today)
     for channel, orders, amount, drafts, inquiries in (await db.execute(statement)).tuples():
         connected = channel.connection == "connected"
-        lines = [channel.handle or channel.name, f"오늘 주문 {count(orders)} · 결제금액 {won(amount)}"]
+        lines = [channel.handle or channel.name, f"오늘 들어온 주문 {count(orders)} · 받은 돈 {won(amount)}"]
         if drafts:
-            lines.append(f"게시물 초안 {count(drafts)}")
+            lines.append(f"올릴 글 초안 {count(drafts)}")
         if channel.id in posts:
-            lines.append(f"최근 7일 새 글 {posts[channel.id]:,}개")
+            lines.append(f"7일 동안 올린 글 {posts[channel.id]:,}개")
         cards.append(
             Card(
                 id=channel.id,
@@ -121,19 +121,19 @@ def content_card(draft: ContentDraftRow, channel: ChannelRow) -> Card:
     """Present a draft; reviewing does not publish it."""
     reviewed = draft.status == "reviewed"
     pending = draft.status == "draft"
-    closing = f"{channel.name}에는 직접 올려 주세요." if reviewed else draft.summary
+    closing = f"{channel.name}에 올리는 건 사장님 몫이에요." if reviewed else draft.summary
     return Card(
         id=draft.id,
         kind="content",
         title=draft.title,
         tag="콘텐츠",
         revision=draft.revision,
-        status=Status(text="검토 완료", tone="done")
+        status=Status(text="다 읽어 봄", tone="done")
         if reviewed
-        else Status(text="초안 준비", tone="progress") if pending
-        else Status(text="반려함", tone="neutral"),
-        lines=[f"{channel.name} 게시물", closing],
-        action=CardAction(code="reviewContent", label="홍보 글 검토하기") if pending else None,
+        else Status(text="초안 있음", tone="progress") if pending
+        else Status(text="쓰지 않기로 함", tone="neutral"),
+        lines=[f"{channel.name} 올릴 글", closing],
+        action=CardAction(code="reviewContent", label="홍보 글 읽어 보기") if pending else None,
         draft=draft_reference(draft),
     )
 

@@ -90,11 +90,11 @@ async def test_a_held_proposal_is_refused_at_once(database: AsyncEngine, client:
         ]
     for answer in answers:
         assert answer.status_code == 409
-        assert "다른 곳에서 처리하고 있어요. 잠시 뒤 다시 확인해 주세요." in answer.text
+        assert "다른 기기에서 하는 중이에요. 잠깐 기다렸다 새로고침해 주세요." in answer.text
     assert (await client.post(f"{path}/approve", json=revision)).status_code == 200
     again = await client.post(f"{path}/approve", json=revision)
     assert again.status_code == 409
-    assert "이미 승인한 제안이에요." in again.text
+    assert "벌써 수락하신 건이에요." in again.text
 
 
 def left_running(key: str, minutes: int) -> AgentRunRow:
@@ -114,7 +114,7 @@ async def test_a_tick_closes_what_a_dead_process_left_running(migrated: AsyncEng
     _ = await agent_worker.run_tick(NOW)
     assert await rows(migrated, RUNS) == [("run-old", "failed", "abandoned"), ("run-recent", "running", None)]
     [(answer,)] = await rows(migrated, "SELECT answer FROM agent_runs WHERE id = 'run-old'")
-    assert "확인해 주세요" in str(answer)
+    assert "앱에서 볼 수 있어요" in str(answer)
 
 
 async def test_a_tick_closes_nothing_while_the_owner_lock_is_held(migrated: AsyncEngine) -> None:

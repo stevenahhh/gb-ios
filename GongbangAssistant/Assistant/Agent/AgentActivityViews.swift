@@ -53,7 +53,7 @@ enum ActivityFilter: String, CaseIterable, Identifiable {
     case all = "전체"
     case chat = "채팅"
     case voice = "음성"
-    case proactive = "먼저 챙김"
+    case proactive = "먼저 챙긴 일"
 
     var id: Self { self }
 
@@ -68,10 +68,10 @@ enum ActivityFilter: String, CaseIterable, Identifiable {
 
     var emptyTitle: String {
         switch self {
-        case .all: "이번 주에 \(AssistantIdentity.name)가 한 일이 없어요"
-        case .chat: "채팅으로 맡긴 일이 없어요"
-        case .voice: "말로 맡긴 일이 없어요"
-        case .proactive: "\(AssistantIdentity.name)가 먼저 챙긴 일이 없어요"
+        case .all: "이번 주엔 아직 \(AssistantIdentity.name) 손을 거친 게 하나도 없네요"
+        case .chat: "아직 채팅으로 부탁하신 건 없어요"
+        case .voice: "음성으로 부탁하신 일이 아직 없어요"
+        case .proactive: "아직은 \(AssistantIdentity.name)가 먼저 나서서 챙긴 게 없어요"
         }
     }
 }
@@ -113,7 +113,7 @@ struct ActivityFeedList<Record: View>: View {
                     ContentUnavailableView {
                         Label(filter.emptyTitle, systemImage: "tray")
                     } actions: {
-                        Button("전체 보기") { filter = .all }
+                        Button("다 보기") { filter = .all }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
                     }
@@ -182,11 +182,11 @@ private struct ActivityRunRow: View {
     private var status: some View {
         switch run.status {
         case .queued, .running:
-            StatusBadge(Status(text: "처리 중", tone: .progress))
+            StatusBadge(Status(text: "진행 중", tone: .progress))
         case .stopped:
-            note("\(AssistantIdentity.name)를 멈춰서 여기까지만 했어요.", symbol: "pause.circle")
+            note("멈추라고 하셔서 \(AssistantIdentity.name)가 여기서 손을 뗐어요.", symbol: "pause.circle")
         case .failed:
-            note("끝까지 처리하지 못했어요.", symbol: "exclamationmark.circle")
+            note("마무리하지 못하고 멈췄어요.", symbol: "exclamationmark.circle")
         case .done, .fallback:
             EmptyView()
         }

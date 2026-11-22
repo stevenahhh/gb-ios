@@ -23,13 +23,13 @@ MAX_AUDIO_BYTES: Final = 2 * 1024 * 1024
 MAX_FILE_BYTES: Final = 2 * 1024 * 1024
 INVOICE_ROUTES: Final = "/agent/invoices/"
 AGENT_ROUTES: Final = "/agent/"
-AGENT_UNAVAILABLE: Final = "지금은 처리할 수 없어요. 잠시 뒤 다시 시도해 주세요."
+AGENT_UNAVAILABLE: Final = "잠깐 문제가 생겼어요. 조금 있다가 한 번 더 해 주세요."
 AGENT_ERRORS: Final[Mapping[int, str]] = {
-    401: "앱을 확인하지 못했어요.",
-    404: "찾는 내용이 없어요.",
-    409: "그사이 바뀌었어요. 다시 확인해 주세요.",
-    413: "보낸 내용이 너무 커요.",
-    422: "입력한 값을 다시 확인해 주세요.",
+    401: "앱 연결 정보가 맞지 않아요. 연결 설정을 살펴봐 주세요.",
+    404: "찾으시는 게 없어요.",
+    409: "그새 바뀐 게 있어요. 새로고침해서 봐 주세요.",
+    413: "용량이 너무 커서 못 받았어요.",
+    422: "적으신 내용에 틀린 데가 있어요. 한 번 더 봐 주세요.",
 }
 LOG_FIELDS: Final = (
     "request_id", "method", "route", "status", "duration_ms", "error_type", "upstream_status",

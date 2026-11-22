@@ -69,26 +69,26 @@ from models import (
 LOGGER: Final = logging.getLogger("roundup.agent")
 
 
-BAD_ARGS: Final = "말씀하신 내용을 이해하지 못했어요. 조금 더 자세히 말씀해 주세요."
+BAD_ARGS: Final = "무슨 뜻인지 잘 모르겠어요. 조금만 더 풀어서 얘기해 주세요."
 
 
-UNKNOWN_TOOL: Final = "제가 할 수 없는 일이에요."
+UNKNOWN_TOOL: Final = "이건 비서한테 맡기실 수 없어요."
 
 
-CONFLICT: Final = "그사이 내용이 바뀌었어요. 다시 확인해 주세요."
+CONFLICT: Final = "그사이 내용이 달라졌어요. 새로고침해서 봐 주세요."
 
 
-GONE: Final = "대상을 찾지 못했어요. 이미 바뀌었을 수 있어요."
+GONE: Final = "그 일이 안 보여요. 그새 바뀌었을지도 몰라요."
 
 
-STORAGE: Final = "처리하지 못했어요. 앱에서 확인해 주세요."
+STORAGE: Final = "중간에 문제가 생겼어요. 앱에서 상태를 봐 주세요."
 
 
 READ_TARGET: Final = TargetRef("session", "", "")
 
 
 NEW_TARGET: Final = "new"
-SUPERSEDED: Final = "새 요청으로 바뀌었어요."
+SUPERSEDED: Final = "새로 하신 말씀을 따를게요."
 
 
 REVISIONED: Final = {
@@ -218,7 +218,7 @@ async def perform(context: RunContext, call: ToolCall) -> Performed:
             StepDraft(
                 context.masker.text(call.name)[:60],
                 "T0",
-                "처리하지 못한 일",
+                "못 끝낸 일",
                 context.masker.args(call.arguments),
                 "refused",
                 STORAGE,
@@ -237,7 +237,7 @@ async def perform_in(db: AsyncSession, context: RunContext, call: ToolCall) -> P
             StepDraft(
                 context.masker.text(call.name)[:60],
                 "T0",
-                "할 수 없는 일",
+                "못 맡는 일",
                 masked_args,
                 "refused",
                 UNKNOWN_TOOL,

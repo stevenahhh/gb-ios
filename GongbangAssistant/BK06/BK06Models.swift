@@ -7,11 +7,11 @@ struct BK06Rule: Codable, Hashable {
     var carryOverAllowed = false
     var note = ""
 
-    var dayText: String { daysBefore == 0 ? "당일" : "\(daysBefore)일 전까지" }
+    var dayText: String { daysBefore == 0 ? "수업 당일" : "수업 \(daysBefore)일 전까지" }
 
     var outcomeText: String {
         switch refundPercent {
-        case nil: "정하지 않음"
+        case nil: "아직 안 정했어요"
         case 0: "환불 없음"
         case 100: "전액 환불"
         case let percent?: "\(percent)% 환불"
@@ -19,7 +19,7 @@ struct BK06Rule: Codable, Hashable {
     }
 
     var extrasText: String {
-        [deductMaterial ? "재료비 공제" : nil, carryOverAllowed ? "이월 가능" : nil].compactMap { $0 }
+        [deductMaterial ? "재료비 빼기" : nil, carryOverAllowed ? "다음 수업으로 넘기기 가능" : nil].compactMap { $0 }
             .joined(separator: " · ")
     }
 }
@@ -81,9 +81,9 @@ enum BK06Decision: String, Codable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .byRule: "규정대로"
-        case .carryOver: "1회 이월"
+        case .carryOver: "다음 수업으로 1회 넘기기"
         case .fullRefund: "전액 환불"
-        case .custom: "직접 정하기"
+        case .custom: "직접 고르기"
         }
     }
 }
@@ -106,12 +106,12 @@ enum BK06Warning: String, Decodable {
 
     var text: String {
         switch self {
-        case .noNotice: "이 손님에게 안내한 규정 기록이 없어요. 지금 규정으로 계산했어요."
-        case .noPolicy: "규정을 먼저 정해 두면 금액을 계산해 드려요."
-        case .undecidedRule: "규정에 정하지 않은 조건이에요. 사장님이 판단해 주세요."
-        case .unreadRule: "규정에 아직 확인하지 않은 문장이 있어 금액을 정하지 않았어요. 문장을 확인한 뒤 다시 저장해 주세요."
-        case .materialUnknown: "재료비가 적혀 있지 않아 공제 금액을 계산하지 못했어요."
-        case .naverBooking: "네이버 예약으로 들어온 예약이에요. 네이버에 설정한 환불 기준을 먼저 확인해 주세요."
+        case .noNotice: "이 손님께 어떤 규정을 보여 드렸는지 남아 있지 않아요. 그래서 현재 규정으로 계산했어요."
+        case .noPolicy: "규정부터 만들어 두시면 돌려드릴 금액을 바로 뽑아 드려요."
+        case .undecidedRule: "규정에 없는 경우라서 사장님이 직접 정해 주셔야 해요."
+        case .unreadRule: "아직 안 보신 문장이 규정에 남아서 금액은 비워 뒀어요. 그 부분을 보시고 저장을 한 번 더 눌러 주세요."
+        case .materialUnknown: "재료비 칸이 비어서 얼마를 뺄지 못 정했어요."
+        case .naverBooking: "네이버로 잡힌 자리라서 그쪽에 걸어 둔 환불 기준이 먼저예요. 네이버부터 열어 봐 주세요."
         }
     }
 }
@@ -159,13 +159,13 @@ struct BK06Case: Decodable, Identifiable {
     var title: String {
         let kindText = switch kind {
         case "no_show": "노쇼"
-        case "under_min": "인원 미달"
+        case "under_min": "인원 부족"
         default: "취소"
         }
         let outcome = switch decision {
-        case "run": "진행"
-        case "merge": "합반"
-        case "cancel": "회차 취소"
+        case "run": "예정대로 수업"
+        case "merge": "반 합치기"
+        case "cancel": "이번 수업 취소"
         case let value?: BK06Decision(rawValue: value)?.title
         case nil: String?.none
         }
@@ -191,8 +191,8 @@ struct BK06LateCard: Decodable, Identifiable, Hashable {
     var id: String { bookingId }
 
     /// While the class runs the guest is late; once it ends only the attendance record is missing.
-    var headline: String { ended == true ? "\(customerName) 님 출석 기록이 없어요" : "\(customerName) 님이 아직 안 오셨어요" }
-    var detail: String { ended == true ? "\(classTitle) · 수업이 끝났어요" : "\(classTitle) · 시작 \(BK06Format.elapsed(minutesLate)) 지남" }
+    var headline: String { ended == true ? "\(customerName) 님이 오셨는지 체크가 안 돼 있어요" : "\(customerName) 님 아직 도착 전" }
+    var detail: String { ended == true ? "\(classTitle) · 수업 마쳤어요" : "\(classTitle) · 시작한 지 \(BK06Format.elapsed(minutesLate)) 넘었어요" }
 }
 
 struct BK06Reminder: Decodable {
@@ -267,7 +267,7 @@ struct BK06RefillTarget: Decodable, Identifiable, Hashable {
     let source: String
     let draft: String
     var id: String { entryId }
-    var sourceText: String { source == "waitlist" ? "대기 요청" : "보강 남음" }
+    var sourceText: String { source == "waitlist" ? "빈자리 나면 연락 요청" : "보강 수업 남음" }
 }
 
 struct BK06Refill: Decodable {
@@ -326,7 +326,7 @@ enum BK06Format {
     }
 
     static func remaining(_ minutes: Int) -> String {
-        if minutes <= 0 { return "지남" }
+        if minutes <= 0 { return "이미 지났어요" }
         if minutes < 60 { return "\(minutes)분 남음" }
         if minutes < 60 * 24 { return "\(minutes / 60)시간 남음" }
         return "\(minutes / (60 * 24))일 남음"

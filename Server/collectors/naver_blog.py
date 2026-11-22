@@ -11,8 +11,8 @@ from pydantic import Field
 from collectors.base import SourceConfig, SourceId
 from collectors.feed import FeedCollector
 
-OFF: Final = "네이버 블로그 자동 수집이 꺼져 있어요."
-MISSING: Final = "블로그 아이디를 입력해 주세요."
+OFF: Final = "지금은 네이버 블로그 글을 자동으로 안 가져와요."
+MISSING: Final = "아이디 칸이 비어 있어요. 블로그 아이디를 넣어 주세요."
 
 
 class BlogConfig(SourceConfig):

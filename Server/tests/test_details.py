@@ -36,14 +36,14 @@ async def test_booking_detail_and_structured_card(database: AsyncEngine, client:
     }
     assert card["draft"] is None
     pending = (await client.get("/bookings/booking-jieun")).json()
-    assert (pending["depositConfirmed"], pending["depositDeadline"]) == (False, "입금 기한 오늘 18:00")
+    assert (pending["depositConfirmed"], pending["depositDeadline"]) == (False, "입금 마감 오늘 18:00")
     assert pending["action"]["code"] == "confirmDeposit"
     assert pending["undo"] is None
     finished = (await client.get("/bookings", params={"session": "session-today-morning"})).json()["items"][0]
     assert (finished["status"], finished["tag"]) == ({"text": "수업 완료", "tone": "done"}, "확정")
     async with database.begin() as connection:
         _ = await connection.execute(text("UPDATE bookings SET channel_id = NULL WHERE id = 'booking-yuna'"))
-    assert (await client.get("/bookings/booking-yuna")).json()["source"] == "직접 등록"
+    assert (await client.get("/bookings/booking-yuna")).json()["source"] == "직접 입력"
 
 
 async def test_session_detail_active_booking_order_and_completion(
@@ -123,8 +123,8 @@ async def test_custom_operations_uses_inclusive_range_and_equal_previous_period(
     }
     assert (period["total"], period["handled"]) == (12, 3)
     assert period["comparisons"] == [
-        {"label": "예약 이전 기간 대비", "display": "+300%"},
-        {"label": "주문 이전 기간 대비", "display": "+0%"},
+        {"label": "예약 지난 기간 대비", "display": "+300%"},
+        {"label": "주문 지난 기간 대비", "display": "+0%"},
     ]
     one_day = (await client.get(
         "/operations", params={"start": "2026-11-19", "end": "2026-11-19"},
@@ -158,14 +158,14 @@ async def test_operations_numbers_explain_themselves(database: AsyncEngine, clie
     body = (await client.get("/operations", params={"month": "2026-11"})).json()
     assert {m["key"]: m["detail"] for m in body["period"]["metrics"]} == {
         "bookings": "지난달보다 +8건", "orders": "지난달보다 +6건",
-        "shipments": "발송 대기 2건", "inquiries": "답변 기다리는 문의 3건",
+        "shipments": "발송 대기 2건", "inquiries": "답장 못 한 문의 3건",
     }
     custom = (await client.get("/operations", params={"start": "2026-11-18", "end": "2026-11-19"})).json()
-    assert custom["period"]["metrics"][0]["detail"] == "이전 기간보다 +3건"
+    assert custom["period"]["metrics"][0]["detail"] == "지난 기간보다 +3건"
     attention = {m["key"]: m["detail"] for m in body["attention"]}
     deposits = (await client.get("/bookings", params={"status": "deposit_pending"})).json()["total"]
     assert attention["depositPending"].endswith(f"님 외 {deposits - 1}명")
-    assert attention["pendingInquiries"] == "비서 초안 3건 준비됨"
+    assert attention["pendingInquiries"] == "비서가 쓴 초안 3건 있어요"
     assert attention["unshipped"].endswith("택배 수거")
     async with database.begin() as connection:
         _ = await connection.execute(
@@ -207,7 +207,7 @@ async def test_calendar_rows_carry_timeline_facts(database: AsyncEngine, client:
         ))
     days = await november()
     assert row(days, "task:task-clay")["revision"] == 1
-    assert row(days, "session:session-today-afternoon")["subject"] == "아직 예약 없음"
+    assert row(days, "session:session-today-afternoon")["subject"] == "아직 예약한 분이 없어요"
 
 
 async def test_order_and_shipment_cards_share_fulfilment_progress(
@@ -237,7 +237,7 @@ async def test_deadlines_are_sent_as_moments(database: AsyncEngine, client: Asyn
     assert (pickup["suffix"], pickup["missed"]) == (" 택배 수거", "수거 놓침")
     assert re.fullmatch(r"2026-\d\d-\d\dT\d\d:\d\d:00\+09:00", pickup["at"])
     deposit = (await client.get("/bookings/booking-jieun")).json()
-    assert deposit["depositDue"]["prefix"] == "입금 기한"
+    assert deposit["depositDue"]["prefix"] == "입금 마감"
     today = (await client.get("/today")).json()
     ship_today = next(m for m in today["tasks"]["metrics"] if m["key"] == "shipToday")["value"]
     operations = (await client.get("/operations")).json()

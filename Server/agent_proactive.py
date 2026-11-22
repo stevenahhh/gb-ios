@@ -62,7 +62,7 @@ async def unconfirmed_orders(db: AsyncSession, now: datetime) -> list[Finding]:
             target=TargetRef("order", order.id, f"#{order.order_number}", order.revision),
             title=f"#{order.order_number} 주문 확인",
             reason=(
-                f"결제한 지 {hours_since(order.ordered_at, now)}시간이 지났는데 "
+                f"결제하고 {hours_since(order.ordered_at, now)}시간이 지났는데 "
                 "아직 주문을 확인하지 않았어요."
             ),
             preview=(
@@ -96,16 +96,16 @@ def parcel_finding(kind: ParcelKind, parcel: tuple[ShipmentRow, OrderRow, str], 
     missed = shipment.ship_by_at < now
     match kind:
         case "parcel_unpacked":
-            title = f"#{order.order_number} 포장 확인"
+            title = f"#{order.order_number} 포장 다 됐나요"
             reason = (
-                f"택배 수거 예정이 {pickup}이었는데 아직 포장하지 않았어요." if missed
-                else f"{pickup}에 택배를 보내야 하는데 아직 포장하지 않았어요."
+                f"택배 가져갈 때가 {pickup}이었는데 포장이 아직이에요." if missed
+                else f"{pickup}에 택배가 나가요. 포장은 아직이에요."
             )
         case "invoice_missing":
-            title = f"#{order.order_number} 송장 등록"
+            title = f"#{order.order_number} 송장 넣기"
             reason = (
-                f"포장을 마쳤는데 송장번호가 없어요. 택배 수거 예정은 {pickup}이었어요." if missed
-                else f"포장을 마쳤는데 송장번호가 없어요. {pickup}에 택배를 보내야 해요."
+                f"포장은 끝났어요. 송장번호만 비어 있어요. 기사님 방문은 {pickup}이었어요." if missed
+                else f"포장은 끝났어요. 송장번호만 비어 있어요. {pickup}에 택배가 나가요."
             )
         case _:
             assert_never(kind)
@@ -162,14 +162,14 @@ async def deposits_due(db: AsyncSession, now: datetime) -> list[Finding]:
             ),
             title=f"{session.title} 예약금 확인",
             reason=(
-                f"예약금 입금 기한이 지났는데 아직 입금을 확인하지 않았어요. 기한은 {when}이었어요."
+                f"입금 마감을 넘겼어요. 예약금은 아직 확인 전이에요. 마감은 {when}이었어요."
                 if deposit_due < now
-                else f"예약금 입금 기한이 {when}인데 아직 입금을 확인하지 않았어요."
+                else f"예약금은 {when}까지 받기로 했는데 입금 확인을 아직 안 하셨어요."
             ),
             preview=(
                 ("수업", f"{month_day_weekday(starts.date())}요일 {clock(starts)}"),
                 ("예약자", f"{masked(name)} · {booking.party_size}명"),
-                ("예약금", won(booking.deposit_won)), ("입금 기한", when),
+                ("예약금", won(booking.deposit_won)), ("입금 마감", when),
             ),
             args={"booking": session.title},
         ))
@@ -200,10 +200,10 @@ async def undrafted_inquiries(db: AsyncSession, now: datetime) -> list[Finding]:
     return [
         Finding(
             kind="inquiry_undrafted", day=today,
-            target=TargetRef("inquiry", row.id, f"{masked(row.customer)} 님 문의", row.revision),
-            title=f"{masked(row.customer)} 님 문의 답장 초안",
-            reason=f"문의가 온 지 {hours_since(row.received_at, now)}시간이 지났는데 답장 초안이 없어요.",
-            preview=(("받은 때", relative_moment(row.received_at, today)),),
+            target=TargetRef("inquiry", row.id, f"{masked(row.customer)} 님 질문", row.revision),
+            title=f"{masked(row.customer)} 님께 미리 쓴 답장",
+            reason=f"물어보신 지 {hours_since(row.received_at, now)}시간째 답장을 아직 못 썼어요.",
+            preview=(("받은 시간", relative_moment(row.received_at, today)),),
             args={"inquiry": row.customer},
         )
         for row in rows
@@ -216,7 +216,7 @@ async def under_min_classes(db: AsyncSession, now: datetime) -> list[Finding]:
     return [
         class_finding(
             card,
-            f"재료 주문 마감은 {due}이에요.",
+            f"재료는 {due}까지 사야 해요.",
             now,
         )
         for card in await under_min_cards(db, now)
@@ -261,14 +261,14 @@ def class_finding(card: UnderMinCard, when: str, now: datetime) -> Finding:
     return Finding(
         kind="class_under_min", day=local(now).date(),
         target=TargetRef("session", card.session_id, card.class_name),
-        title=f"{card.class_name} 진행 여부 결정",
-        reason=f"예약 인원이 {card.booked}명이라 최소 인원 {card.min_seats}명보다 적어요. {when}",
+        title=f"{card.class_name} 수업 열지 정해 주세요",
+        reason=f"예약 인원이 {card.booked}명뿐이라 최소 {card.min_seats}명이 안 돼요. {when}",
         preview=(
             ("수업", f"{month_day_weekday(starts.date())}요일 {clock(starts)}"),
             ("예약", f"{card.booked}명"), ("최소 인원", f"{card.min_seats}명"),
         ),
         args={
-            "title": f"{card.class_name} 진행 여부 결정", "day": deadline_at.date().isoformat(),
+            "title": f"{card.class_name} 수업 열지 정해 주세요", "day": deadline_at.date().isoformat(),
             "time": clock(deadline_at), "detail": f"예약 {card.booked}명, 최소 인원 {card.min_seats}명",
         },
     )
@@ -297,11 +297,11 @@ async def waiting_quotes(db: AsyncSession, now: datetime) -> list[Finding]:
         findings.append(Finding(
             kind="quote_waiting", day=today,
             target=TargetRef("quote", row.id, view.title, row.revision),
-            title=f"{view.title} 견적 답 기록",
+            title=f"{view.title} 견적 답변 적기",
             reason=(
-                "견적을 보낸 뒤 다시 연락하기로 한 때가 지났는데 기관의 답을 아직 기록하지 않았어요."
+                "기관에 다시 연락할 날이 지났어요. 답을 받으셨다면 적어 주세요."
                 if row.follow_up_at is not None
-                else f"견적을 보낸 지 {days}일이 넘었는데 기관의 답을 아직 기록하지 않았어요."
+                else f"견적 보내고 {days}일째 기관 답변 칸이 비어 있어요."
             ),
             preview=(("내용", view.detail), ("견적", won(view.total_krw))),
             args={"quote": view.title},

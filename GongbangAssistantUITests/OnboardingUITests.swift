@@ -72,7 +72,7 @@ final class OnboardingUITests: RoundupUITestCase {
         type("my..workshop", into: "instagram", in: app)
         let problem = app.descendants(matching: .any)["connections.edit.problem"].firstMatch
         XCTAssertTrue(problem.waitForExistence(timeout: 15))
-        XCTAssertTrue(waitFor(problem, toShow: "아이디 형식이 맞지 않아요"), problem.label)
+        XCTAssertTrue(waitFor(problem, toShow: "아이디가 좀 이상해요. 한 번 더 봐 주세요."), problem.label)
         keepScreenshot(of: app, named: "onboarding-service-refused")
     }
 
@@ -103,7 +103,7 @@ final class OnboardingUITests: RoundupUITestCase {
         XCTAssertTrue(option.isSelected)
         XCTAssertTrue(element(labelled: "아직 결제되지 않아요", in: app).exists)
         keepScreenshot(of: app, named: "onboarding-plan-chosen")
-        app.buttons["이 요금제로 정해 두기"].tap()
+        app.buttons["이걸로 할게요"].tap()
         XCTAssertTrue(page(6, in: app).waitForExistence(timeout: 15))
         app.buttons["onboarding.skipAll"].tap()
         XCTAssertTrue(app.tabBars.buttons["설정"].waitForExistence(timeout: 20))

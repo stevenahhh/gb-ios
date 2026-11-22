@@ -79,7 +79,7 @@ async def delete_memory(db: AsyncSession, memory_id: str, now: datetime) -> None
     """Forget one note for good; the owner's own action needs no evidence."""
     row = await db.get(AgentMemoryRow, memory_id, with_for_update=True)
     if row is None or row.deleted_at is not None:
-        raise HTTPException(404, "그 기억을 찾지 못했어요.")
+        raise HTTPException(404, "그건 기억에 없어요.")
     row.deleted_at = now
     await db.flush()
 
@@ -110,10 +110,10 @@ async def locate_new_memory(db: AsyncSession, args: RememberArgs, env: ToolEnv) 
     return Located(
         Resolution((TargetRef("memory", "new", clipped(args.text)),), BY_IDENTIFIER),
         claims=(
-            Claim("기억할 말", args.source_quote, "quote"),
-            Claim("기억 내용", args.text, "quote"),
+            Claim("사장님 말씀", args.source_quote, "quote"),
+            Claim("기억할 것", args.text, "quote"),
         ),
-        preview=(("기억할 내용", args.text),),
+        preview=(("기억해 둘 것", args.text),),
     )
 
 
@@ -130,7 +130,7 @@ async def remember(db: AsyncSession, args: RememberArgs, target: TargetRef, env:
     db.add(row)
     await db.flush()
     return Outcome(
-        f"기억했어요: {args.text}",
+        f"잊지 않을게요: {args.text}",
         TargetRef("memory", row.id, clipped(args.text)),
         UndoTicket(f"/agent/memories/{row.id}"),
     )
@@ -139,7 +139,7 @@ async def remember(db: AsyncSession, args: RememberArgs, target: TargetRef, env:
 async def undo_remember(db: AsyncSession, undo: UndoInput) -> Outcome:
     """Forget a note the assistant just kept."""
     await delete_memory(db, undo.target.id, undo.now)
-    return Outcome("기억한 내용을 지웠어요.")
+    return Outcome("말씀하신 대로 잊었어요.")
 
 
 class ForgetArgs(ToolArgs):
@@ -158,10 +158,10 @@ async def locate_memory(db: AsyncSession, args: ForgetArgs, env: ToolEnv) -> Loc
         Resolution(
             tuple(TargetRef("memory", row.id, clipped(row.text)) for row, _ in found),
             confidence,
-            "그런 기억을 찾지 못했어요.",
+            "그런 건 기억에 없어요.",
         ),
-        claims=(Claim("잊기", FORGET_WORDS, "words"), Claim("메모", args.memory, "text")),
-        preview=(("메모", found[0][0].text),) if len(found) == 1 else (),
+        claims=(Claim("잊기", FORGET_WORDS, "words"), Claim("지울 메모", args.memory, "text")),
+        preview=(("지울 메모", found[0][0].text),) if len(found) == 1 else (),
     )
 
 
@@ -175,7 +175,7 @@ async def forget(db: AsyncSession, args: ForgetArgs, target: TargetRef, env: Too
         raise RevisionConflictError
     row.deleted_at = env.now
     await db.flush()
-    return Outcome(f"기억을 지웠어요: {clipped(row.text)}", target, UndoTicket("/agent/memories"))
+    return Outcome(f"잊었어요: {clipped(row.text)}", target, UndoTicket("/agent/memories"))
 
 
 async def undo_forget(db: AsyncSession, undo: UndoInput) -> Outcome:
@@ -185,7 +185,7 @@ async def undo_forget(db: AsyncSession, undo: UndoInput) -> Outcome:
         raise TargetGoneError
     row.deleted_at = None
     await db.flush()
-    return Outcome(f"지운 기억을 되돌렸어요: {clipped(row.text)}")
+    return Outcome(f"다시 기억해 둘게요: {clipped(row.text)}")
 
 
 class RecallArgs(ToolArgs):

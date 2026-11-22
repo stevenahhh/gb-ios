@@ -46,9 +46,9 @@ async def reply_activities(db: Session, since: datetime) -> list[Activity]:
         Activity(
             id=f"inquiry:{row.id}", kind="inquiryReply",
             at=local(row.received_at).isoformat(timespec="seconds"),
-            target_id=row.id, summary=f"{row.customer} 님 문의에 답변을 써 뒀어요",
+            target_id=row.id, summary=f"{row.customer} 님께 보낼 답장, 준비해 놨어요",
             status="확인 대기" if row.status == "pending" else None,
-            evidence=[f"손님 문의 · {row.question}", *row.facts],
+            evidence=[f"손님이 물어본 내용 · {row.question}", *row.facts],
         )
         for row in rows
     ]
@@ -74,8 +74,8 @@ async def pickup_activities(db: Session, now: datetime) -> list[Activity]:
     return [
         Activity(
             id=f"pickup:{card.id}", at=card.due.at, kind="missedPickup", target_id=card.id,
-            summary=f"수거를 놓친 택배를 찾았어요 · {card.title}", status="확인 필요",
-            evidence=[*card.lines, f"수거 시각 {card.deadline}"] if card.deadline else list(card.lines),
+            summary=f"기사님이 못 가져간 택배 · {card.title}", status="확인 필요",
+            evidence=[*card.lines, f"가져가는 시간 {card.deadline}"] if card.deadline else list(card.lines),
         )
         for card in cards
         if card.due is not None and datetime.fromisoformat(card.due.at) < now

@@ -121,7 +121,7 @@ def booking_card(record: BookingRecord, now: datetime) -> Card:
     match booking.status:
         case "confirmed":
             remaining = max(session.capacity - taken, 0)
-            lines.append(f"{who} · 예약금 확인 완료 · 남은 자리 {remaining}개")
+            lines.append(f"{who} · 입금 끝 · 빈자리 {remaining}개")
             return Card(
                 id=booking.id, kind="booking", title=session.title, lines=lines, tag="확정",
                 status=Status(text="수업 완료" if session.status == "completed" else "확정", tone="done"),
@@ -136,8 +136,8 @@ def booking_card(record: BookingRecord, now: datetime) -> Card:
             return Card(
                 id=booking.id, kind="booking", title=session.title, lines=lines, tag="예약금 대기",
                 status=Status(text="예약금 대기", tone="attention"), revision=booking.revision,
-                deadline=f"입금 기한 {phrase}" if deposit_due >= now else f"입금 기한 지남 · {phrase}",
-                due=due(deposit_due, prefix="입금 기한"),
+                deadline=f"입금 마감 {phrase}" if deposit_due >= now else f"입금 마감 지남 · {phrase}",
+                due=due(deposit_due, prefix="입금 마감"),
                 action=CardAction(code="confirmDeposit", label="입금 확인하기"),
                 booking=info,
             )

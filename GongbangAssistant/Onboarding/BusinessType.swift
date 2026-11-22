@@ -15,7 +15,7 @@ enum BusinessType: String, CaseIterable, Identifiable, Codable, Hashable, Sendab
         case .oneDayClass: "원데이 클래스"
         case .customOrder: "주문 제작"
         case .onlineSales: "온라인 판매"
-        case .outreach: "출강"
+        case .outreach: "출장 수업"
         }
     }
 }

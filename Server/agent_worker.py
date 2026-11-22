@@ -42,12 +42,12 @@ from observability import configure_logging
 
 LOGGER: Final = logging.getLogger("roundup.agent")
 TICK_LOCK: Final = (0x61677074, 1)
-QUESTION: Final = "오늘 챙길 일 살펴보기"
+QUESTION: Final = "오늘 할 일 챙겨 보기"
 POLL: Final = timedelta(seconds=5)
 PER_TICK: Final = 10
 """Raised in one tick, so the owner's own question never waits long for the shared run lock."""
 ABANDONED_AFTER: Final = timedelta(minutes=10)
-ABANDONED_NOTE: Final = "처리하다가 멈췄어요. 어디까지 했는지 앱에서 확인해 주세요."
+ABANDONED_NOTE: Final = "일이 도중에 멈췄어요. 진행된 만큼은 앱에서 볼 수 있어요."
 BUSY_RETRY: Final = timedelta(minutes=1)
 BACKOFF_BASE: Final = timedelta(seconds=30)
 BACKOFF_CAP: Final = timedelta(minutes=30)

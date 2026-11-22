@@ -81,4 +81,4 @@ async def test_a_file_is_not_approved_while_invoices_are_switched_off(
 ) -> None:
     await set_mode(database, "auto", register_invoice="off")
     refused = await client.post("/agent/invoices/any/approve?filename=a.csv", content=b"a")
-    assert (refused.status_code, refused.json()["detail"][:2]) == (409, "꺼 ")
+    assert (refused.status_code, refused.json()["detail"][:2]) == (409, "설정")

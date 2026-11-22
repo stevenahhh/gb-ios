@@ -74,7 +74,7 @@ async def locate_content(db: AsyncSession, args: ContentArgs, env: ToolEnv) -> L
                 for row, channel, _ in found
             ),
             max((score for *_, score in found), default=BY_IDENTIFIER),
-            "검토 중인 초안을 찾지 못했어요.",
+            "살펴보는 중인 초안이 없어요.",
         ),
         claims=owner_claims(ASKS_CONTENT, named_in("초안", args.draft), only=len(rows) == 1),
         preview=preview,
@@ -89,7 +89,7 @@ async def save_content(db: AsyncSession, args: ContentArgs, target: TargetRef, e
     save_text(row, args.text)
     await db.flush()
     return Outcome(
-        f"홍보 초안을 저장했어요: {row.title}",
+        f"저장해 둔 홍보 글: {row.title}",
         TargetRef("content", row.id, row.title, row.revision),
         UndoTicket(f"/assistant-drafts/content/{row.id}/draft", {"body": previous}),
     )
@@ -100,7 +100,7 @@ async def undo_content(db: AsyncSession, undo: UndoInput) -> Outcome:
     row = await lock_row(db, ContentDraftRow, undo.target.id, undo.target.revision)
     save_text(row, required_text(str(undo.data["body"])))
     await db.flush()
-    return Outcome(f"홍보 초안을 되돌렸어요: {row.title}")
+    return Outcome(f"되돌린 홍보 글: {row.title}")
 
 
 class ReplyArgs(ToolArgs):
@@ -129,7 +129,7 @@ async def locate_inquiry(db: AsyncSession, args: ReplyArgs, env: ToolEnv) -> Loc
                 for row, _ in found
             ),
             max((score for _, score in found), default=BY_IDENTIFIER),
-            "답변 기다리는 문의를 찾지 못했어요.",
+            "답장 안 한 문의 목록엔 없어요.",
         ),
         claims=owner_claims(ASKS_REPLY, named_in("문의", args.inquiry), only=len(rows) == 1),
         preview=preview,
@@ -148,13 +148,13 @@ async def save_reply(db: AsyncSession, args: ReplyArgs, target: TargetRef, env: 
         await drop_written(target.id, written, earlier, env.now)
         raise
     if written.judgment is not None:
-        return Outcome("답을 정하기 어려운 문의라 판단 요청으로 올렸어요. 앱에서 확인해 주세요.", target)
+        return Outcome("비서가 답하기 애매한 문의예요. 사장님 판단이 필요해서 앱에 올려 뒀어요.", target)
     previous = row.draft
     save_reply_text(row, written.draft)
     await db.flush()
-    lock_note = "" if written.lock != "locked" else " 숫자가 장부와 맞지 않아 확인이 필요해요."
+    lock_note = "" if written.lock != "locked" else " 장부와 숫자가 달라요. 한 번 봐 주세요."
     return Outcome(
-        f"답장 초안을 저장했어요.{lock_note} 보내기 전에 확인해 주세요.",
+        f"답장 초안 저장 끝.{lock_note} 손님께 가기 전에 한 번 읽어 주세요.",
         TargetRef("inquiry", row.id, target.label, row.revision),
         UndoTicket(
             f"/inquiries/{row.id}/draft",
@@ -295,7 +295,7 @@ async def undo_reply(db: AsyncSession, undo: UndoInput) -> Outcome:
     save_reply_text(row, str(undo.data["draft"]))
     await restore_check(db, row.id, written, EarlierReply.model_validate(undo.data["earlier"]))
     await db.flush()
-    return Outcome("답장 초안을 되돌렸어요.")
+    return Outcome("예전 답장 초안으로 돌렸어요.")
 
 
 DRAFTS: Final[tuple[Tool, ...]] = (

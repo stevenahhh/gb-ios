@@ -69,7 +69,7 @@ final class BK25UITests: RoundupUITestCase {
         let write = app.descendants(matching: .any)["inquiry.generate"].firstMatch
         XCTAssertTrue(scrollTo(write, in: app))
         write.tap()
-        app.buttons["새로 쓰기"].tap()
+        app.buttons["처음부터 다시 쓰기"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["bk25.lockLine"].firstMatch.waitForExistence(timeout: 90),
                       "the line under the button is missing")
         XCTAssertTrue(scrollTo(app.buttons["bk25.more"], in: app), "the mismatch summary is missing")
@@ -83,7 +83,7 @@ final class BK25UITests: RoundupUITestCase {
         let complete = app.buttons["inquiry.complete"]
         XCTAssertTrue(scrollBackTo(complete, in: app))
         XCTAssertFalse(complete.isEnabled, "a reply with numbers that differ must not be completed")
-        XCTAssertTrue(element(labelled: "숫자 3개가 장부와 달라요", in: app).exists)
+        XCTAssertTrue(element(labelled: "장부와 다른 숫자 3개", in: app).exists)
         keepScreenshot(of: app, named: "bk25-locked-button")
 
         for wrong in ["‘네 자리’", "‘45,000원’", "‘30,000원’"] {
@@ -93,7 +93,7 @@ final class BK25UITests: RoundupUITestCase {
             fix.tap()
             XCTAssertTrue(app.staticTexts[wrong].waitForNonExistence(timeout: 90), "\(wrong) was not fixed")
         }
-        XCTAssertTrue(scrollBackTo(app.staticTexts["장부와 다른 숫자를 찾지 못했어요"], in: app))
+        XCTAssertTrue(scrollBackTo(app.staticTexts["장부와 어긋난 숫자는 없어요"], in: app))
         let kinds = app.descendants(matching: .any)["bk25.checkedKinds"].firstMatch
         XCTAssertTrue(kinds.waitForExistence(timeout: 60), "the compared kinds are not named")
         for kind in ["남은 자리", "가격", "예약금"] {
@@ -109,13 +109,13 @@ final class BK25UITests: RoundupUITestCase {
         let app = try launch()
         writeLockedReply(in: app)
         app.buttons["bk25.more"].tap()
-        app.buttons["이번만 그대로 보내기"].tap()
-        let reason = app.buttons["손님과 따로 정했어요"]
+        app.buttons["이번 한 번만 그냥 보내기"].tap()
+        let reason = app.buttons["손님이랑 따로 얘기 끝났어요"]
         XCTAssertTrue(reason.waitForExistence(timeout: 60), "the reasons did not come up")
         keepScreenshot(of: app, named: "bk25-override-reasons")
         reason.tap()
         XCTAssertTrue(reason.waitForNonExistence(timeout: 90))
-        XCTAssertTrue(scrollBackTo(element(labelled: "답변 준비됨", in: app), in: app), "the reply was not completed")
+        XCTAssertTrue(scrollBackTo(element(labelled: "답장 다 됐어요", in: app), in: app), "the reply was not completed")
         keepScreenshot(of: app, named: "bk25-override-done")
     }
 
@@ -170,7 +170,7 @@ final class BK25UITests: RoundupUITestCase {
         let cards = app.buttons["settings.factCards"]
         XCTAssertTrue(cards.waitForExistence(timeout: 60))
         cards.tap()
-        XCTAssertTrue(element(labelled: "캘린더에 수업을 먼저 넣어 주세요", in: app).waitForExistence(timeout: 60))
+        XCTAssertTrue(element(labelled: "수업부터 하나 캘린더에 넣어 주세요", in: app).waitForExistence(timeout: 60))
         keepScreenshot(of: app, named: "bk25-fact-card-empty")
     }
 

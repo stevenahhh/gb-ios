@@ -15,17 +15,17 @@ struct BK06CancellationView: View {
     var body: some View {
         List {
             CardSection {
-                TextField("손님이 보낸 글을 붙여넣어 주세요", text: $message, axis: .vertical)
+                TextField("손님한테 받은 취소 문자를 여기에 붙여 넣어 주세요", text: $message, axis: .vertical)
                     .lineLimit(4...12)
-                    .accessibilityLabel("손님 메시지")
+                    .accessibilityLabel("손님이 보낸 문자")
                     .accessibilityIdentifier("k06.message")
                 PasteButton(payloadType: String.self) { values in
                     Task { @MainActor in message = values.first ?? "" }
                 }
             } header: {
-                Text("손님 메시지")
+                Text("손님이 보낸 문자")
             } footer: {
-                Text("메시지는 예약을 찾는 데만 쓰고 저장하지 않아요.")
+                Text("붙여 넣으신 문자는 예약 찾을 때만 쓰고 어디에도 남기지 않아요.")
             }
             if let errorMessage {
                 CardSection { BK06ErrorRow(message: errorMessage) }
@@ -34,12 +34,12 @@ struct BK06CancellationView: View {
                 results(intake)
             }
             CardSection {
-                BK06PrimaryButton(title: "예약 찾기", isBusy: isBusy, identifier: "k06.find") { find() }
+                BK06PrimaryButton(title: "예약 찾아보기", isBusy: isBusy, identifier: "k06.find") { find() }
                     .disabled(trimmed.isEmpty)
             }
         }
         .cardList()
-        .navigationTitle("취소 메시지")
+        .navigationTitle("손님이 보낸 취소 문자")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selected) { booking in
             BK06QuoteView(booking: booking, category: intake?.reasonCategory, pastedAt: pastedAt)
@@ -50,14 +50,14 @@ struct BK06CancellationView: View {
     private func results(_ intake: BK06Intake) -> some View {
         if intake.candidates.isEmpty {
             CardSection {
-                Text("이 메시지와 맞는 예약을 찾지 못했어요")
+                Text("이 문자에 맞는 예약이 안 보여요")
                     .accessibilityIdentifier("k06.notFound")
                 ForEach(intake.recent) { candidateRow($0) }
             } footer: {
-                Text(intake.recent.isEmpty ? "앞으로 7일 안에 잡힌 예약이 없어요." : "앞으로 7일 예약에서 직접 골라 주세요.")
+                Text(intake.recent.isEmpty ? "다음 7일 동안은 잡혀 있는 예약이 하나도 없어요." : "다음 7일 안의 목록에서 하나 골라 주세요.")
             }
         } else {
-            CardSection(intake.candidates.count > 1 ? "어느 예약인가요?" : "찾은 예약") {
+            CardSection(intake.candidates.count > 1 ? "어떤 예약 말씀이세요?" : "이 예약 같아요") {
                 ForEach(intake.candidates) { candidateRow($0) }
             }
         }
@@ -128,7 +128,7 @@ struct BK06QuoteView: View {
             }
             .cardList()
         }
-        .navigationTitle("취소 카드")
+        .navigationTitle("취소 정리하기")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         // The tab reloads only once this card is left, so its own row cannot be pulled away.
@@ -177,19 +177,19 @@ struct BK06QuoteView: View {
     }
 
     private func basis(_ quote: BK06Quote, _ version: Int) -> String {
-        guard let noticed = quote.noticedAt else { return "지금 규정 \(version)판 기준" }
-        return "\(BK06Format.day(noticed + "T00:00:00+09:00"))에 안내한 규정 \(version)판 기준"
+        guard let noticed = quote.noticedAt else { return "현재 \(version)번째 규정으로 계산" }
+        return "\(BK06Format.day(noticed + "T00:00:00+09:00"))에 손님께 보여 드린 \(version)번째 규정으로 계산"
     }
 
     private func calculation(_ quote: BK06Quote) -> some View {
         CardSection {
-            BK06ValueRow(label: "남은 기간", value: quote.daysLeft <= 0 ? "당일" : "\(quote.daysLeft)일 전")
-            BK06ValueRow(label: "낸 예약금", value: BK06Format.won(quote.paid))
-            BK06ValueRow(label: "환불액", value: quote.refund.map(BK06Format.won) ?? "사장님 판단", tag: "참고 계산")
+            BK06ValueRow(label: "수업까지 남은 날", value: quote.daysLeft <= 0 ? "수업 당일" : "수업 \(quote.daysLeft)일 전")
+            BK06ValueRow(label: "손님이 낸 예약금", value: BK06Format.won(quote.paid))
+            BK06ValueRow(label: "돌려드릴 금액", value: quote.refund.map(BK06Format.won) ?? "사장님이 직접 정하기", tag: "미리 계산해 본 금액")
                 .accessibilityIdentifier("k06.refund")
-            if let label = quote.matchedLabel { BK06ValueRow(label: "근거", value: label) }
+            if let label = quote.matchedLabel { BK06ValueRow(label: "계산 기준", value: label) }
         } header: {
-            Text("계산")
+            Text("계산 과정")
         } footer: {
             BK06Disclaimer()
         }
@@ -198,7 +198,7 @@ struct BK06QuoteView: View {
     @ViewBuilder
     private func precedents(_ quote: BK06Quote) -> some View {
         if !quote.precedents.isEmpty {
-            CardSection("지난번 비슷한 경우") {
+            CardSection("예전에 비슷했던 일") {
                 ForEach(quote.precedents) { item in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(verbatim: item.reason)
@@ -213,28 +213,28 @@ struct BK06QuoteView: View {
 
     private func decisionSection(_ quote: BK06Quote) -> some View {
         CardSection {
-            Picker("결정", selection: $decision) {
+            Picker("어떻게 할까요", selection: $decision) {
                 ForEach(BK06Decision.allCases.filter { $0 != .byRule || quote.refund != nil }) { item in
                     Text(verbatim: item.title).tag(item)
                 }
             }
             .accessibilityIdentifier("k06.decision")
             if decision == .custom {
-                TextField("환불할 금액(원)", text: $customWon)
+                TextField("돌려드릴 금액(원)", text: $customWon)
                     .keyboardType(.numberPad)
                     .accessibilityIdentifier("k06.customWon")
             }
             if decision != .byRule {
-                TextField("규정과 다르게 정한 이유", text: $reason)
+                TextField("규정과 다르게 정하신 이유", text: $reason)
                     .accessibilityIdentifier("k06.reason")
             }
             if let errorMessage { BK06ErrorRow(message: errorMessage) }
-            BK06PrimaryButton(title: "결정하고 초안 만들기", isBusy: isBusy, identifier: "k06.decide") { decide(quote) }
+            BK06PrimaryButton(title: "정하고 답장 초안 받기", isBusy: isBusy, identifier: "k06.decide") { decide(quote) }
                 .disabled(!canDecide(quote))
         } header: {
-            Text("결정")
+            Text("어떻게 할까요")
         } footer: {
-            Text("결정하면 이 예약이 취소로 바뀌어요. 돈은 앱이 보내지 않아요.")
+            Text("이 예약은 정하시는 순간 취소돼요. 환불금 송금은 앱이 하지 않아요.")
         }
     }
 
@@ -248,7 +248,7 @@ struct BK06QuoteView: View {
     private var draftSection: some View {
         CardSection {
             if isWriting {
-                GeneratingIndicator(label: "답장 초안을 쓰고 있어요")
+                GeneratingIndicator(label: "답장 초안을 준비하는 중이에요")
             } else {
                 KoreanTextEditor(text: $draft, isFresh: $isFresh)
                     .frame(minHeight: 140)
@@ -256,7 +256,7 @@ struct BK06QuoteView: View {
                     .accessibilityLabel("답장 초안")
                     .accessibilityIdentifier("k06.draft")
                 if usedFixedText && !isApproved {
-                    Text("비서가 글을 쓰지 못해 정해 둔 문장을 넣었어요.")
+                    Text("비서가 답장을 못 써서 미리 준비해 둔 기본 문장으로 채웠어요.")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                     Button("다시 쓰기") { Task { await write() } }
@@ -265,14 +265,14 @@ struct BK06QuoteView: View {
             }
             if let errorMessage { BK06ErrorRow(message: errorMessage) }
             if isApproved {
-                Button("다시 복사하기", systemImage: "doc.on.doc") { UIPasteboard.general.string = draft }
+                Button("한 번 더 복사", systemImage: "doc.on.doc") { UIPasteboard.general.string = draft }
                     .buttonStyle(.bordered)
                 if let result, result.seatOpened {
-                    NavigationLink("빈자리 보기") { BK06RefillView(sessionID: result.sessionId) }
+                    NavigationLink("빈자리 찾아보기") { BK06RefillView(sessionID: result.sessionId) }
                         .accessibilityIdentifier("k06.openRefill")
                 }
             } else {
-                BK06PrimaryButton(title: "승인하고 복사", isBusy: isBusy, identifier: "k06.approve") { approve() }
+                BK06PrimaryButton(title: "수락하고 복사하기", isBusy: isBusy, identifier: "k06.approve") { approve() }
                     .disabled(isWriting || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         } header: {
@@ -280,11 +280,11 @@ struct BK06QuoteView: View {
             if isWriting || usedFixedText {
                 Text("답장 초안")
             } else {
-                Text("비서가 쓴 답변")
+                Text("비서가 준비한 답장")
                     .foregroundStyle(Color.assistantAccent)
             }
         } footer: {
-            Text("복사한 글은 쓰시는 채널에서 직접 보내 주세요.")
+            Text("평소 쓰시는 채널에 붙여서 사장님이 직접 보내 주세요.")
         }
     }
 
@@ -310,7 +310,7 @@ struct BK06QuoteView: View {
     }
 
     private func showUndo(_ caseID: String) {
-        app.showToast("‘\(booking.customerName) 님’ 취소했어요") {
+        app.showToast("‘\(booking.customerName) 님’ 예약을 취소했어요") {
             guard await app.run(id: "k06.undo", { try await RoundupAPI.k06UndoDecision(caseID: caseID) }) else { return }
             result = nil
             isApproved = false
@@ -343,7 +343,7 @@ struct BK06QuoteView: View {
                 try await RoundupAPI.k06Approve(caseID: result.caseId, draft: text)
                 UIPasteboard.general.string = text
                 isApproved = true
-                app.showToast("복사했어요. 쓰시는 채널에서 보내 주세요", seconds: 3)
+                app.showToast("복사 끝! 카톡이든 문자든 평소 쓰시는 채널에 붙여 보내 주세요", seconds: 3)
             } catch {
                 errorMessage = error.localizedDescription
             }

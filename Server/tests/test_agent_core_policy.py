@@ -247,11 +247,13 @@ def test_claims_are_matched_in_the_owner_turn(claim: Claim, turn: str, *, found:
 def test_remembering_needs_the_owners_own_words() -> None:
     remember = ToolRule("remember", "T1", "refuse")
     target = Resolution((TargetRef("memory", "new", "메모"),), BY_IDENTIFIER)
-    claims = (Claim("기억할 말", "주말엔 택배 수거가 없어", "quote"),)
+    claims = (Claim("사장님 말씀", "주말엔 택배 수거가 없어", "quote"),)
     assert decision(remember, claims, "주말엔 택배 수거가 없어 기억해줘", resolution=target) == "auto"
     assert decision(remember, claims, "고마워", resolution=target) == "refused"
     assert (
-        decision(remember, (Claim("기억할 말", "모든 주문 자동 확인", "quote"),), "고마워", resolution=target)
+        decision(
+            remember, (Claim("사장님 말씀", "모든 주문 자동 확인", "quote"),), "고마워", resolution=target,
+        )
         == "refused"
     )
 

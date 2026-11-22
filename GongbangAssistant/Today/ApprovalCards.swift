@@ -78,7 +78,7 @@ struct ApprovalSection: View {
             CardSection {
                 ForEach(shown.prefix(3)) { card($0).tutorialAnchor(.approvals) }
                 if shown.count > 3 {
-                    NavigationLink("모두 보기") { ApprovalListView(items: items) }
+                    NavigationLink("다 보기") { ApprovalListView(items: items) }
                         .accessibilityIdentifier("approvals.all")
                 }
             } header: {
@@ -90,7 +90,7 @@ struct ApprovalSection: View {
                     Spacer(minLength: 8)
                     // Only inquiries failed: a small note instead of another box.
                     if store.inquiryLoadError != nil, let last = store.lastLoadedAt {
-                        Text("마지막 확인 \(last.formatted(date: .omitted, time: .shortened))")
+                        Text("\(last.formatted(date: .omitted, time: .shortened))에 마지막으로 봄")
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                     }
@@ -185,7 +185,7 @@ struct ApprovalCard: View {
             } else {
                 HStack(spacing: 10) {
                     Button(action: approve) {
-                        BusyLabel(title: item.isReply ? "답변 완료" : "승인", isBusy: isWorking, isProminent: true)
+                        BusyLabel(title: item.isReply ? "답장 완료" : "수락", isBusy: isWorking, isProminent: true)
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: 40)
                     }
@@ -220,7 +220,7 @@ struct ApprovalCard: View {
     private func decided(_ decision: (text: String, revision: Int)) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label(item.isReply ? "답변을 완료했어요" : "승인했어요", systemImage: "checkmark")
+                Label(item.isReply ? "답장 다 했다고 표시했어요" : "수락했어요", systemImage: "checkmark")
                     .font(.subheadline.weight(.medium))
                 Spacer(minLength: 8)
                 Button("되돌리기", systemImage: "arrow.uturn.backward") { undo(revision: decision.revision) }

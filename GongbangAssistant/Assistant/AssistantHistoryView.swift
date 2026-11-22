@@ -9,9 +9,9 @@ struct AssistantHistoryView: View {
         Group {
             if store.conversations.isEmpty {
                 ContentUnavailableView {
-                    Label("지난 대화가 없어요", systemImage: "clock.arrow.circlepath")
+                    Label("아직 나눈 이야기가 없어요", systemImage: "clock.arrow.circlepath")
                 } description: {
-                    Text("\(AssistantIdentity.name)에게 물어본 내용이 여기에 모여요.")
+                    Text("궁금해서 \(AssistantIdentity.name)에게 여쭤보신 것들이 차곡차곡 쌓이는 곳이에요.")
                         .foregroundStyle(Color.secondaryText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -27,7 +27,7 @@ struct AssistantHistoryView: View {
                                     HistoryRow(conversation: conversation)
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button("삭제", systemImage: "trash", role: .destructive) {
+                                    Button("대화 지우기", systemImage: "trash", role: .destructive) {
                                         store.delete(conversation.id)
                                     }
                                 }
@@ -39,7 +39,7 @@ struct AssistantHistoryView: View {
                 .cardList(onPage: false)
             }
         }
-        .navigationTitle("지난 대화")
+        .navigationTitle("이전 대화 목록")
         .navigationBarTitleDisplayMode(.inline)
     }
 

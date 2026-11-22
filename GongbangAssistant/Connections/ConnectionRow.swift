@@ -11,7 +11,7 @@ enum ConnectionRowState: Equatable {
     /// A badge only where a state stands behind it; an empty slot shows none.
     var badge: Status? {
         switch self {
-        case .collecting: Status(text: "수집 중", tone: .progress)
+        case .collecting: Status(text: "가져오는 중", tone: .progress)
         case .saved: Status(text: "저장됨", tone: .done)
         case .planned: Status(text: "준비 중", tone: .neutral)
         case .empty: nil

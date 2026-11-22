@@ -62,7 +62,7 @@ async def booking_detail(booking_id: str, db: Session, now: Now) -> BookingDetai
     return BookingDetail(
         id=booking.id, title=card.title, status=card.status, schedule=schedule_text(session),
         customer=masked(customer.name), people=booking.party_size, minutes=session.duration_minutes,
-        source=channel.name if channel else "직접 등록",
+        source=channel.name if channel else "직접 입력",
         seat_note=f"남은 자리 {max(session.capacity - taken, 0)}개",
         deposit_display=won(booking.deposit_won), deposit_confirmed=booking.status == "confirmed",
         deposit_deadline=card.deadline, deposit_due=card.due,

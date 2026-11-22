@@ -10,7 +10,7 @@ struct PlanStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("어떤 요금제로 쓸지 골라 두세요")
+                Text("요금제 하나만 미리 정해 두세요")
                     .font(.title2.bold())
                     .accessibilityAddTraits(.isHeader)
                 PlanOptions(pickedID: $pickedID)
@@ -19,7 +19,7 @@ struct PlanStep: View {
             .padding(.vertical, 12)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            PlanChooseBar(title: "이 요금제로 정해 두기", isEnabled: true) {
+            PlanChooseBar(title: "이걸로 할게요", isEnabled: true) {
                 if let plan = PlanCatalog.options.first(where: { $0.id == pickedID }) {
                     PlanSelection.shared.choose(plan)
                 }

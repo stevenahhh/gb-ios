@@ -30,7 +30,7 @@ struct ConnectionsList: View {
                                     remove: { delete(item, service) })
             }
         }
-        .alert("지우지 못했어요", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+        .alert("못 지웠어요", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("확인", role: .cancel) {}
         } message: {
             Text(verbatim: failure ?? "")
@@ -48,20 +48,20 @@ struct ConnectionsList: View {
         return List {
             if data.statusFailed {
                 CardSection {
-                    notice("수집 상태를 확인하지 못했어요. 저장한 값은 그대로예요.", symbol: "exclamationmark.circle.fill")
+                    notice("가져오기가 잘 되는지 살피지 못했어요. 입력해 둔 값은 지워지지 않았어요.", symbol: "exclamationmark.circle.fill")
                         .accessibilityIdentifier("connections.statusFailed")
                 }
             } else if hasNothingSaved, !savable.isEmpty {
                 CardSection {
-                    Text("아직 저장한 곳이 없어요. 자주 쓰는 곳 하나만 먼저 입력해 보세요. 비밀번호는 묻지 않아요.")
+                    Text("아직 넣어 둔 채널이 하나도 없네요. 평소 많이 쓰는 채널부터 골라서 링크나 아이디만 넣어 보세요. 비밀번호 같은 건 안 물어봐요.")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                         .accessibilityIdentifier("connections.empty")
                 }
             }
-            CardSection("지금 저장할 수 있어요") {
+            CardSection("지금 저장할 수 있는 곳") {
                 if savable.isEmpty {
-                    Text("지금 저장할 수 있는 곳이 없어요. 아래로 당겨 다시 불러와 주세요.")
+                    Text("지금 저장할 수 있는 채널이 없네요. 화면을 아래로 끌어내리면 목록을 새로 받아 와요.")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }
@@ -89,7 +89,7 @@ struct ConnectionsList: View {
             ConnectionRow(service: service, state: state, value: item?.value, note: data.note(for: service))
         }
         .buttonStyle(.plain)
-        .accessibilityHint(item?.isSaved == true ? "저장한 값을 고쳐요" : "값을 입력해요")
+        .accessibilityHint(item?.isSaved == true ? "넣은 값 고치기" : "값을 입력해요")
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // No destructive role: the row stays in place, and the toast can undo the delete.
             if let item, item.isSaved {
@@ -119,7 +119,7 @@ struct ConnectionsList: View {
             do {
                 let removed = try await RoundupAPI.deleteConnection(service: service.id, revision: item.revision)
                 await load()
-                app.showToast("‘\(service.name)’ 저장한 값을 지웠어요", undo: {
+                app.showToast("‘\(service.name)’ 값 삭제 완료", undo: {
                     await restore(value, service: service, revision: removed.revision)
                 })
             } catch is CancellationError {
@@ -136,7 +136,7 @@ struct ConnectionsList: View {
         do {
             _ = try await RoundupAPI.saveConnection(service: service.id, value: value, revision: revision)
         } catch {
-            app.showToast("되돌리지 못했어요. 다시 입력해 주세요.")
+            app.showToast("되돌리기가 안 됐어요. 값을 한 번 더 넣어 보세요.")
         }
         await load()
     }
@@ -204,7 +204,7 @@ struct ConnectionEditSheet: View {
                             .font(.subheadline)
                             .textSelection(.enabled)
                     }
-                    Text("비밀번호나 인증 코드는 묻지 않아요. 입력하지 마세요.")
+                    Text("공도리는 비밀번호와 인증번호를 묻는 일이 없어요. 여기에 절대 적지 마세요.")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                     Text(verbatim: service.today)

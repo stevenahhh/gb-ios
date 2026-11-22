@@ -19,9 +19,9 @@ from pydantic import Field
 
 from collectors.base import CollectedItem, Collector, NeedsConnectionError, SourceConfig, SourceId, Window
 
-BOOKING_PATH = "네이버 예약은 아직 자동으로 가져올 수 없어요. 예약은 직접 입력해 주세요."
-TALKTALK_PATH = "네이버 톡톡은 아직 자동으로 가져올 수 없어요. 톡톡 파트너센터에서 확인해 주세요."
-KAKAO_PATH = "카카오톡 채널은 아직 자동으로 가져올 수 없어요. 채널 관리자센터에서 확인해 주세요."
+BOOKING_PATH = "예약은 아직 네이버에서 자동으로 안 넘어와요. 사장님이 직접 넣어 주세요."
+TALKTALK_PATH = "톡톡 대화는 아직 자동으로 못 불러와요. 네이버 톡톡 파트너센터를 열어서 봐 주세요."
+KAKAO_PATH = "채널 대화는 아직 자동으로 못 불러와요. 카카오톡 채널 관리자센터를 열어서 봐 주세요."
 
 
 class BookingConfig(SourceConfig):

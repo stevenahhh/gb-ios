@@ -32,11 +32,11 @@ STATUSES: Final[Mapping[str, ParcelStatus]] = {
 }
 MIN_STORED: Final = 4
 MAX_STORED: Final = 40
-STOPPED: Final = "다른 송장에 문제가 있어 함께 멈췄어요."
+STOPPED: Final = "함께 넣던 송장 하나가 걸려서 모두 멈췄어요."
 REFUSALS: Final = {
-    404: "주문을 찾지 못했어요.",
-    409: "그사이 주문이 바뀌었거나 송장을 등록할 수 없는 상태예요.",
-    422: "입력한 값을 다시 확인해 주세요.",
+    404: "그 주문이 없어요.",
+    409: "그새 주문이 달라졌거나 지금은 송장을 넣을 때가 아니에요.",
+    422: "적으신 내용에 틀린 데가 있어요. 한 번 더 봐 주세요.",
 }
 
 
@@ -108,11 +108,11 @@ def hard_block(choice: InvoiceChoice, row: InvoiceRow, counts: Counter[str]) -> 
     if row.blocks:
         return PROBLEM_TEXT[row.blocks[0]]
     if choice.shipment_id not in {target.id for target in row.candidates}:
-        return "보내 주신 내용과 다른 주문이에요."
+        return "알려 주신 주문이 아니에요."
     if counts[row.number] > 1 or counts[choice.shipment_id] > 1:
-        return "같은 송장번호나 주문이 두 번 들어 있어요."
+        return "목록에 같은 송장번호나 주문이 겹쳐요."
     if carrier_named(choice.carrier) is None:
-        return "택배사를 먼저 골라 주세요."
+        return "보낼 택배사부터 정해 주세요."
     return None if MIN_STORED <= len(row.number) <= MAX_STORED else REFUSALS[422]
 
 
@@ -121,13 +121,13 @@ def refusal(
 ) -> str | None:
     """Explain why a number must not be registered, before any row is locked."""
     if row is None:
-        return "보내 주신 내용에 없는 송장번호예요."
+        return "알려 주신 목록에는 이 송장번호가 없어요."
     if reason := hard_block(choice, row, counts):
         return reason
     if request.decided_by == "auto" and (
         request.source == "file" or row.needs_owner or choice.carrier != row.carrier
     ):
-        return "확인 없이 바로 등록할 수 없는 송장이에요. 먼저 확인해 주세요."
+        return "이 송장은 사장님이 먼저 봐 주셔야 넣을 수 있어요."
     if not choice.accept_format and not has_valid_format(carrier_named(choice.carrier), row.number):
         return PROBLEM_TEXT[Problem.WRONG_FORMAT]
     return None

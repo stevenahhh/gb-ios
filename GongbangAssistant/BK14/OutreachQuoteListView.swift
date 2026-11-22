@@ -10,15 +10,15 @@ struct OutreachQuoteListView: View {
         LoadableContent(loader: loader, retry: load) { quotes in
             if quotes.isEmpty {
                 ContentUnavailableView {
-                    Label("아직 받은 출강 문의가 없습니다", systemImage: "doc.text.magnifyingglass")
+                    Label("아직 들어온 출장 수업 문의가 없어요", systemImage: "doc.text.magnifyingglass")
                 } description: {
-                    Text(verbatim: "문의 문장을 붙여넣으면 견적과 가부 판단을 만들어 드립니다")
+                    Text(verbatim: "기관에서 온 글을 붙이시면 금액을 뽑고 맡아도 괜찮을지까지 알려 드려요")
                         .foregroundStyle(Color.secondaryText)
                 } actions: {
                     Button {
                         isReading = true
                     } label: {
-                        Text("새 견적").foregroundStyle(Color(.systemBackground))
+                        Text("견적 새로 내기").foregroundStyle(Color(.systemBackground))
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
@@ -28,12 +28,12 @@ struct OutreachQuoteListView: View {
                 list(quotes)
             }
         }
-        .navigationTitle("출강 견적")
+        .navigationTitle("출장 수업 견적")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if loader.value?.isEmpty == false {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("새 견적", systemImage: "plus") { isReading = true }
+                    Button("견적 새로 내기", systemImage: "plus") { isReading = true }
                         .accessibilityIdentifier("outreach.new")
                 }
             }

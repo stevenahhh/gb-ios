@@ -181,10 +181,10 @@ def test_a_reference_of_several_words_names_a_row_only_when_the_row_holds_them_a
 @pytest.mark.parametrize(
     ("words", "left"),
     [
-        ("알겠어요. 정*우 님 미니 화병 주문을 받았어요.", "아직 처리하지 않았어요. 알겠어요."),
+        ("알겠어요. 정*우 님 미니 화병 주문을 받았어요.", "아직 바꾼 건 없어요. 알겠어요."),
         ("주문 확인은 완료했는데, 점토 주문은 목록에 없어요.", ""),
         ("네, 토요일 오후 1시로 단체 수업 준비 일정을 잡았어요.", ""),
-        ("네, #1043번 주문 확인했어요. 28,000원이에요.", "아직 처리하지 않았어요. 28,000원이에요."),
+        ("네, #1043번 주문 확인했어요. 28,000원이에요.", "아직 바꾼 건 없어요. 28,000원이에요."),
     ],
 )
 def test_an_answer_without_an_action_never_says_one_happened(words: str, left: str) -> None:

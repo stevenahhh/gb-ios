@@ -146,8 +146,8 @@ async def test_a_loop_that_breaks_after_acting_says_what_was_done(
 ) -> None:
     body = await ask(client, chat_of(wants("mark_packed", order="1040"), broken), PACKED)
     assert body["status"] == "failed"
-    assert "처리했어요" in body["answer"]
-    assert "나머지는 하지 못했어요" in body["answer"]
+    assert "끝낸 일" in body["answer"]
+    assert "남은 건 이어서 부탁해 주세요" in body["answer"]
     assert await rows(database, "SELECT status, error FROM agent_runs") == [("failed", "loop_failed")]
     status = await scalar(database, "SELECT status FROM shipments WHERE id = :id", id=ORDER)
     assert status == "invoice_pending"
@@ -188,7 +188,7 @@ async def test_a_tool_that_breaks_is_refused_and_leaves_nothing_behind(
     finally:
         object.__setattr__(TOOLS["mark_packed"], "plan", plan)
     assert [(step["decision"], step["reason"]) for step in body["steps"]] == [("refused", STORAGE)]
-    assert "하지 않았어요" in body["answer"]
+    assert "건너뛴 일" in body["answer"]
     assert await scalar(database, "SELECT status FROM shipments WHERE id = :id", id=ORDER) == "packing"
     assert await scalar(database, "SELECT status FROM agent_runs") == "done"
 

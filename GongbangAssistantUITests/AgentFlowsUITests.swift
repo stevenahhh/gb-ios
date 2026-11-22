@@ -313,7 +313,7 @@ final class AgentRealServerUITests: AgentFlowCase {
         XCTAssertTrue(scrollTo(dismiss, in: app))
         dismiss.tap()
         XCTAssertTrue(dismiss.waitForNonExistence(timeout: 20))
-        XCTAssertTrue(element(labelled: "하지 않기로 했어요", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "거절하신 요청이에요. 바꾼 건 없어요.", in: app).waitForExistence(timeout: 10))
         try await expectOrders([1042: "paid", 1043: "paid"], "a dismissal")
         let states = try await state().proposals.reduce(into: [String: String]()) { $0[$1.id] = $1.state }
         XCTAssertEqual(states, [first.id: "open", second.id: "dismissed"])
@@ -353,7 +353,7 @@ final class AgentRealServerUITests: AgentFlowCase {
         let row = named("agent.step.\(second.stepId)", in: app)
         XCTAssertTrue(scrollTo(row, in: app), "the history does not show the approved step")
         try capture(app, "real-history-approved")
-        XCTAssertTrue(row.label.contains("승인함") || row.label.contains("완료"), "the step does not say it ran: \(row.label)")
+        XCTAssertTrue(row.label.contains("수락했어요") || row.label.contains("완료"), "the step does not say it ran: \(row.label)")
         let undo = app.buttons["agent.step.undo.\(second.stepId)"]
         XCTAssertTrue(undo.waitForExistence(timeout: 10), "the approved step has no undo in the history")
         undo.tap()
@@ -474,7 +474,7 @@ final class AgentFlowsUITests: AgentFlowCase {
 
     @MainActor
     private func dismissFailure(in app: XCUIApplication) -> String {
-        let alert = app.alerts["처리하지 못했어요"]
+        let alert = app.alerts["이번엔 마무리하지 못했어요"]
         XCTAssertTrue(alert.waitForExistence(timeout: 30), "a failed write said nothing")
         let said = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
         alert.buttons["확인"].tap()
@@ -489,7 +489,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         let app = try open()
         openAssistant(in: app)
         ask("김지은 님 예약 취소 처리해 줘", in: app)
-        XCTAssertTrue(step(saying: "하지 않음", in: app).waitForExistence(timeout: 30))
+        XCTAssertTrue(step(saying: "건너뜀", in: app).waitForExistence(timeout: 30))
         for prefix in ["agent.step.undo.", "agent.proposal.approve.", "agent.proposal.dismiss."] {
             XCTAssertFalse(button(prefix, in: app).exists, "a refusal offers \(prefix)")
         }
@@ -509,7 +509,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         XCTAssertTrue(approve.waitForExistence(timeout: 10), "the proposal was not open to begin with")
         XCTAssertTrue(approve.waitForNonExistence(timeout: 110), "an expired proposal can still be approved")
         XCTAssertFalse(app.buttons["agent.proposal.dismiss.\(id)"].exists)
-        XCTAssertTrue(element(labelled: "기한이 지난 제안이에요", in: app).exists)
+        XCTAssertTrue(element(labelled: "기간이 지난 확인 요청이에요", in: app).exists)
         let after = try await state()
         XCTAssertEqual(after.orders["1042"], "packing")
         try capture(app, "proposal-expired-on-screen")
@@ -526,7 +526,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         approve.tap()
 
         let said = dismissFailure(in: app)
-        XCTAssertTrue(said.contains("제안 시간이 지났어요"), said)
+        XCTAssertTrue(said.contains("수락 기간이 끝난 요청이에요"), said)
         XCTAssertTrue(approve.waitForNonExistence(timeout: 20), "an expired proposal can still be approved")
         let after = try await state()
         XCTAssertEqual(after.orders["1041"], "paid")
@@ -541,7 +541,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         let app = try open()
         let header = named("agent.proposals.header", in: app)
         XCTAssertTrue(header.waitForExistence(timeout: 60))
-        XCTAssertEqual(header.label, "비서 제안 2건")
+        XCTAssertEqual(header.label, "비서의 확인 요청 2건")
 
         try await drop(true)
         header.swipeDown()
@@ -554,7 +554,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         try await drop(false)
         XCTAssertTrue(notice.waitForNonExistence(timeout: 60), "Today did not reconnect by itself")
         XCTAssertTrue(app.buttons["agent.proposal.row.\(id)"].waitForExistence(timeout: 20), "the proposal raised meanwhile is missing")
-        XCTAssertEqual(header.label, "비서 제안 3건")
+        XCTAssertEqual(header.label, "비서의 확인 요청 3건")
         try capture(app, "reconnected-today")
     }
 
@@ -569,7 +569,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         try await drop(true)
         approve.tap()
         let said = dismissFailure(in: app)
-        XCTAssertTrue(said.contains("서버에 연결하지 못했어요"), said)
+        XCTAssertTrue(said.contains("지금 연결이 안 돼요"), said)
         XCTAssertTrue(approve.exists, "a proposal that was not approved lost its approval")
         let untouched = try await state()
         XCTAssertEqual(untouched.orders["1041"], "paid")
@@ -614,7 +614,9 @@ final class AgentFlowsUITests: AgentFlowCase {
         ask("1040 포장 끝났어", in: app)
         XCTAssertTrue(step(saying: "주문 1040", in: app).waitForExistence(timeout: 60), "the lost answer was not found")
         let sent = try await writes()
-        XCTAssertEqual(sent, ["/agent/run"], "a job that was done was sent again or asked elsewhere")
+        // The send whose answer was lost is repeated once under the same request id; the server runs it once.
+        XCTAssertEqual(Set(sent), ["/agent/run"], "a job that was done was asked elsewhere")
+        XCTAssertLessThanOrEqual(sent.count, 2, "a job that was done was sent again and again")
         let after = try await state()
         XCTAssertEqual(after.orders["1040"], "invoice_pending")
         waitForAnswerToSettle(in: app)
@@ -660,14 +662,14 @@ final class AgentFlowsUITests: AgentFlowCase {
         if arguments.isEmpty { try checkAppearance(of: app, dark: dark) }
         let expired = try await proposal(titled: "주문 1038을 배송 완료로 바꿀까요?")
         openProposal(expired.id, in: app)
-        XCTAssertTrue(scrollTo(element(labelled: "기한이 지난 제안이에요", in: app), in: app))
+        XCTAssertTrue(scrollTo(element(labelled: "기간이 지난 확인 요청이에요", in: app), in: app))
         XCTAssertFalse(app.buttons["agent.proposal.approve.\(expired.id)"].exists)
         try capture(app, "\(prefix)-expired")
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
         openAssistant(in: app)
         ask("김지은 님 예약 취소 처리해 줘", in: app)
-        let row = step(saying: "하지 않음", in: app)
+        let row = step(saying: "건너뜀", in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 30))
         waitForAnswerToSettle(in: app)
         XCTAssertTrue(scrollTo(row, in: app), "the refusal is out of reach")

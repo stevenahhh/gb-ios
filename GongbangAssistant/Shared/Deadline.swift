@@ -44,7 +44,7 @@ enum RelativeDayFormatter {
     static func elapsed(since date: Date, now: Date, calendar: Calendar = .workshop) -> String {
         let seconds = Int(now.timeIntervalSince(date))
         switch seconds {
-        case ..<1: return "방금"
+        case ..<1: return "방금 전"
         case ..<60: return "\(seconds)초 전"
         case ..<3600: return "\(seconds / 60)분 전"
         case ..<86_400: return "\(seconds / 3600)시간 전"

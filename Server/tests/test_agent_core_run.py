@@ -63,7 +63,7 @@ async def test_a_stated_packing_runs_at_once_and_can_be_undone(
     assert body["proposals"] == []
     assert body["status"] == "done"
     assert body["intent"] == "act"
-    assert "처리했어요" in body["answer"]
+    assert "끝낸 일" in body["answer"]
     assert (
         await scalar(database, "SELECT status FROM shipments WHERE id = :id", id=ORDER) == "invoice_pending"
     )
@@ -271,7 +271,7 @@ async def test_a_model_that_fails_after_an_action_reports_the_action(
 ) -> None:
     body = await ask(client, chat_of(wants("mark_packed", order="1040"), ModelUnavailableError()), PACKED)
     assert body["status"] == "failed"
-    assert "처리했어요" in body["answer"]
+    assert "끝낸 일" in body["answer"]
     assert (
         await scalar(database, "SELECT status FROM shipments WHERE id = :id", id=ORDER) == "invoice_pending"
     )
@@ -442,4 +442,4 @@ async def test_recent_runs_are_listed(database: AsyncEngine, client: AsyncClient
 async def test_a_missing_run_is_a_korean_404(client: AsyncClient, database: AsyncEngine) -> None:
     missing = await client.get("/agent/runs/none")
     assert missing.status_code == 404
-    assert missing.json()["detail"] == "그 기록을 찾지 못했어요."
+    assert missing.json()["detail"] == "찾는 기록이 안 보여요."

@@ -43,21 +43,21 @@ from agent_types import (
     Verdict,
 )
 
-OFF: Final = "비서를 꺼 두셔서 아무것도 하지 않았어요."
-TOOL_OFF: Final = "꺼 두신 일이라 하지 않았어요."
-ASKED: Final = "물어보신 말이 함께 있어 확인을 받고 처리해요."
-READ_ONLY: Final = "읽기만 했어요."
-NOT_FOUND: Final = "맞는 건을 찾지 못했어요. 어느 건인지 알려 주세요."
-SEVERAL: Final = "맞는 건이 {count}건이에요. 어느 건인지 알려 주세요."
-ALWAYS_ASK: Final = "'물어보고'로 설정하셔서 제안으로 올렸어요."
-NOT_SAID: Final = "지금 하신 말씀에 없는 내용이라 하지 않았어요."
-NO_EVIDENCE: Final = "방금 하신 말씀에 없는 내용이 있어 제안으로 올렸어요: {labels}"
-CHECK_NEEDED: Final = "{labels}: 확인이 필요해서 제안으로 올렸어요."
-UNSURE_TARGET: Final = "대상이 확실하지 않아 제안으로 올렸어요."
-SPOKEN: Final = "말로 하신 일은 확인을 받고 처리해요."
-CAP_REACHED: Final = "오늘 알아서 하는 일의 한도 {cap}건을 다 써서 제안으로 올렸어요."
-SAID: Final = "말씀하신 대로 처리했어요."
-DONE: Final = "바로 처리했어요."
+OFF: Final = "꺼진 상태라 비서는 쉬었어요. 바뀐 건 없어요."
+TOOL_OFF: Final = "이 기능은 꺼 두셔서 그냥 뒀어요."
+ASKED: Final = "질문이 섞여 있어서 먼저 여쭤보고 할게요."
+READ_ONLY: Final = "보기만 하고 바꾼 건 없어요."
+NOT_FOUND: Final = "어떤 건지 모르겠어요. 하나만 콕 집어 주세요."
+SEVERAL: Final = "{count}건이 비슷해요. 그중 하나를 골라 주세요."
+ALWAYS_ASK: Final = "'물어보고 하기'로 정해 두셔서 확인 요청을 보냈어요."
+NOT_SAID: Final = "부탁하신 일이 아니라서 그냥 뒀어요."
+NO_EVIDENCE: Final = "방금 말씀에 없던 내용이 있어서 확인 요청을 보냈어요: {labels}"
+CHECK_NEEDED: Final = "{labels}: 이건 사장님 눈으로 보셔야 해서 확인 요청으로 넘겼어요."
+UNSURE_TARGET: Final = "무엇을 말씀하신 건지 헷갈려서 확인 요청을 보냈어요."
+SPOKEN: Final = "음성으로 하신 부탁은 먼저 여쭤보고 해요."
+CAP_REACHED: Final = "오늘 몫 {cap}건을 이미 알아서 했어요. 나머지는 확인 요청으로 넘겼어요."
+SAID: Final = "부탁하신 일, 끝냈어요."
+DONE: Final = "바로 해 뒀어요."
 SEPARATOR: Final = re.compile(r"[\s.,·!?~…\-]")
 MIN_TEXT_CLAIM: Final = 2
 SHARED_DIGITS: Final = 3

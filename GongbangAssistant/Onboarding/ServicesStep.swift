@@ -11,10 +11,10 @@ struct ServicesStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("쓰고 계신 곳을 알려 주세요")
+                Text("요즘 쓰시는 채널에 체크해 주세요")
                     .font(.title2.weight(.bold))
                     .accessibilityAddTraits(.isHeader)
-                Text("주소나 계정 이름만 저장해요. 로그인은 하지 않아요.")
+                Text("링크랑 계정 이름만 갖고 있어요. 그 서비스에 로그인하는 일은 없어요.")
                     .font(.body)
                     .foregroundStyle(Color.secondaryText)
             }

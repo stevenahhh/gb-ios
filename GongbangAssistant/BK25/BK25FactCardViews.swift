@@ -11,12 +11,12 @@ struct BK25FactCardListView: View {
         LoadableContent(loader: loader, retry: load) { cards in
             if cards.isEmpty {
                 ContentUnavailableView {
-                    Label("캘린더에 수업을 먼저 넣어 주세요", systemImage: "calendar")
+                    Label("수업부터 하나 캘린더에 넣어 주세요", systemImage: "calendar")
                 } description: {
-                    Text(verbatim: "수업이 생기면 여기에서 손님 답장에 쓸 사실을 채울 수 있어요.")
+                    Text(verbatim: "수업을 만들고 나면 손님 답장에 들어갈 정보를 여기서 채울 수 있어요.")
                         .foregroundStyle(Color.secondaryText)
                 } actions: {
-                    Button("캘린더로 가기") { tab = .calendar }
+                    Button("캘린더 열기") { tab = .calendar }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                 }
@@ -25,7 +25,7 @@ struct BK25FactCardListView: View {
                 list(cards)
             }
         }
-        .navigationTitle("수업 사실 카드")
+        .navigationTitle("수업 정보")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: app.dataVersion) { await load() }
     }
@@ -48,7 +48,7 @@ struct BK25FactCardListView: View {
             } header: {
                 EmptyView()
             } footer: {
-                Text("비서는 여기에 적힌 사실과 예약 장부만 보고 답장을 써요. 답장 초안이 확인해 보겠다고만 쓰는 일을 줄여요.")
+                Text("예약 장부와 아래 칸에 적힌 것만 가지고 답장을 써요. 칸을 채울수록 ‘알아보고 연락드릴게요’ 같은 답이 줄어요.")
             }
         }
         .cardList()
@@ -63,7 +63,7 @@ struct BK25FactCardListView: View {
                 Spacer(minLength: 8)
                 StatusBadge(status(of: card), isPlain: true)
             }
-            PhraseText(text: "5칸 중 \(card.filledCount)칸 · 내 규칙 \(card.ruleCount)개")
+            PhraseText(text: "\(card.filledCount)/5칸 채움 · 내가 정한 규칙 \(card.ruleCount)개")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
         }
@@ -71,9 +71,9 @@ struct BK25FactCardListView: View {
     }
 
     private func status(of card: BK25FactCardSummary) -> Status {
-        if card.filledCount == 0 { return Status(text: "아직 없음", tone: .neutral) }
+        if card.filledCount == 0 { return Status(text: "하나도 없어요", tone: .neutral) }
         return card.filledCount < BK25FactField.allCases.count
-            ? Status(text: "빈 칸 있음", tone: .attention) : Status(text: "모두 채움", tone: .done)
+            ? Status(text: "빈칸이 있어요", tone: .attention) : Status(text: "다 채웠어요", tone: .done)
     }
 }
 
@@ -190,9 +190,9 @@ struct BK25FactCardEditor: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("bk25.fact.priceWon")
             } header: {
-                Text("답장에 쓰는 사실")
+                Text("답장에 넣을 수업 정보")
             } footer: {
-                Text("비어 있는 칸은 답장에 쓰지 않아요. 비어 있으면 손님이 물을 때 판단 필요로 알려 드려요.")
+                Text("비워 둔 칸 내용은 답장에 넣지 않아요. 손님이 그걸 물어보면 그때 사장님께 먼저 여쭤볼게요.")
             }
 
             if form.emptyFields.isEmpty {
@@ -202,7 +202,7 @@ struct BK25FactCardEditor: View {
                     Button {
                         isInterviewing = true
                     } label: {
-                        Text(card.revision == 0 && !isDirty ? "인터뷰로 채우기" : "빈 칸 인터뷰로 채우기")
+                        Text(card.revision == 0 && !isDirty ? "물어보며 채우기" : "빈 칸만 물어보며 채우기")
                             .frame(maxWidth: .infinity, minHeight: 30)
                     }
                     .buttonStyle(.bordered)
@@ -214,13 +214,13 @@ struct BK25FactCardEditor: View {
 
             CardSection {
                 if card.rules.isEmpty {
-                    Text("아직 규칙이 없어요. 판단 필요에 답하면 여기에 쌓여요.")
+                    Text("규칙이 하나도 없어요. 손님 질문에 답을 주시면 그 답이 규칙으로 바뀌어 이곳에 쌓여요.")
                         .foregroundStyle(Color.secondaryText)
                 } else {
                     ForEach(card.rules) { rule in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(verbatim: rule.ruleText)
-                            Text(rule.className.map { "\($0)에 쓰는 규칙" } ?? "공방 전체에 쓰는 규칙")
+                            Text(rule.className.map { "\($0) 전용 규칙" } ?? "모든 수업 공통 규칙")
                                 .font(.subheadline)
                                 .foregroundStyle(Color.secondaryText)
                         }
@@ -234,7 +234,7 @@ struct BK25FactCardEditor: View {
             } header: {
                 Text("내 규칙")
             } footer: {
-                Text("판단 필요에 답하면서 만든 규칙이에요. 옆으로 밀면 지워져요.")
+                Text("사장님 답으로 생긴 규칙 모음이에요. 왼쪽으로 쓸면 지울 수 있어요.")
             }
         }
         .cardList()
@@ -282,7 +282,7 @@ struct BK25FactCardEditor: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
                 if value.isEmpty {
-                    Text("아직 없음")
+                    Text("하나도 없어요")
                         .foregroundStyle(Color.secondaryText)
                 } else if isFresh.wrappedValue {
                     GeneratedText(AttributedString(value), isFresh: isFresh)
@@ -303,7 +303,7 @@ struct BK25FactCardEditor: View {
     private var priceSheet: some View {
         NavigationStack {
             List {
-                CardSection("한 사람 가격", footer: "숫자만 적으면 돼요. 초안의 가격을 이 값과 맞춰 봐요.") {
+                CardSection("한 분 가격", footer: "금액은 숫자로만 넣으면 돼요. 손님께 갈 초안에 적힌 가격이 이 숫자와 같은지 대조해 드릴게요.") {
                     TextField("예: 38000", text: $priceText)
                         .keyboardType(.numberPad)
                         .accessibilityIdentifier("bk25.price.field")
@@ -332,7 +332,7 @@ struct BK25FactCardEditor: View {
         do {
             _ = try await BK25API.saveFactCard(card.id, form.update(for: card))
             freshFields = []
-            app.showToast("수업 사실 카드를 저장했어요")
+            app.showToast("수업 정보 저장 완료")
             await reload()
         } catch {
             // The preview stays as it is, so nothing the owner said is lost.
@@ -344,7 +344,7 @@ struct BK25FactCardEditor: View {
         Task {
             do {
                 _ = try await BK25API.retireRule(rule.id)
-                app.showToast("규칙을 지웠어요")
+                app.showToast("규칙 삭제 완료")
                 await reload()
             } catch {
                 app.showToast(error.localizedDescription)
@@ -371,7 +371,7 @@ struct BK25FieldSheet: View {
                     }
                 }
                 if !current.isEmpty {
-                    CardSection("지금 값") {
+                    CardSection("지금 적힌 값") {
                         Text(verbatim: current)
                     }
                 }
@@ -401,7 +401,7 @@ struct BK25FieldInput: View {
         VStack(alignment: .leading, spacing: 12) {
             BK25VoiceField(text: $text, prompt: field.hint)
             if isWorking {
-                GeneratingIndicator(label: "답을 칸에 맞게 정리하는 중이에요")
+                GeneratingIndicator(label: "말씀하신 답을 칸마다 나눠 정리하고 있어요")
             }
             if let message {
                 Label(message, systemImage: "exclamationmark.circle")
@@ -430,7 +430,7 @@ struct BK25FieldInput: View {
         do {
             let read = try await BK25API.interview(cardID, field: field, answer: text)
             guard read.confidence == .clear, !read.value.isEmpty else {
-                message = "다시 말하거나 글로 써 주세요"
+                message = "한 번 더 말씀하시거나 키보드로 적어 보세요"
                 return
             }
             text = ""
@@ -483,7 +483,7 @@ struct BK25InterviewView: View {
                     } header: {
                         EmptyView()
                     } footer: {
-                        Text("건너뛴 칸은 손님이 물을 때 판단 필요로 다시 물어봐요.")
+                        Text("건너뛴 칸 내용을 손님이 물어 오면 그때 사장님께 다시 여쭤볼게요.")
                     }
                 }
             }

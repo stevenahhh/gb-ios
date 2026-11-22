@@ -35,7 +35,7 @@ class InvoiceFileError(Exception):
 def read_table(data: bytes, filename: str) -> list[list[str]]:
     """Return the rows of a CSV or XLSX file with every value kept as text."""
     if len(data) > MAX_BYTES:
-        msg = "파일이 너무 커요. 2MB 이하로 나눠 주세요."
+        msg = "한 번에 2MB까지 불러와요. 파일을 쪼개서 다시 올려 주세요."
         raise InvoiceFileError(msg)
     match PurePath(filename).suffix.lower():
         case ".csv":
@@ -43,7 +43,7 @@ def read_table(data: bytes, filename: str) -> list[list[str]]:
         case ".xlsx":
             return read_xlsx(data)
         case _:
-            msg = "CSV나 XLSX 파일만 읽을 수 있어요."
+            msg = "엑셀 파일, 그러니까 CSV나 XLSX만 열어 볼 수 있어요."
             raise InvoiceFileError(msg)
 
 
@@ -52,7 +52,7 @@ def checked(rows: Iterator[list[str]]) -> list[list[str]]:
     kept: list[list[str]] = []
     for row in rows:
         if len(kept) >= MAX_ROWS or len(row) > MAX_COLUMNS:
-            msg = "행이나 열이 너무 많아요. 파일을 나눠 주세요."
+            msg = "줄과 칸이 한도를 넘었어요. 파일을 여러 개로 쪼개 주세요."
             raise InvoiceFileError(msg)
         kept.append(row)
     return kept
@@ -67,7 +67,7 @@ def decoded(data: bytes) -> str:
             continue
         if "\0" not in text:
             return text
-    msg = "파일의 글자를 읽지 못했어요. UTF-8 CSV로 다시 저장해 주세요."
+    msg = "글자가 깨져 보여요. 엑셀에서 UTF-8 CSV 형식으로 바꿔 올려 주세요."
     raise InvoiceFileError(msg)
 
 
@@ -78,10 +78,10 @@ def read_csv(data: bytes) -> list[list[str]]:
     try:
         rows = checked(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
     except csv.Error as error:
-        msg = "CSV 형식이 올바르지 않아요."
+        msg = "규칙에 안 맞는 CSV 파일이에요."
         raise InvoiceFileError(msg) from error
     if any(cell.lstrip().startswith("=") for row in rows for cell in row):
-        msg = "수식이 든 파일은 읽지 않아요. 값으로 저장해 주세요."
+        msg = "수식이 들어간 칸이 있으면 못 열어요. 수식 대신 결과값만 남겨 올려 주세요."
         raise InvoiceFileError(msg)
     return rows
 
@@ -96,7 +96,7 @@ def read_xlsx(data: bytes) -> list[list[str]]:
         zipfile.BadZipFile, KeyError, IndexError, ValueError, RuntimeError, NotImplementedError, EOFError,
         ParseError, DefusedXmlException, zlib.error,
     ) as error:
-        msg = "엑셀 파일이 손상됐거나 형식이 달라요."
+        msg = "엑셀이 망가졌거나 다른 종류 파일 같아요."
         raise InvoiceFileError(msg) from error
 
 
@@ -104,11 +104,11 @@ def refuse_unsafe(book: zipfile.ZipFile) -> None:
     """Refuse oversized archives, macros, and links to other files before reading any sheet."""
     members = book.infolist()
     if len(members) > MAX_MEMBERS or sum(member.file_size for member in members) > MAX_UNZIPPED:
-        msg = "압축을 풀면 너무 큰 파일이에요."
+        msg = "압축을 풀었더니 용량이 너무 커요."
         raise InvoiceFileError(msg)
     names = [member.filename.lower() for member in members]
     if any("vbaproject" in name or "macrosheets/" in name for name in names):
-        msg = "매크로가 든 파일은 읽지 않아요."
+        msg = "엑셀에 매크로가 있으면 열지 않아요."
         raise InvoiceFileError(msg)
     external = any(
         rel.get("TargetMode") == "External"
@@ -116,7 +116,7 @@ def refuse_unsafe(book: zipfile.ZipFile) -> None:
         for rel in fromstring(book.read(member)).iter(f"{RELS}Relationship")
     )
     if external or any("externallinks/" in name for name in names):
-        msg = "다른 파일로 연결된 엑셀은 읽지 않아요."
+        msg = "외부 파일을 끌어다 쓰는 엑셀은 안 받아요."
         raise InvoiceFileError(msg)
 
 
@@ -155,7 +155,7 @@ def column(reference: str) -> int:
 def cell_text(cell: Element, strings: list[str]) -> str:
     """Return a cell's value as the text the file stores."""
     if cell.find(f"{MAIN}f") is not None:
-        msg = "수식이 든 파일은 읽지 않아요. 값으로 저장해 주세요."
+        msg = "수식이 들어간 칸이 있으면 못 열어요. 수식 대신 결과값만 남겨 올려 주세요."
         raise InvoiceFileError(msg)
     if cell.get("t") == "inlineStr":
         return spelled(cell)
@@ -171,7 +171,7 @@ def sheet_rows(sheet: Element, strings: list[str]) -> Iterator[list[str]]:
             reference = cell.get("r")
             index = column(reference) if reference else place
             if not 0 <= index < MAX_COLUMNS:
-                msg = "행이나 열이 너무 많아요. 파일을 나눠 주세요."
+                msg = "줄과 칸이 한도를 넘었어요. 파일을 여러 개로 쪼개 주세요."
                 raise InvoiceFileError(msg)
             cells[index] = cell_text(cell, strings)
         yield [cells.get(index, "") for index in range(max(cells, default=-1) + 1)]

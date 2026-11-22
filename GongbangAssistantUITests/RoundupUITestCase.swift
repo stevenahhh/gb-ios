@@ -45,6 +45,8 @@ class RoundupUITestCase: XCTestCase {
             if target.waitForExistence(timeout: 2), target.isHittable { return true }
             app.swipeUp()
         }
+        // A swipe can carry a target that was just below the screen past the top, so the way back is searched too.
+        for _ in 0..<8 where !(target.exists && target.isHittable) { app.swipeDown() }
         return target.exists && target.isHittable
     }
 

@@ -83,7 +83,7 @@ enum BK25API {
 /// The quick approval from the Today card, which never sends a reply whose numbers are locked.
 enum BK25Approval {
     struct LockedReply: LocalizedError {
-        var errorDescription: String? { "초안의 숫자가 장부와 달라요. 문의를 열어 확인한 뒤 보내 주세요." }
+        var errorDescription: String? { "장부 기록과 초안 속 숫자가 안 맞아요. 문의를 열어 숫자를 맞춰 보신 다음 보내 주세요." }
     }
 
     @MainActor

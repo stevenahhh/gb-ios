@@ -12,7 +12,7 @@ struct CurrentPlanRow: View {
             } label: {
                 Label {
                     Text("요금제")
-                    Text(verbatim: selection.chosen == nil ? "아직 고르지 않았어요" : PlanCatalog.paymentNotice)
+                    Text(verbatim: selection.chosen == nil ? "고른 요금제 없음" : PlanCatalog.paymentNotice)
                         .foregroundStyle(Color.secondaryText)
                 } icon: { MenuIcon(systemName: "creditcard") }
             }

@@ -55,10 +55,10 @@ enum ActionCode: String, Codable, Hashable {
     /// The finished step for the toast, as in "‘머그컵’ 포장 완료했어요".
     var doneText: String {
         switch self {
-        case .confirmDeposit: "입금 확인했어요"
+        case .confirmDeposit: "입금 확인 완료"
         case .confirmOrder: "주문 확인했어요"
         case .pack: "포장 완료했어요"
-        case .registerInvoice: "송장 등록했어요"
+        case .registerInvoice: "송장 등록 완료"
         case .markDelivered: "배송 완료했어요"
         case .reviewContent: "검토했어요"
         case .completeTask: "완료했어요"
@@ -69,11 +69,11 @@ enum ActionCode: String, Codable, Hashable {
     /// The step taken back for the toast, as in "‘머그컵’ 포장 완료를 취소했어요".
     var undoneText: String {
         switch self {
-        case .confirmDeposit: "입금 확인을 취소했어요"
-        case .confirmOrder: "주문 확인을 취소했어요"
-        case .pack: "포장 완료를 취소했어요"
-        case .registerInvoice: "송장 등록을 취소했어요"
-        case .markDelivered: "배송 완료를 취소했어요"
+        case .confirmDeposit: "입금 확인을 되돌렸어요"
+        case .confirmOrder: "주문 확인을 되돌렸어요"
+        case .pack: "포장 완료를 되돌렸어요"
+        case .registerInvoice: "송장 등록을 되돌렸어요"
+        case .markDelivered: "배송 완료를 되돌렸어요"
         case .reviewContent: "검토를 취소했어요"
         case .completeTask: "완료를 취소했어요"
         case .acknowledgeRecommendation: "확인을 취소했어요"

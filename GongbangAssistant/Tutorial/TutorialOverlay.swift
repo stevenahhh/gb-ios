@@ -154,7 +154,7 @@ private struct CoachMark: View {
                 .font(.body)
                 .foregroundStyle(Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel("\(stop.sentence) \(total)개 중 \(position)번째 안내")
+                .accessibilityLabel("\(stop.sentence) \(position)/\(total)")
                 .accessibilityFocused($isFocused)
                 .accessibilityIdentifier("tutorial.sentence")
             row {

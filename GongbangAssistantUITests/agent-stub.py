@@ -37,24 +37,24 @@ TOOL_TIERS = {
 MODES = {"off", "ask", "auto"}
 BAD_INPUT = "입력한 내용을 다시 확인해 주세요."
 UNKNOWN_TOOL = "알 수 없는 도구예요. 고객에게 보내기, 결제, 환불, 삭제는 비서에게 맡길 수 없어요."
-STALE_SETTINGS = "그사이에 설정이 바뀌었어요. 다시 불러온 뒤 저장해 주세요."
-STALE_PROPOSAL = "그사이 내용이 바뀌었어요. 다시 확인해 주세요."
-MISSING_VALUE = "제안을 실행할 수 없어요. 빠진 값을 말씀해 주세요."
-NO_PROPOSAL = "제안을 찾지 못했어요."
-CLOSED = {"approved": "이미 승인한 제안이에요.", "dismissed": "이미 넘긴 제안이에요.", "expired": "제안 시간이 지났어요."}
+STALE_SETTINGS = "그사이 설정이 달라졌어요. 새로고침한 뒤에 저장해 주세요."
+STALE_PROPOSAL = "그사이 내용이 달라졌어요. 새로고침해서 봐 주세요."
+MISSING_VALUE = "빠진 값이 있어서 진행을 못 해요. 마저 말씀해 주세요."
+NO_PROPOSAL = "그 요청이 안 보여요."
+CLOSED = {"approved": "벌써 수락하신 건이에요.", "dismissed": "이미 지난 확인 요청이에요.", "expired": "수락 기간이 끝난 요청이에요."}
 NO_STEP = "그 단계를 찾지 못했어요."
-ALREADY_UNDONE = "이미 되돌렸어요."
+ALREADY_UNDONE = "벌써 원래대로 돌려 놨어요."
 NOT_UNDOABLE = "되돌릴 수 없는 단계예요."
-OTHER_FILE = "처음에 올린 파일과 달라요. 같은 파일을 다시 보내 주세요."
+OTHER_FILE = "아까와 다른 파일이에요. 처음에 쓰신 그 파일로 올려 주세요."
 NOTHING_TO_REGISTER = "등록할 수 있는 송장이 없어요. 파일을 다시 확인해 주세요."
-BAD_LINES = "확인한 행 번호를 읽지 못했어요."
+BAD_LINES = "보내 주신 줄 번호가 알아보기 어려워요."
 WRONG_FORMAT = "택배사 송장번호 형식과 맞지 않아요."
-ALREADY_SHIPPED = "이미 발송한 주문이에요."
-FILE_STEP = "송장 파일 가져오기"
+ALREADY_SHIPPED = "벌써 보낸 택배예요."
+FILE_STEP = "송장 파일로 한 번에 넣기"
 STEP_TITLES = {"confirm_order": "주문 확인", "mark_packed": "포장 완료 처리", "mark_delivered": "배송 완료 처리",
                "confirm_deposit": "예약금 확인", "register_invoice": "송장 등록",
                "record_quote_outcome": "출강 견적 결과 기록"}
-ORDER_STATUS = {"paid": "주문 확인 전", "packing": "포장 대기", "invoice_pending": "송장 대기",
+ORDER_STATUS = {"paid": "주문 확인 전", "packing": "포장 전", "invoice_pending": "송장 넣기 전",
                 "in_transit": "배송 중", "delivered": "배송 완료"}
 ATTENTION = {"paid", "packing", "invoice_pending"}
 INVOICE_ROWS = (
@@ -198,7 +198,7 @@ class Workshop:
             self.add_proposal(
                 "confirm_deposit", "김지은 님 예약금을 확인 처리할까요?", "예약금 기한이 24시간 안으로 다가왔어요.",
                 [("예약", "토요일 14:00 물레 클래스 · 2명"), ("예약금", "20,000원"), ("기한", "내일 12:00")],
-                ["입금을 확인했는지"], {"kind": "booking", "id": "booking-jieun", "label": "김지은 님 · 물레 클래스"},
+                ["입금 들어왔는지"], {"kind": "booking", "id": "booking-jieun", "label": "김지은 님 · 물레 클래스"},
                 timedelta(hours=20), ("deposit",)),
         ]
         if options.get("expired"):
@@ -214,7 +214,7 @@ class Workshop:
             raised.append(self.add_proposal(
                 "record_quote_outcome", "순천초등학교 출강 견적 답 적기", "견적을 보낸 지 사흘이 지났는데 답을 적지 않았어요.",
                 [("기관", "순천초등학교"), ("견적", "450,000원")],
-                ["기관의 답"], {"kind": "quote", "id": "quote-1", "label": "순천초등학교 출강 견적"},
+                ["기관에서 온 답"], {"kind": "quote", "id": "quote-1", "label": "순천초등학교 출강 견적"},
                 timedelta(hours=22), ("needs_value",), revision=1))
         self.add_run("proactive", "오늘 챙길 일이 있는지 확인했어요.", "done", None,
                      [step for _, step in raised], [proposal for proposal, _ in raised],
@@ -410,7 +410,7 @@ class Workshop:
         if "포장" in question and ("끝났" in question or "완료" in question):
             mode = self.tool_mode("mark_packed")
             if mode == "off":
-                step = self.add_step("mark_packed", "포장 완료 처리", "refused", "꺼 두신 일이라 하지 않았어요.")
+                step = self.add_step("mark_packed", "포장 완료 처리", "refused", "이 기능은 꺼 두셔서 그냥 뒀어요.")
                 return self.add_run(source, question, "done", "포장 완료 처리는 꺼 두셔서 하지 않았어요.", [step])
             if number is None:
                 step = self.add_step(
@@ -515,7 +515,7 @@ class Workshop:
             summary = f"주문 {undo[1]}을 {ORDER_STATUS[undo[2]]}(으)로 되돌렸어요."
         elif undo[0] == "deposit":
             self.deposit_confirmed = False
-            summary = "예약금 확인을 되돌렸어요."
+            summary = "예약금 받은 표시를 지웠어요."
         else:
             summary = "일정을 지웠어요."
         view["undone"] = True
@@ -531,11 +531,11 @@ class Workshop:
         if content_type != "application/octet-stream":
             raise Refused(422, "stub: the file goes as application/octet-stream")
         if not filename.lower().endswith((".csv", ".xlsx")):
-            raise Refused(422, "CSV나 XLSX 파일만 읽을 수 있어요.")
+            raise Refused(422, "엑셀 파일, 그러니까 CSV나 XLSX만 열어 볼 수 있어요.")
         if not data:
-            raise Refused(422, "CSV 형식이 올바르지 않아요.")
+            raise Refused(422, "규칙에 안 맞는 CSV 파일이에요.")
         if len(data) > 2 * 1024 * 1024:
-            raise Refused(413, "파일이 너무 커요. 2MB 이하로 나눠 주세요.")
+            raise Refused(413, "한 번에 2MB까지 불러와요. 파일을 쪼개서 다시 올려 주세요.")
 
     def import_invoices(self, data, filename, content_type, query):
         only(query, {"filename"}, required={"filename"})
@@ -556,7 +556,7 @@ class Workshop:
         if ready:
             proposal, step = self.add_proposal(
                 "register_invoice", FILE_STEP, f"송장 {ready}건을 한 번에 등록해요.",
-                [("파일", filename), ("등록할 송장", f"{ready}건"), ("확인 필요", f"{len(rows) - ready}건")],
+                [("파일", filename), ("넣을 송장", f"{ready}건"), ("확인 필요", f"{len(rows) - ready}건")],
                 [], None, timedelta(hours=24), ("file", hashlib.sha256(data).hexdigest()), revision=None)
             self.add_run("chat", f"{FILE_STEP}: {filename}", "done", None, [step], [proposal])
             proposal_id = proposal["id"]

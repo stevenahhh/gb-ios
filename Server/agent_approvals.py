@@ -45,12 +45,12 @@ from agent_types import (
 from database import transaction
 
 LOCK_NOT_AVAILABLE: Final = "55P03"
-HELD: Final = "다른 곳에서 처리하고 있어요. 잠시 뒤 다시 확인해 주세요."
+HELD: Final = "다른 기기에서 하는 중이에요. 잠깐 기다렸다 새로고침해 주세요."
 STORED_ARGS: Final = TypeAdapter(dict[str, JsonValue])
 CLOSED: Final[Mapping[str, str]] = {
-    "approved": "이미 승인한 제안이에요.",
-    "dismissed": "이미 하지 않기로 한 제안이에요.",
-    "expired": "승인할 수 있는 시간이 지난 제안이에요.",
+    "approved": "벌써 수락하신 건이에요.",
+    "dismissed": "이미 지난 확인 요청이에요.",
+    "expired": "수락 기간이 끝난 요청이에요.",
 }
 TARGET_KIND: Final[TypeAdapter[TargetKind]] = TypeAdapter(TargetKind)
 
@@ -64,7 +64,7 @@ async def require_on(db: AsyncSession) -> None:
 async def require_tool_on(db: AsyncSession, tool: str) -> None:
     """Refuse an approval of a tool the owner switched off after it was proposed."""
     if (await policy_settings(db)).per_tool.get(tool) == "off":
-        raise HTTPException(409, "꺼 두신 일이에요. 설정에서 켠 뒤 다시 승인해 주세요.")
+        raise HTTPException(409, "설정에서 이 기능이 꺼져 있어요. 켜고 나서 수락해 주세요.")
 
 
 async def open_proposal(db: AsyncSession, proposal_id: str, now: datetime) -> AgentProposalRow:
@@ -82,7 +82,7 @@ async def open_proposal(db: AsyncSession, proposal_id: str, now: datetime) -> Ag
             raise
         raise HTTPException(409, HELD) from None
     if row is None:
-        raise HTTPException(404, "제안을 찾지 못했어요.")
+        raise HTTPException(404, "그 요청이 안 보여요.")
     if row.state != "open":
         raise HTTPException(409, CLOSED[row.state])
     return row
@@ -107,7 +107,7 @@ async def approve(proposal_id: str, expected_revision: int | None, now: datetime
         row = await open_proposal(db, proposal_id, now)
         await require_tool_on(db, row.tool)
         if expected_revision != row.expected_revision:
-            raise HTTPException(409, "그사이 내용이 바뀌었어요. 다시 확인해 주세요.")
+            raise HTTPException(409, "그사이 내용이 달라졌어요. 새로고침해서 봐 주세요.")
         tool = TOOLS[row.tool]
         step = await db.get_one(AgentStepRow, row.step_id, with_for_update=True)
         outcome = await approved_outcome(db, row, tool, now)
@@ -137,9 +137,9 @@ async def approved_outcome(
         async with db.begin_nested():
             return await plan.execute(db, env.pinned or READ_TARGET)
     except ToolArgsError:
-        raise HTTPException(409, "제안을 실행할 수 없어요. 빠진 값을 말씀해 주세요.") from None
+        raise HTTPException(409, "빠진 값이 있어서 진행을 못 해요. 마저 말씀해 주세요.") from None
     except RevisionConflictError:
-        raise HTTPException(409, "그사이 바뀌어서 처리하지 못했어요. 다시 확인해 주세요.") from None
+        raise HTTPException(409, "그새 내용이 달라져 멈췄어요. 새로고침해서 봐 주세요.") from None
     except TargetGoneError:
         raise HTTPException(404, GONE) from None
     except ToolRefusedError as error:
@@ -178,14 +178,14 @@ async def undo_step(step_id: str, now: datetime) -> UndoResult:
             .execution_options(populate_existing=True),
         )
         if step is None:
-            raise HTTPException(404, "그 일의 기록을 찾지 못했어요.")
+            raise HTTPException(404, "해 둔 일 기록이 안 보여요.")
         if step.undone_at is not None:
-            raise HTTPException(409, "이미 되돌렸어요.")
+            raise HTTPException(409, "벌써 원래대로 돌려 놨어요.")
         if undo_closed(step, now):
-            raise HTTPException(409, "되돌릴 수 있는 시간이 지났어요.")
+            raise HTTPException(409, "되돌리기는 기간이 지나 안 돼요.")
         tool = TOOLS.get(step.tool)
         if step.undo_path is None or tool is None or tool.undo is None or step.target_kind is None:
-            raise HTTPException(409, "되돌릴 수 없는 일이에요.")
+            raise HTTPException(409, "이 일은 되돌리지 못해요.")
         target = TargetRef(
             TARGET_KIND.validate_python(step.target_kind),
             step.target_id or "",
@@ -196,9 +196,9 @@ async def undo_step(step_id: str, now: datetime) -> UndoResult:
             async with db.begin_nested():
                 outcome = await tool.undo(db, UndoInput(target, step.undo_data or {}, now))
         except RevisionConflictError:
-            raise HTTPException(409, "그사이 바뀌어서 되돌릴 수 없어요.") from None
+            raise HTTPException(409, "그동안 달라져서 못 되돌려요.") from None
         except TargetGoneError:
-            raise HTTPException(404, "되돌릴 대상이 없어졌어요.") from None
+            raise HTTPException(404, "돌려놓을 게 사라졌어요.") from None
         except ToolRefusedError as error:
             raise HTTPException(409, error.reason) from None
         except HTTPException as error:

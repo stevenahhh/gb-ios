@@ -11,7 +11,7 @@ from observability import MAX_JSON_BYTES
 
 pytestmark = pytest.mark.anyio
 KEY = "synthetic-test-key"
-REFUSED = {"detail": "앱을 확인하지 못했어요."}
+REFUSED = {"detail": "앱 연결 정보가 맞지 않아요. 연결 설정을 살펴봐 주세요."}
 
 
 @pytest.fixture

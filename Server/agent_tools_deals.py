@@ -95,7 +95,7 @@ def deposit_checks(env: ToolEnv, name: str, expected: int) -> tuple[Check, ...]:
     )
     return (
         Check(f"예약금 {won(expected)} 금액", passed=deposit_amounts(env) <= {expected}),
-        Check("입금 여부", passed=paid and NOT_PAID.search(turn) is None),
+        Check("입금됐는지", passed=paid and NOT_PAID.search(turn) is None),
     )
 
 
@@ -136,12 +136,12 @@ async def locate_deposit(db: AsyncSession, args: DepositArgs, env: ToolEnv) -> L
         other = sorted(deposit_amounts(env) - {expected})
         checks = deposit_checks(env, matches[0].claim.value, expected)
         preview = (
-            ("할 일", "예약금 입금 확인"),
+            ("할 일", "예약금 들어왔는지 확인"),
             ("예약", matches[0].target.label),
             ("예약금", won(expected)),
-            *((("말씀하신 금액", ", ".join(won(amount) for amount in other)),) if other else ()),
+            *((("말씀 속 금액", ", ".join(won(amount) for amount in other)),) if other else ()),
         )
-    located = found_one(matches, "예약금을 기다리는 예약에서 찾지 못했어요.")
+    located = found_one(matches, "예약금 받을 예약 목록에는 없어요.")
     return Located(
         located.resolution,
         claims_for(matches, Claim("입금", DEPOSIT_WORDS, "words")),
@@ -162,7 +162,7 @@ async def confirm_one_deposit(
     confirm_paid(booking, env.now)
     await db.flush()
     return Outcome(
-        f"예약금을 확인했어요: {target.label}",
+        f"입금 확인 끝: {target.label}",
         TargetRef("booking", booking.id, target.label, booking.revision),
         UndoTicket(f"/bookings/{booking.id}/undo-deposit"),
     )
@@ -173,7 +173,7 @@ async def undo_deposit(db: AsyncSession, undo: UndoInput) -> Outcome:
     booking = await lock_row(db, BookingRow, undo.target.id, undo.target.revision)
     await reopen_deposit(db, booking, undo.now)
     await db.flush()
-    return Outcome("예약금 확인을 되돌렸어요.")
+    return Outcome("예약금 받은 표시를 지웠어요.")
 
 
 class BookArgs(ToolArgs):
@@ -233,9 +233,9 @@ async def locate_session(db: AsyncSession, args: BookArgs, env: ToolEnv) -> Loca
         named = {day for day, *_ in dates_named(env.turn or "", local(env.now).date())}
         people = {found.value for found in mentions(env.turn or "") if found.unit == "people"}
         checks = (
-            Check("수업 날짜", passed=not named or local(session.starts_at).date() in named),
+            Check("수업 날", passed=not named or local(session.starts_at).date() in named),
             Check("인원", passed=people <= {args.party_size}),
-            Check("새 예약 여부", passed=NOT_NEW.search(env.turn or "") is None),
+            Check("새 예약인지", passed=NOT_NEW.search(env.turn or "") is None),
         )
     else:
         preview = ()
@@ -251,7 +251,7 @@ async def locate_session(db: AsyncSession, args: BookArgs, env: ToolEnv) -> Loca
     ]
     confidence = max((score for _, score in matches), default=BY_IDENTIFIER)
     return Located(
-        Resolution(candidates, confidence, "앞으로 열리는 수업 중에서 찾지 못했어요."),
+        Resolution(candidates, confidence, "다가오는 수업 목록엔 없어요."),
         tuple(claims),
         checks,
         preview,
@@ -277,7 +277,7 @@ async def book(db: AsyncSession, args: BookArgs, target: TargetRef, env: ToolEnv
     )
     label = booking_label(args.customer_name, session, booking.party_size)
     return Outcome(
-        f"예약을 만들었어요: {label}",
+        f"새 예약 잡음: {label}",
         TargetRef("booking", booking.id, label, booking.revision),
         UndoTicket("/agent/undo/create_booking", {"customer_id": None if known else booking.customer_id}),
     )
@@ -319,7 +319,7 @@ async def remove_booking(db: AsyncSession, undo: UndoInput) -> Outcome:
             ),
         ),
     )
-    return Outcome("만든 예약을 지웠어요.")
+    return Outcome("방금 잡은 예약을 없앴어요.")
 
 
 DEALS: Final[tuple[Tool, ...]] = (

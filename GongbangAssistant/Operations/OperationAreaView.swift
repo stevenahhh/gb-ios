@@ -24,16 +24,16 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
         case .bookings: "예약 관리"
         case .orders: "주문 관리"
         case .deliveries: "배송 관리"
-        case .channels: "SNS·스토어 관리"
+        case .channels: "SNS와 스토어"
         }
     }
 
     var summary: String {
         switch self {
-        case .bookings: "예약금·일정 변경·출석을 관리해요"
-        case .orders: "주문 확인부터 처리 상태까지"
-        case .deliveries: "포장·송장·배송 현황을 확인해요"
-        case .channels: "채널과 문의, 콘텐츠를 관리해요"
+        case .bookings: "예약금, 일정 바꾸기, 출석 체크를 챙겨요"
+        case .orders: "주문 들어온 순간부터 마무리까지"
+        case .deliveries: "포장부터 송장, 배송 상황까지 한눈에 봐요"
+        case .channels: "채널·문의·콘텐츠를 한 화면에서 챙겨요"
         }
     }
 
@@ -62,7 +62,7 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
         case .bookings:
             [AreaFilter("all", "전체"), AreaFilter("confirmed", "확정"), AreaFilter("deposit_pending", "예약금 대기")]
         case .orders:
-            [AreaFilter("all", "전체"), AreaFilter("paid", "결제 완료"), AreaFilter("processing", "처리 중")]
+            [AreaFilter("all", "전체"), AreaFilter("paid", "결제 완료"), AreaFilter("processing", "진행 중")]
         case .deliveries:
             [AreaFilter("all", "전체"), AreaFilter("scheduled", "발송 예정"),
              AreaFilter("in_transit", "배송 중"), AreaFilter("delivered", "완료")]
@@ -74,10 +74,10 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
 
     var searchPrompt: String {
         switch self {
-        case .bookings: "예약자명 또는 클래스 검색"
-        case .orders: "주문번호 또는 고객명 검색"
-        case .deliveries: "주문번호 또는 운송장 검색"
-        case .channels: "채널 또는 콘텐츠 검색"
+        case .bookings: "예약한 분이나 수업 찾기"
+        case .orders: "주문번호·손님 이름으로 찾기"
+        case .deliveries: "주문번호·송장번호로 찾기"
+        case .channels: "채널이나 올린 글 찾기"
         }
     }
 
@@ -85,35 +85,35 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .bookings: "예약 목록"
         case .orders: "주문 목록"
-        case .deliveries: "발송·배송 목록"
+        case .deliveries: "보낼 택배·가는 택배"
         case .channels: "채널과 할 일"
         }
     }
 
     var emptyTitle: String {
         switch self {
-        case .bookings: "해당하는 예약이 없어요"
-        case .orders: "해당하는 주문이 없어요"
-        case .deliveries: "해당하는 배송이 없어요"
-        case .channels: "해당하는 항목이 없어요"
+        case .bookings: "맞는 예약을 못 찾았어요"
+        case .orders: "맞는 주문을 못 찾았어요"
+        case .deliveries: "찾는 택배가 없어요"
+        case .channels: "맞는 결과가 없어요"
         }
     }
 
     var noDataTitle: String {
         switch self {
-        case .bookings: "아직 예약이 없어요"
-        case .orders: "아직 주문이 없어요"
-        case .deliveries: "발송할 물건이 없어요"
-        case .channels: "연결된 채널이 없어요"
+        case .bookings: "잡힌 예약이 하나도 없어요"
+        case .orders: "들어온 주문이 하나도 없어요"
+        case .deliveries: "보낼 택배가 없어요"
+        case .channels: "연결해 둔 채널이 아직 없어요"
         }
     }
 
     var noDataMessage: String {
         switch self {
-        case .bookings: "예약을 직접 등록해\u{00A0}보세요."
-        case .orders: "주문이 등록되면\n여기에 모여요."
-        case .deliveries: "주문이 들어오면\n발송할 물건이 여기에 생겨요."
-        case .channels: "등록된 채널이 생기면\n여기에 모여요."
+        case .bookings: "예약을 손으로\u{00A0}넣어 볼까요?"
+        case .orders: "새 주문이 생기면\n이 자리에 쌓여요."
+        case .deliveries: "새 주문이 생기면\n부칠 물건이 이 자리에 떠요."
+        case .channels: "채널을 연결해 두면\n이 자리에 쌓여요."
         }
     }
 
@@ -122,8 +122,8 @@ enum OperationArea: String, Decodable, CaseIterable, Identifiable, Hashable {
 
     var sortOptions: [AreaFilter] {
         switch self {
-        case .orders: [AreaFilter("newest", "최근 주문순"), AreaFilter("oldest", "오래된 주문순")]
-        case .deliveries: [AreaFilter("soonest", "마감 임박순"), AreaFilter("latest", "늦은 마감순")]
+        case .orders: [AreaFilter("newest", "새 주문 먼저"), AreaFilter("oldest", "옛 주문 먼저")]
+        case .deliveries: [AreaFilter("soonest", "마감 빠른 것 먼저"), AreaFilter("latest", "마감 늦은 것 먼저")]
         case .bookings, .channels: []
         }
     }
@@ -154,7 +154,7 @@ private struct SelectableWorkRow: View {
         .buttonStyle(PressDimStyle())
         .disabled(!isChoosable)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityHint(isChoosable ? "" : "남은 단계가 없어요.")
+        .accessibilityHint(isChoosable ? "" : "더 할 게 없어요.")
         .accessibilityIdentifier("select.\(item.id)")
     }
 }
@@ -190,7 +190,7 @@ private struct BatchActionBar: View {
                 }
             }
             HStack {
-                Text(groups.isEmpty ? "처리할 항목을 골라 주세요" : "\(groups.map(\.items.count).reduce(0, +))건 골랐어요")
+                Text(groups.isEmpty ? "한꺼번에 끝낼 일을 고르세요" : "\(groups.map(\.items.count).reduce(0, +))건 골랐어요")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
                 Spacer(minLength: 8)
@@ -276,7 +276,7 @@ struct OperationAreaView: View {
         .toolbar {
             if area == .bookings {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("예약 등록", systemImage: "plus") {
+                    Button("예약 넣기", systemImage: "plus") {
                         isAddingBooking = true
                     }
                     .accessibilityIdentifier("booking.add")
@@ -455,7 +455,7 @@ struct OperationAreaView: View {
             Button {
                 Task { await loadMore() }
             } label: {
-                BusyLabel(title: "더 보기", isBusy: isLoadingMore)
+                BusyLabel(title: "펼쳐 보기", isBusy: isLoadingMore)
             }
             .disabled(isLoadingMore)
             .accessibilityIdentifier("area.more")
@@ -467,8 +467,8 @@ struct OperationAreaView: View {
         guard area == .channels else { return area.listTitle }
         switch filter {
         case "channels": return "채널"
-        case "inquiries": return "답변 기다리는 문의"
-        case "content": return "홍보 글 초안"
+        case "inquiries": return "답장 안 한 문의"
+        case "content": return "홍보 글 초안 쓰기"
         default: return area.listTitle
         }
     }
@@ -505,7 +505,7 @@ struct OperationAreaView: View {
                 Button {
                     isAddingBooking = true
                 } label: {
-                    Text("예약 등록하기")
+                    Text("예약 넣기")
                         .foregroundStyle(Color(.systemBackground))
                 }
                 .buttonStyle(.borderedProminent)
@@ -520,20 +520,20 @@ struct OperationAreaView: View {
         if !query.isEmpty {
             // The system's search view writes its hint in a gray that measures 3.3:1 on the card.
             ContentUnavailableView {
-                Label("‘\(query)’ 검색 결과가 없어요", systemImage: "magnifyingglass")
+                Label("‘\(query)’(으)로는 아무것도 안 나와요", systemImage: "magnifyingglass")
             } description: {
-                Text(verbatim: "다른 검색어로 다시 찾아보세요.")
+                Text(verbatim: "다른 말로 찾아볼까요?")
                     .foregroundStyle(Color.secondaryText)
             }
         } else {
             ContentUnavailableView {
                 Label(area.emptyTitle, systemImage: "tray")
             } description: {
-                Text(verbatim: "지금 고른 상태에는 항목이 없어요.")
+                Text(verbatim: "이 상태로 고른 건 하나도 없어요.")
                     .foregroundStyle(Color.secondaryText)
             } actions: {
                 if filter != area.filters[0].key {
-                    Button("전체 보기") {
+                    Button("다 보기") {
                         filter = area.filters[0].key
                     }
                     .buttonStyle(.bordered)

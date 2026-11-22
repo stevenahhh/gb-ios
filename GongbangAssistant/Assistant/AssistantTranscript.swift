@@ -126,9 +126,9 @@ struct AssistantTranscript: View {
                 .textSelection(.enabled)
                 .accessibilityLabel(Text("\(AssistantIdentity.name): \(Text(text))"))
             // Written posts and replies get pasted elsewhere, so every answer can be copied in one tap.
-            Button("복사하기", systemImage: "doc.on.doc") {
+            Button("글 복사", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = turn.text
-                app.showToast("복사했어요", seconds: 2)
+                app.showToast("복사 끝!", seconds: 2)
             }
             .font(.subheadline.weight(.semibold))
             .buttonStyle(.bordered)
@@ -156,9 +156,9 @@ struct AssistantTranscript: View {
     @ViewBuilder
     private var pending: some View {
         if isAnswering {
-            GeneratingIndicator(label: "\(AssistantIdentity.name)가 현황을 보고 있어요")
+            GeneratingIndicator(label: "\(AssistantIdentity.name)가 공방 상황을 살펴보는 중이에요")
         } else if conversation.turns.last?.role == .owner {
-            UnansweredNotice(text: "답을 받지 못했어요.", retry: retry)
+            UnansweredNotice(text: "답이 도착하지 않았어요.", retry: retry)
         }
     }
 }

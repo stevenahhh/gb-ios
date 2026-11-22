@@ -45,7 +45,7 @@ Ranked jobs:
 - Primary action: the first state-changing card action of the selected segment (for example 포장 완료하기 on 배송).
 - Priorities: 1) the three numbers for today, 2) 확인해 주실 일, up to three assistant drafts to decide or fix in place, 3) the segment control (할 일 / 채널 / 배송 / 비서 추천), 4) the grouped rows with done toggles and status badges. A reply card's button is 답변 완료 and a post or suggestion card's is 승인; a decided card stays with 되돌리기, and replies and posts add copy and open-the-channel buttons. 예약 rows sit on a vertical timeline; checking any row strikes its title through in place.
 - Left out on purpose: monthly statistics, settings, a second prominent button.
-- 비서 제안 (`AgentProposalSection`) sits under the three numbers and the K06 cards: up to three waiting proposals, each row opening its card, and 모두 보기 when there are more. With none waiting it is hidden. A failed load keeps the list and adds 다시 시도.
+- 비서의 확인 요청 (`AgentProposalSection`) sits under the three numbers and the K06 cards: up to three waiting proposals, each row opening its card, and 모두 보기 when there are more. With none waiting it is hidden. A failed load keeps the list and adds 다시 시도.
 - Layout: List insetGrouped; scroll owner is the List; large title is a one-line headline of the most urgent work (`TodayHeadline`: overdue, class within two hours, waiting work, remaining today, all done, tomorrow/this week), always label-colored and at most 10 Hangul syllables, with a subtitle showing the date and the last update time; pull to refresh. Anti-patterns: nested segmented controls, card buttons that only navigate.
 
 ### 캘린더
@@ -100,25 +100,25 @@ Ranked jobs:
 - Left out on purpose: logins, passwords, system permission prompts, payment. A saved value says 저장됨, never 연결됨; a plan says 아직 결제되지 않아요.
 - Layout: a full-screen cover over the tabs. The cover draws the toast itself while it is up. Coach marks run over the real screens afterwards; mark rows with `tutorialAnchor`, never a section, which would become one row.
 
-### 비서 제안 (proposal cards)
-- Primary action: 승인하기 on the first open proposal. Only that card is prominent on a screen; in live voice none is.
-- Priorities: 1) the state badge and the deadline, 2) the title and why it was raised, 3) the values it would write and 필요한 것, 4) 승인하기 and 하지 않기.
+### 비서의 확인 요청 (proposal cards)
+- Primary action: 수락하기 on the first open proposal. Only that card is prominent on a screen; in live voice none is.
+- Priorities: 1) the state badge and the deadline, 2) the title and why it was raised, 3) the values it would write and 필요한 것, 4) 수락하기 and 거절하기.
 - Left out on purpose: approving several proposals at once (invoice files are the one group approval), editing values in the card.
-- States: 승인 대기 says nothing has changed yet; 승인함 shows the step that ran, with undo when the server offers it; 하지 않기로 함; 만료; 닫힘 for one decided elsewhere. A decided card stays in place. The list also has an empty state (기다리는 제안이 없어요) and an error with 다시 시도.
+- States: 확인 전 says nothing has changed yet; 수락했어요 shows the step that ran, with undo when the server offers it; 거절했어요; 기간 지남; 지난 확인 요청 for one decided elsewhere. A decided card stays in place. The list also has an empty state (지금은 답할 확인 요청이 없어요) and an error with 다시 시도.
 - Layout: one card per `CardSection`. At accessibility sizes the header, values, and buttons stack. Anti-patterns: a card that looks finished before a yes, a deadline in words the rest of the app doesn't use.
 
 ### 비서 단계 (steps and undo)
 - Primary action: 되돌리기, a bordered circle beside a step the server can still take back; full width at accessibility sizes.
 - Priorities: 1) what the step was, 2) its state word and target, 3) the owner's words it rested on, or why it stopped.
-- States: 완료, 되돌림, 승인 대기, 승인함, 하지 않기로 함, 만료, 닫힘, 하지 않음, 확인 필요. Only 승인 대기 and 확인 필요 carry the orange dot; the others are gray marks with a word.
+- States: 완료, 되돌림, 확인 전, 수락했어요, 거절했어요, 기간 지남, 지난 확인 요청, 건너뜀, 확인 필요. Only 확인 전 and 확인 필요 carry the orange dot; the others are gray marks with a word.
 - Left out on purpose: tool names, confidence numbers, and raw arguments.
 
-### 비서 자율성
-- Primary action: 지금 모두 멈추기. While stopped it gives way to a bordered ‘물어보고’로 다시 맡기기.
-- Priorities: 1) whether the assistant is working and the stop control, 2) 맡기는 방식 (끔, 물어보고, 알아서) with one sentence on the chosen one, 3) proactive proposals, 4) a mode per tool in two groups: work that stays inside the studio, then money, parcels, and customer state, 5) 맡길 수 없는 일, locked rows, 6) the daily cap and quiet hours, then 비서가 기억하는 것.
+### 비서에게 맡기는 범위
+- Primary action: 전부 멈추기. While stopped it gives way to a bordered 다시 켜고 ‘물어보고 하기’로 두기.
+- Priorities: 1) whether the assistant is working and the stop control, 2) 어떻게 맡길까요 (꺼 두기, 물어보고 하기, 알아서 하기) with one sentence on the chosen one, 3) proactive proposals, 4) a mode per tool in two groups: work that stays inside the studio, then money, parcels, and customer state, 5) 비서가 손댈 수 없는 일, locked rows, 6) the daily cap and quiet hours, then 비서가 기억하는 것.
 - States: loading and error with retry; stopped, where the proactive toggle and the tool pickers are disabled and say why; a refused change reverts and shows the server's reason on an orange-symbol line.
 - Left out on purpose: a save button. Every change saves at once.
-- Layout: List insetGrouped, pushed from 설정. Anti-patterns: the stop control below the fold, a switch for anything in 맡길 수 없는 일.
+- Layout: List insetGrouped, pushed from 설정. Anti-patterns: the stop control below the fold, a switch for anything in 비서가 손댈 수 없는 일.
 
 ### 비서가 한 일
 - Primary action: 되돌리기 on a step.

@@ -4,18 +4,18 @@ import SwiftUI
 extension AgentProposal {
     /// The moment a yes stops being possible, worded like every other deadline in the app.
     var due: CardDue? {
-        expiry.map { CardDue(at: $0.ISO8601Format(), prefix: "승인", suffix: "까지", missed: "기한 지남") }
+        expiry.map { CardDue(at: $0.ISO8601Format(), prefix: "수락", suffix: "까지", missed: "기한 지남") }
     }
 
     func badge(for standing: AgentCenter.ProposalStanding) -> Status {
         switch standing {
-        case .open where isInvoiceFile: Status(text: "파일 필요", tone: .attention)
-        case .open where needsOwnerWords: Status(text: "내용 필요", tone: .attention)
-        case .open: Status(text: "승인 대기", tone: .attention)
-        case .approved: Status(text: "승인함", tone: .done)
-        case .dismissed: Status(text: "하지 않기로 함", tone: .neutral)
-        case .expired: Status(text: "만료", tone: .neutral)
-        case .closed: Status(text: "끝난 제안", tone: .neutral)
+        case .open where isInvoiceFile: Status(text: "파일을 골라 주세요", tone: .attention)
+        case .open where needsOwnerWords: Status(text: "내용을 채워 주세요", tone: .attention)
+        case .open: Status(text: "확인 전", tone: .attention)
+        case .approved: Status(text: "수락했어요", tone: .done)
+        case .dismissed: Status(text: "거절했어요", tone: .neutral)
+        case .expired: Status(text: "기간 지남", tone: .neutral)
+        case .closed: Status(text: "지난 확인 요청", tone: .neutral)
         }
     }
 
@@ -23,12 +23,12 @@ extension AgentProposal {
     /// what the owner has to give first.
     var openNote: String {
         if isInvoiceFile {
-            return "아직 등록한 송장은 없어요. 파일은 휴대폰에 남기지 않아서 같은 파일을 다시 골라야 등록할 수 있어요."
+            return "송장은 아직 한 건도 등록하지 않았어요. 휴대폰에 파일을 남겨 두지 않으니 같은 파일을 한 번 더 골라 주셔야 등록돼요."
         }
-        guard needsOwnerWords else { return "아직 바꾼 것은 없어요. 승인하시면 그때 처리해요." }
+        guard needsOwnerWords else { return "아직 아무것도 건드리지 않았어요. 수락해 주시면 그때 시작할게요." }
         return tool == "register_invoice"
-            ? "아직 바꾼 것은 없어요. 송장번호를 알려 주시면 등록할게요."
-            : "아직 바꾼 것은 없어요. 기관의 답을 알려 주시면 적어 둘게요."
+            ? "손댄 건 아직 없어요. 번호만 알려 주시면 송장을 바로 넣어 둘게요."
+            : "아직 아무것도 건드리지 않았어요. 기관에서 뭐라고 답했는지 알려 주시면 메모할게요."
     }
 }
 
@@ -131,15 +131,15 @@ struct AgentProposalCard: View {
             if let step {
                 AgentStepRow(step: step)
             } else {
-                Label("승인한 대로 처리했어요.", systemImage: "checkmark")
+                Label("수락하신 그대로 마쳤어요.", systemImage: "checkmark")
                     .font(.subheadline.weight(.medium))
             }
         case .dismissed:
-            note("하지 않기로 했어요. 바뀐 것은 없어요.")
+            note("거절하신 요청이에요. 바꾼 건 없어요.")
         case .expired:
-            note("기한이 지난 제안이에요. 바뀐 것은 없어요.")
+            note("기간이 지난 확인 요청이에요. 바꾼 건 없어요.")
         case .closed:
-            note("이미 정했거나 기한이 지난 제안이에요.")
+            note("이미 정하셨거나 기간이 지난 확인 요청이에요.")
         }
     }
 
@@ -157,12 +157,12 @@ struct AgentProposalCard: View {
             }
         } else if proposal.needsOwnerWords {
             BK25VoiceField(text: $value, prompt: proposal.evidenceNeeded.joined(separator: ", "))
-            actions("알려 주기", identifier: "supply",
+            actions("내용 알려 주기", identifier: "supply",
                     isAvailable: !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
                 settle { await center.supply(value, for: proposal, app: app) }
             }
         } else {
-            actions("승인하기", identifier: "approve") {
+            actions("수락하기", identifier: "approve") {
                 settle { await center.approve(proposal, app: app) }
             }
         }
@@ -188,12 +188,12 @@ struct AgentProposalCard: View {
                     pressed = nil
                 }
             } label: {
-                BusyLabel(title: "하지 않기", isBusy: isBusy && pressed == .dismiss)
+                BusyLabel(title: "거절하기", isBusy: isBusy && pressed == .dismiss)
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 40)
             }
             .buttonStyle(.bordered)
-            .accessibilityLabel("\(proposal.title) 하지 않기")
+            .accessibilityLabel("\(proposal.title) 거절하기")
             .accessibilityIdentifier("agent.proposal.dismiss.\(proposal.id)")
         }
         .disabled(isBusy)
@@ -276,20 +276,20 @@ struct AgentProposalSection: View {
                     .accessibilityIdentifier("agent.proposal.row.\(proposal.id)")
                 }
                 if proposals.count > 3 {
-                    NavigationLink("모두 보기") { AgentProposalListView() }
+                    NavigationLink("다 보기") { AgentProposalListView() }
                         .accessibilityIdentifier("agent.proposals.all")
                 }
                 if center.proposalsFailed {
                     LabeledContent {
                         Button("다시 시도") { Task { await center.loadProposals() } }
                     } label: {
-                        Text("\(AssistantIdentity.name) 제안을 불러오지 못했어요")
+                        Text("\(AssistantIdentity.name)의 확인 요청을 열어 보지 못했어요")
                             .foregroundStyle(Color.secondaryText)
                     }
                 }
             } header: {
                 // A failed load knows no count, so the header gives none.
-                Text(proposals.isEmpty ? "\(AssistantIdentity.name) 제안" : "\(AssistantIdentity.name) 제안 \(proposals.count)건")
+                Text(proposals.isEmpty ? "\(AssistantIdentity.name)의 확인 요청" : "\(AssistantIdentity.name)의 확인 요청 \(proposals.count)건")
                     .font(.headline)
                     .foregroundStyle(Color.primary)
                     .textCase(nil)
@@ -312,7 +312,7 @@ struct AgentProposalBanner: View {
                     .fill(Color.pendingOrange)
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
-                Text("기다리는 제안 \(count)건")
+                Text("답을 기다리는 확인 요청 \(count)건")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 8)
@@ -367,15 +367,15 @@ struct AgentProposalListView: View {
                 .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
             } else {
                 ContentUnavailableView {
-                    Label("기다리는 제안이 없어요", systemImage: "checkmark.circle")
+                    Label("지금은 답할 확인 요청이 없어요", systemImage: "checkmark.circle")
                 } description: {
-                    Text(verbatim: "\(AssistantIdentity.name)가 승인받을 일이 생기면 여기에 올려요.")
+                    Text(verbatim: "\(AssistantIdentity.name)가 사장님 수락이 필요한 일을 만나면 여기로 보내요.")
                         .foregroundStyle(Color.secondaryText)
                 }
                 .accessibilityIdentifier("agent.proposals.empty")
             }
         }
-        .navigationTitle("\(AssistantIdentity.name) 제안")
+        .navigationTitle("\(AssistantIdentity.name)의 확인 요청")
         .navigationBarTitleDisplayMode(.inline)
         .invoiceFilePicking(onPage: onPage)
         .task(id: app.dataVersion) { await load() }

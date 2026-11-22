@@ -19,7 +19,7 @@ struct BK06TodaySection: View {
             NavigationLink {
                 BK06CancellationView()
             } label: {
-                Label { Text("취소 메시지 붙여넣기") } icon: { MenuIcon(systemName: "doc.on.clipboard") }
+                Label { Text("취소 문자 붙여 넣기") } icon: { MenuIcon(systemName: "doc.on.clipboard") }
             }
             .accessibilityIdentifier("k06.paste")
             .tutorialAnchor(.cancellations)
@@ -69,27 +69,27 @@ struct BK06TodaySection: View {
                     }
                 } else {
                     row("빈자리 \(card.openSeats)개", "\(card.classTitle) · \(BK06Format.when(card.startsAt))",
-                        badge: "제안할 분 \(card.targetCount)명")
+                        badge: "연락드릴 손님 \(card.targetCount)명")
                 }
             }
             .accessibilityIdentifier("k06.refill.\(card.sessionId)")
         }
         ForEach(cards.underMin) { card in
             NavigationLink { BK06UnderMinView(card: card) } label: {
-                row("예약 \(card.booked)명, 최소 \(card.minSeats)명", "\(card.className) · \(BK06Format.when(card.startsAt))",
-                    badge: "진행 여부 결정")
+                row("예약 \(card.booked)명 / 적어도 \(card.minSeats)명", "\(card.className) · \(BK06Format.when(card.startsAt))",
+                    badge: "수업을 열지 정하기")
             }
             .accessibilityIdentifier("k06.underMin.\(card.sessionId)")
         }
         NavigationLink { BK06SessionListView(sessions: cards.sessions) } label: {
-            Label { Text("출석 체크와 대기 손님") } icon: { MenuIcon(systemName: "checklist") }
+            Label { Text("출석 체크, 빈자리 기다리는 손님") } icon: { MenuIcon(systemName: "checklist") }
         }
         .accessibilityIdentifier("k06.sessions")
     }
 
     private var permissionRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("15분 알림을 받으려면 알림을 켜 주세요")
+            Text("알림을 허용해 주시면 수업 15분 전에 알려 드려요")
             HStack {
                 Button("알림 켜기") {
                     if reminders.status == .denied, let url = URL(string: UIApplication.openSettingsURLString) {
@@ -101,7 +101,7 @@ struct BK06TodaySection: View {
                         }
                     }
                 }
-                Button("나중에") { hidesPermission = true }
+                Button("다음에 할게요") { hidesPermission = true }
             }
             .buttonStyle(.bordered)
         }

@@ -200,7 +200,7 @@ async def locate_paid(db: AsyncSession, args: ConfirmArgs, env: ToolEnv) -> Loca
     preview = ()
     if len(matches) == 1:
         preview = (("할 일", "주문 확인"), ("주문", matches[0].target.label))
-    located = found_one(matches, "결제 완료된 주문 중에서 찾지 못했어요.")
+    located = found_one(matches, "결제 끝난 주문 목록엔 없어요.")
     return Located(
         located.resolution,
         claims_for(matches, step_claim("확인", CONFIRM_WORDS, env)),
@@ -216,7 +216,7 @@ async def confirm_one(db: AsyncSession, args: ConfirmArgs, target: TargetRef, en
     confirm(db, order, env.now)
     await db.flush()
     return Outcome(
-        f"#{order.order_number} 주문을 확인했어요. 포장 대기로 넘어갔어요.",
+        f"#{order.order_number} 주문 확인 끝. 이제 포장할 차례예요.",
         TargetRef("order", order.id, target.label, order.revision),
         UndoTicket(f"/orders/{order.id}/undo-confirm"),
     )
@@ -227,7 +227,7 @@ async def undo_confirm_order(db: AsyncSession, undo: UndoInput) -> Outcome:
     revision = undo.target.revision
     await unconfirm(db, undo.target.id, 0 if revision is None else revision)
     await db.flush()
-    return Outcome("주문 확인을 되돌렸어요.")
+    return Outcome("주문 확인 전으로 돌렸어요.")
 
 
 async def parcel_back(db: AsyncSession, undo: UndoInput) -> Outcome:
@@ -237,7 +237,7 @@ async def parcel_back(db: AsyncSession, undo: UndoInput) -> Outcome:
         raise RevisionConflictError
     await step_back(db, shipment)
     await db.flush()
-    return Outcome("발송 상태를 한 단계 되돌렸어요.")
+    return Outcome("보내기 전 단계로 돌려 놨어요.")
 
 
 class PackArgs(OrderArgs):
@@ -248,7 +248,7 @@ async def locate_packing(db: AsyncSession, args: PackArgs, env: ToolEnv) -> Loca
     """Find the parcel that was packed."""
     matches = await parcel_matches(db, args.order, "packing")
     preview = (("할 일", "포장 완료"), ("주문", matches[0].target.label)) if len(matches) == 1 else ()
-    located = found_one(matches, "포장 중인 주문에서 찾지 못했어요.")
+    located = found_one(matches, "포장 중 목록엔 없어요.")
     return Located(
         located.resolution,
         claims_for(matches, Claim("포장", PACK_WORDS, "words")),
@@ -264,7 +264,7 @@ async def pack(db: AsyncSession, args: PackArgs, target: TargetRef, env: ToolEnv
     pack_parcel(shipment, env.now)
     await db.flush()
     return Outcome(
-        f"포장 완료로 바꿨어요: {target.label}",
+        f"포장 끝으로 표시: {target.label}",
         TargetRef("shipment", shipment.id, target.label, shipment.revision),
         parcel_ticket(shipment),
     )
@@ -278,7 +278,7 @@ async def locate_in_transit(db: AsyncSession, args: DeliveredArgs, env: ToolEnv)
     """Find the parcel on its way."""
     matches = await parcel_matches(db, args.order, "in_transit")
     preview = (("할 일", "배송 완료"), ("주문", matches[0].target.label)) if len(matches) == 1 else ()
-    located = found_one(matches, "배송 중인 주문에서 찾지 못했어요.")
+    located = found_one(matches, "배송 중 목록엔 없어요.")
     return Located(
         located.resolution,
         claims_for(matches, step_claim("도착", DELIVER_WORDS, env)),
@@ -294,7 +294,7 @@ async def deliver(db: AsyncSession, args: DeliveredArgs, target: TargetRef, env:
     await deliver_parcel(db, shipment, env.now)
     await db.flush()
     return Outcome(
-        f"배송 완료로 바꿨어요: {target.label}",
+        f"배송 끝으로 표시: {target.label}",
         TargetRef("shipment", shipment.id, target.label, shipment.revision),
         parcel_ticket(shipment),
     )
@@ -327,7 +327,7 @@ async def locate_invoice(db: AsyncSession, args: InvoiceArgs, env: ToolEnv) -> L
         order = (("주문", row.candidates[0].label),) if len(row.candidates) == 1 else ()
         warnings = (
             *(("확인", PROBLEM_TEXT[problem]) for problem in row.problems),
-            *(("없는 주문번호", str(number)) for number in row.unknown_orders),
+            *(("찾을 수 없는 주문번호", str(number)) for number in row.unknown_orders),
         )
         preview = (("송장번호", row.number), ("택배사", row.carrier or "알 수 없음"), *order, *warnings)
         return Located(row.resolution, (claim,), row.checks, preview)
@@ -335,7 +335,7 @@ async def locate_invoice(db: AsyncSession, args: InvoiceArgs, env: ToolEnv) -> L
     preview = (
         (("송장번호", args.tracking_number), ("주문", matches[0].target.label)) if len(matches) == 1 else ()
     )
-    located = found_one(matches, "송장을 등록할 주문을 찾지 못했어요. 주문 번호를 알려 주세요.")
+    located = found_one(matches, "어느 주문의 송장인지 헷갈려요. 주문 번호부터 알려 주세요.")
     unread = Check("송장번호 형식", passed=False)
     return Located(located.resolution, (claim,), (unread,), preview)
 
@@ -367,9 +367,9 @@ async def register_one(db: AsyncSession, args: InvoiceArgs, target: TargetRef, e
     if result.outcome == "refused":
         if result.reason == REFUSALS[409]:
             raise RevisionConflictError
-        raise ToolRefusedError(result.reason or "송장을 등록하지 못했어요.")
+        raise ToolRefusedError(result.reason or "송장 넣기에 실패했어요.")
     return Outcome(
-        f"송장을 등록했어요: {target.label} · {args.tracking_number}",
+        f"송장 입력 끝: {target.label} · {args.tracking_number}",
         TargetRef("shipment", target.id, target.label, result.revision_after),
         result.undo,
     )

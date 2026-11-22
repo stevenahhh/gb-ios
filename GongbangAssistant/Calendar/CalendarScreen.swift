@@ -181,7 +181,7 @@ struct CalendarContent: View {
             let start = calendar.dateComponents([.month, .day], from: first)
             let end = calendar.dateComponents([.month, .day], from: last)
             let endText = start.month == end.month ? "\(end.day ?? 0)일" : "\(end.month ?? 0)월 \(end.day ?? 0)일"
-            return "\(start.month ?? 0)월 \(start.day ?? 0)일 – \(endText)"
+            return "\(start.month ?? 0)월 \(start.day ?? 0)일 ~ \(endText)"
         }
     }
 

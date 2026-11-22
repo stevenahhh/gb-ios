@@ -330,7 +330,7 @@ def checked_policy(raw: ExtractedPolicy, source: str) -> Policy:
         reading.read(part, [row for _, row in quoted], fees=fees)
     for index, row in enumerate(raw.rules):
         if index not in used:
-            reading.doubt(row.note.strip() or f"{day_label(row.days_before)} 환불 조건", [row.days_before])
+            reading.doubt(row.note.strip() or f"{day_label(row.days_before)} 환불 기준", [row.days_before])
     known = {squashed(part) for part in parts}
     for line in raw.unread:
         if not any(squashed(line) in part for part in known):
@@ -441,7 +441,7 @@ def percent_label(percent: int | None) -> str:
     """Name a tier's refund."""
     match percent:
         case None:
-            return "정하지 않음"
+            return "아직 안 정했어요"
         case 0:
             return "환불 없음"
         case 100:
@@ -454,7 +454,7 @@ def rule_label(rule: Rule) -> str:
     """Write one tier on one line."""
     extras = [
         text for keep, text in (
-            (rule.deduct_material, "재료비 공제"), (rule.carry_over_allowed, "이월 가능"),
+            (rule.deduct_material, "재료비 빼기"), (rule.carry_over_allowed, "다음 수업으로 넘기기 가능"),
         ) if keep
     ]
     return " · ".join([f"{day_label(rule.days_before)} {percent_label(rule.refund_percent)}", *extras])
@@ -471,14 +471,14 @@ def policy_summary(rules: Sequence[Rule], late: LateRule | None) -> str:
 def change_summary(before: Policy | None, after: Policy) -> str:
     """Say which tiers differ from the previous version."""
     if before is None:
-        return "첫 규정"
+        return "첫 번째 규정"
     old = {rule.days_before: rule_label(rule) for rule in before.rules}
     new = {rule.days_before: rule_label(rule) for rule in after.rules}
     changed = [day for day in sorted({*old, *new}, reverse=True) if old.get(day) != new.get(day)]
-    parts = [new.get(day, f"{day_label(day)} 삭제") for day in changed]
+    parts = [new.get(day, f"{day_label(day)} 지움") for day in changed]
     if before.late != after.late:
         parts.append("지각 기준")
-    return ", ".join(parts) or "바뀐 행 없음"
+    return ", ".join(parts) or "바뀐 줄이 없어요"
 
 
 @dataclass(frozen=True, slots=True)

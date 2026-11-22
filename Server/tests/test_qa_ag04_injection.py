@@ -38,7 +38,7 @@ def test_pasted_text_is_not_the_owners_statement(turn: str) -> None:
     ],
 )
 def test_pasted_text_never_becomes_a_note(turn: str) -> None:
-    assert find_evidence(Claim("기억할 말", NOTE, "quote"), turn, TODAY) is None
+    assert find_evidence(Claim("사장님 말씀", NOTE, "quote"), turn, TODAY) is None
 
 
 @pytest.mark.parametrize(
@@ -50,6 +50,6 @@ def test_a_lookup_is_not_a_statement(turn: str) -> None:
 
 
 def test_the_owners_own_words_still_count() -> None:
-    note = Claim("기억할 말", NOTE, "quote")
+    note = Claim("사장님 말씀", NOTE, "quote")
     assert find_evidence(Claim("포장", "포장", "words"), "1040 포장 끝났어", TODAY) is not None
     assert find_evidence(note, f"기억해 줘. {NOTE}", TODAY) is not None

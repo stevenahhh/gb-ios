@@ -154,7 +154,7 @@ async def session_group(db: AsyncSession, today: date) -> TaskGroup | None:
         total = sum(party for party, _ in booked)
         others = total - 1
         suffix = f" 외 {others}명" if others else ""
-        who = f"{masked(booked[0][1])} 님{suffix}" if booked else "예약 없음"
+        who = f"{masked(booked[0][1])} 님{suffix}" if booked else "예약한 분 없음"
         items.append(TaskItem(
             id=session.id, target="session", time=clock(session.starts_at), title=session.title,
             detail=f"{who} · {session.duration_minutes}분", status=None,
@@ -211,8 +211,8 @@ def transit_text(counts: Counts) -> tuple[str, str]:
     """Summarize moving parcels from their estimated arrival dates."""
     summary = f"배송 중 {count(counts.in_transit)} · 오늘 도착 {count(counts.arriving_today)}"
     if counts.late_in_transit:
-        return summary, f"도착 예정일이 지난 배송이 {count(counts.late_in_transit)} 있어요."
-    return summary, "도착 예정일이 지난 배송은 없어요."
+        return summary, f"늦어지는 배송이 {count(counts.late_in_transit)} 있어요."
+    return summary, "늦어지는 배송은 없어요."
 
 
 async def headline_facts(db: AsyncSession, now: datetime, counts: Counts) -> HeadlineFacts:
@@ -275,7 +275,7 @@ async def today_screen(db: Session, now: Now) -> Today:
         RecommendationRow, RecommendationRow.acknowledged_at >= now - RECENT_WINDOW,
     ))) or 0
     summary, detail = transit_text(counts)
-    new_orders = metric("newOrders", "오늘 새 주문", counts.orders_today)
+    new_orders = metric("newOrders", "오늘 들어온 주문", counts.orders_today)
     return Today(
         date=today, generated_at=now, attention_count=counts.attention,
         tasks=TasksSegment(
@@ -284,7 +284,7 @@ async def today_screen(db: Session, now: Now) -> Today:
                     key="bookedPeople", label="오늘 예약", value=counts.booked_people_today,
                     display=people(counts.booked_people_today),
                 ),
-                new_orders, metric("shipToday", "오늘 발송", counts.ship_due_today),
+                new_orders, metric("shipToday", "오늘 보낼 택배", counts.ship_due_today),
             ],
             groups=[group for group in groups if group is not None],
         ),
@@ -305,7 +305,7 @@ async def today_screen(db: Session, now: Now) -> Today:
                     "openRecommendations", "오늘의 추천",
                     sum(card.action is not None for card in suggestions),
                 ),
-                metric("drafts", "준비된 초안", counts.drafts),
+                metric("drafts", "써 둔 초안", counts.drafts),
                 metric("acknowledgedThisWeek", "이번 주 확인", acknowledged),
             ],
             items=suggestions,

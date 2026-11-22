@@ -62,15 +62,15 @@ async def present(row: DraftRow, db: AsyncSession, now: datetime) -> AssistantDr
         case ContentDraftRow():
             channel = await db.get_one(ChannelRow, row.channel_id)
             kind: DraftKind = "content"
-            lines = [f"{channel.name} 게시물", row.summary]
-            after = "승인해도 자동으로 게시되지 않아요. 게시는 직접 해 주세요."
+            lines = [f"{channel.name} 올릴 글", row.summary]
+            after = "글은 사장님이 직접 올려 주세요. 수락하셔도 저절로 올라가지 않아요."
         case RecommendationRow():
             kind = "recommendation"
             facts = recommendation_lines(
                 row, await load_counts(db, now.date()), await weekend_opening(db, now),
             )
             lines = facts[:-1] if facts else []
-            after = "승인해도 자동으로 신청되거나 발송되지 않아요."
+            after = "수락하셔도 신청이나 발송이 저절로 되지는 않아요."
         case _:
             assert_never(row)
     status = STATUSES[row.status]

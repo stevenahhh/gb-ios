@@ -311,7 +311,7 @@ struct TaskRow: View {
         .opacity(isLocked ? 0.35 : 1)
         .accessibilityLabel("\(item.title) 완료 표시")
         .accessibilityValue(isDone ? "완료" : "미완료")
-        .accessibilityHint(isLocked ? "수업이 시작되면 누를 수 있어요." : "")
+        .accessibilityHint(isLocked ? "시작 시각이 돼야 버튼이 켜져요." : "")
         .accessibilityIdentifier("task.\(item.id)")
     }
 
@@ -481,14 +481,14 @@ struct StepBackButton: View {
         .controlSize(.large)
         .disabled(app.isRunning(item.id))
         .accessibilityLabel("되돌리기")
-        .accessibilityValue(isSteppingBack ? "처리 중" : "")
-        .accessibilityHint("이전 단계로 돌아가요.")
+        .accessibilityValue(isSteppingBack ? "진행 중" : "")
+        .accessibilityHint("앞 화면으로 가요.")
         .accessibilityIdentifier("stepback.\(item.id)")
-        .confirmationDialog("송장을 지우고 되돌릴까요?", isPresented: $isConfirming, titleVisibility: .visible) {
-            Button("송장 지우고 되돌리기", role: .destructive, action: stepBack)
+        .confirmationDialog("등록한 송장을 지우고 되돌릴까요?", isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("송장을 지우고 되돌릴게요", role: .destructive, action: stepBack)
             Button("그대로 두기", role: .cancel) {}
         } message: {
-            Text("등록한 택배사와 송장번호가 지워져요.")
+            Text("넣어 두신 택배사 이름, 번호가 다 사라져요.")
         }
     }
 
@@ -525,7 +525,7 @@ struct CardActions: View {
                     StepBackButton(item: item, isSteppingBack: $isSteppingBack)
                     if item.action == nil {
                         // If the line wraps it breaks after 단계로, never inside "돌아갈 수 있어요".
-                        Text(verbatim: "이전 단계로 돌아갈\u{00A0}수\u{00A0}있어요.")
+                        Text(verbatim: "앞\u{00A0}화면으로\u{00A0}언제든 가요.")
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -564,8 +564,8 @@ struct StepProgressLine: View {
                     .animation(.default, value: progress.current)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("진행 단계")
-            .accessibilityValue("\(progress.steps.count)단계 중 \(progress.current)단계 완료, 다음 \(progress.steps[progress.current])")
+            .accessibilityLabel("어디까지 왔나")
+            .accessibilityValue("\(progress.steps.count)단계 가운데 \(progress.current)단계 마침, 이어서 할 일 \(progress.steps[progress.current])")
         }
     }
 }
@@ -592,7 +592,7 @@ struct BusyLabel: View {
         .animation(.default, value: isBusy)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityValue(isBusy ? "처리 중" : "")
+        .accessibilityValue(isBusy ? "진행 중" : "")
     }
 
     @ViewBuilder
@@ -733,11 +733,11 @@ struct SectionHeader: View {
                 Spacer()
             }
             if let area {
-                NavigationLink("전체 보기", value: AreaRoute(area: area, filter: filter))
+                NavigationLink("다 보기", value: AreaRoute(area: area, filter: filter))
                     .font(.subheadline)
                     .textCase(nil)
                     .frame(minHeight: 44)
-                    .accessibilityLabel("\(title) 전체 보기")
+                    .accessibilityLabel("\(title) 다 보기")
             }
         }
     }
@@ -767,7 +767,7 @@ struct LoadErrorView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("불러오지 못했어요", systemImage: "wifi.exclamationmark")
+            Label("못 불러왔어요", systemImage: "wifi.exclamationmark")
         } description: {
             Text(verbatim: message)
                 .foregroundStyle(Color.secondaryText)
@@ -811,7 +811,7 @@ extension [WorkItem] {
 
 struct UnconnectedChannelsNote: View {
     var body: some View {
-        Text("채널은 아직 연결 전이에요. 주문과 문의는 앱에 직접 등록한 내용만 보여요.")
+        Text("채널 연결 전이에요. 목록엔 사장님이 앱에서 손으로 넣은 주문·문의만 떠요.")
             .font(.subheadline)
             .foregroundStyle(Color.secondaryText)
             .textCase(nil)

@@ -13,15 +13,15 @@ struct InvoiceFile: Identifiable, Hashable {
 
     init(contentsOf url: URL) throws {
         guard ["csv", "xlsx"].contains(url.pathExtension.lowercased()) else {
-            throw RoundupAPIError(message: "CSV나 XLSX 파일만 읽을 수 있어요.")
+            throw RoundupAPIError(message: "엑셀 파일, 그러니까 CSV나 XLSX만 열어 볼 수 있어요.")
         }
         let isScoped = url.startAccessingSecurityScopedResource()
         defer { if isScoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else {
-            throw RoundupAPIError(message: "파일을 열지 못했어요. 다시 골라 주세요.")
+            throw RoundupAPIError(message: "이 파일은 안 열려요. 다른 파일로 다시 골라 주세요.")
         }
         guard data.count <= Self.maxBytes else {
-            throw RoundupAPIError(message: "파일이 너무 커요. 2MB 이하로 나눠 주세요.")
+            throw RoundupAPIError(message: "한 번에 2MB까지 불러와요. 파일을 쪼개서 다시 올려 주세요.")
         }
         name = url.lastPathComponent
         self.data = data
@@ -60,7 +60,7 @@ private struct InvoiceFilePicking: ViewModifier {
                 case .failure(let error): failure = error.localizedDescription
                 }
             }
-            .alert("파일을 불러오지 못했어요", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+            .alert("파일을 열어 보지 못했어요", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
                 Button("확인", role: .cancel) {}
             } message: {
                 Text(failure ?? "")
@@ -111,12 +111,12 @@ extension AgentInvoiceImport.Row {
     /// Why the row needs the owner, in the server's words where it sent any.
     var reasons: [String] {
         if !problems.isEmpty { return problems.map(\.text) }
-        if target == nil { return ["어느 주문인지 하나로 정하지 못했어요."] }
-        if carrier == nil { return ["택배사를 알 수 없어요."] }
-        return ["택배사를 번호 길이로 짐작했어요. 맞는지 확인해 주세요."]
+        if target == nil { return ["이 줄이 어느 주문 건인지 딱 하나로 못 골랐어요."] }
+        if carrier == nil { return ["어느 택배사 번호인지 모르겠어요."] }
+        return ["번호 자릿수를 보고 택배사를 추측했어요. 한 번 봐 주세요."]
     }
 
-    var title: String { target?.label ?? "\(line)번째 줄" }
+    var title: String { target?.label ?? "파일 \(line)번째 줄" }
 }
 
 /// What the server read from a picked carrier export. One approval registers the clean rows together with the
@@ -140,7 +140,7 @@ struct AgentInvoiceImportView: View {
         LoadableContent(loader: loader, retry: load) { read in
             content(read)
         }
-        .navigationTitle("송장 파일 확인")
+        .navigationTitle("송장 파일 훑어보기")
         .navigationBarTitleDisplayMode(.inline)
         // Reading raises a proposal, so coming back to this screen must not read again.
         .task { if loader.value == nil { await load() } }
@@ -169,8 +169,8 @@ struct AgentInvoiceImportView: View {
                     Text(verbatim: file.name)
                         .font(.headline)
                     Group {
-                        Text("송장번호 \(rows.count)개를 읽었어요.")
-                        Text("승인하시기 전에는 아무것도 등록하지 않아요.")
+                        Text("파일에서 찾은 송장번호 \(rows.count)개")
+                        Text("사장님이 수락하시기 전엔 한 건도 넣지 않아요.")
                     }
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
@@ -179,16 +179,16 @@ struct AgentInvoiceImportView: View {
                 .accessibilityIdentifier("invoice.import.summary")
                 approval(read, chosen: chosen, remaining: rows.count - (registered ?? 0))
             } footer: {
-                Text("파일은 휴대폰에 저장하지 않아요. 이 화면을 나가면 지워요.\n송장번호는 파일에 적힌 그대로 등록해요.\n번호가 맞는지 택배사에 확인하지는 않아요.")
+                Text("이 화면을 벗어나면 파일은 바로 사라져요. 휴대폰에 따로 남기지 않아요.\n쓰여 있는 송장번호를 숫자 하나 안 바꾸고 그대로 넣어요.\n택배사에 그 번호가 맞는지 물어보지는 않아요.")
             }
 
             if !ready.isEmpty {
-                CardSection("바로 등록할 수 있는 송장 \(ready.count)건") {
+                CardSection("문제없이 들어갈 송장 \(ready.count)건") {
                     ForEach(ready, id: \.offset) { InvoiceRowLine(row: $0.element) }
                 }
             }
             if !warned.isEmpty {
-                CardSection("형식을 확인할 송장 \(warned.count)건") {
+                CardSection("번호를 다시 봐 주실 송장 \(warned.count)건") {
                     ForEach(warned, id: \.offset) { warnedRow($0.element) }
                 }
             }
@@ -203,9 +203,9 @@ struct AgentInvoiceImportView: View {
                         .accessibilityIdentifier("invoice.import.leftOut.\(row.element.line)")
                     }
                 } header: {
-                    Text("이번에 등록하지 않는 송장 \(leftOut.count)건")
+                    Text("이번엔 넣지 않고 빼 둔 송장 \(leftOut.count)건")
                 } footer: {
-                    Text("파일에서 고친 뒤 다시 불러오거나 배송 관리에서 직접 등록해 주세요.")
+                    Text("엑셀 파일을 고쳐서 다시 올리시거나 배송 관리에서 하나씩 넣어 주세요.")
                 }
             }
         }
@@ -218,10 +218,10 @@ struct AgentInvoiceImportView: View {
     private func approval(_ read: AgentInvoiceImport, chosen: Int, remaining: Int) -> some View {
         if let registered {
             VStack(alignment: .leading, spacing: 4) {
-                Label("송장 \(registered)건을 등록했어요.", systemImage: "checkmark")
+                Label("송장 \(registered)건 등록 끝!", systemImage: "checkmark")
                     .font(.subheadline.weight(.medium))
                 if remaining > 0 {
-                    Text("남은 \(remaining)건은 파일을 다시 불러와야 등록할 수 있어요.")
+                    Text("나머지 \(remaining)건은 파일을 한 번 더 올리셔야 들어가요.")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }
@@ -229,19 +229,19 @@ struct AgentInvoiceImportView: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("invoice.import.registered")
             NavigationLink(value: AreaRoute(area: .deliveries)) {
-                Text("잘못 등록한 송장은 배송 관리에서 되돌릴 수 있어요.")
+                Text("혹시 잘못 넣으셨다면 배송 관리에서 되돌리시면 돼요.")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
             }
             .accessibilityIdentifier("invoice.import.deliveries")
         } else if let proposal = read.proposalId {
-            BK06PrimaryButton(title: "\(chosen)건 등록 승인", isBusy: app.isRunning(Self.runID),
+            BK06PrimaryButton(title: "\(chosen)건 수락하고 등록", isBusy: app.isRunning(Self.runID),
                               identifier: "invoice.import.approve") {
                 approve(proposal, lines: read.rows.map(\.line).filter(accepted.contains))
             }
             .disabled(chosen == 0)
         } else {
-            Text("바로 등록할 수 있는 송장이 없어서 승인할 것이 없어요. 아래 이유를 확인해 주세요.")
+            Text("지금은 수락할 송장이 한 건도 없네요. 아래에서 줄마다 왜 빠졌는지 보여 드릴게요.")
                 .font(.subheadline)
                 .accessibilityIdentifier("invoice.import.nothing")
         }
@@ -251,13 +251,13 @@ struct AgentInvoiceImportView: View {
         VStack(alignment: .leading, spacing: 8) {
             InvoiceRowLine(row: row)
             InvoiceReasons(reasons: row.reasons)
-            Toggle("형식이 달라도 이 번호로 등록", isOn: Binding(
+            Toggle("번호 형식이 달라도 이대로 등록할게요", isOn: Binding(
                 get: { accepted.contains(row.line) },
                 set: { isOn in
                     if isOn { accepted.insert(row.line) } else { accepted.remove(row.line) }
                 }))
                 .disabled(registered != nil || app.isRunning(Self.runID))
-                .accessibilityLabel("\(row.title) 형식이 달라도 이 번호로 등록")
+                .accessibilityLabel("\(row.title) 번호 형식이 달라도 이대로 등록할게요")
                 .accessibilityIdentifier("invoice.import.accept.\(row.line)")
         }
         .padding(.vertical, 2)
@@ -275,8 +275,8 @@ struct AgentInvoiceImportView: View {
             registered = outcome.registered
             AgentCenter.shared.noteApproved(outcome.proposal)
             ConversationStore.shared.recordExchange(
-                "송장 파일 ‘\(file.name)’ 등록 승인",
-                answer: AssistantAnswer(text: "송장 \(outcome.registered)건을 등록했어요.", items: [], agent: nil))
+                "‘\(file.name)’ 파일의 송장 등록 수락",
+                answer: AssistantAnswer(text: "송장 \(outcome.registered)건 등록 끝!", items: [], agent: nil))
             await AgentCenter.shared.loadProposals()
         }
     }

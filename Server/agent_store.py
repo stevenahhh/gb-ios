@@ -40,9 +40,9 @@ from prompts import Intent
 
 LOCK_CLASS: Final = 0x61676E74
 """Advisory lock class of the assistant; the schema name picks the lock within it."""
-BUSY: Final = "앞선 요청을 처리하고 있어요. 끝나면 다시 말씀해 주세요."
-UNAVAILABLE: Final = "지금은 처리할 수 없어요. 잠시 뒤 다시 시도해 주세요."
-NO_ANSWER: Final = "지금은 답할 수 없어요. 잠시 뒤 다시 시도해 주세요."
+BUSY: Final = "하던 일이 아직 안 끝났어요. 조금 뒤에 얘기해 주세요."
+UNAVAILABLE: Final = "잠깐 문제가 생겼어요. 조금 있다가 한 번 더 해 주세요."
+NO_ANSWER: Final = "지금은 대답이 어려워요. 조금 있다가 물어봐 주세요."
 RESULT_CHARS: Final = 500
 TARGET_KIND: Final[TypeAdapter[TargetKind]] = TypeAdapter(TargetKind)
 DECISION: Final[TypeAdapter[Decision]] = TypeAdapter(Decision)

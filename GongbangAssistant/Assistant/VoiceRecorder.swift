@@ -12,7 +12,7 @@ final class VoiceRecorder {
     /// Live mode passes `configuresSession: false` because it already runs a play-and-record voice chat session.
     func start(configuresSession: Bool = true) async throws {
         guard await AVAudioApplication.requestRecordPermission() else {
-            throw RoundupAPIError(message: "마이크 권한이 꺼져 있어요. 설정에서 마이크를 허용해 주세요.")
+            throw RoundupAPIError(message: "공도리가 마이크를 쓸 수 없게 막혀 있어요. 아이폰 설정에서 허용해 주세요.")
         }
         if configuresSession {
             let session = AVAudioSession.sharedInstance()
@@ -30,7 +30,7 @@ final class VoiceRecorder {
         let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
         recorder.isMeteringEnabled = true
         guard recorder.record(forDuration: 55) else {
-            throw RoundupAPIError(message: "녹음을 시작하지 못했어요.")
+            throw RoundupAPIError(message: "녹음이 안 켜졌어요. 한 번 더 눌러 주세요.")
         }
         self.recorder = recorder
         isRecording = true

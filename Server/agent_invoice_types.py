@@ -30,28 +30,28 @@ class Problem(StrEnum):
 
 
 PROBLEM_TEXT: Final[Mapping[Problem, str]] = {
-    Problem.DUPLICATE_IN_TEXT: "같은 송장번호나 주문이 글에 두 번 나와요.",
-    Problem.ALREADY_USED: "이미 다른 주문에 등록된 송장번호예요.",
-    Problem.ALREADY_SHIPPED: "이미 발송한 주문이에요.",
-    Problem.NOT_PACKED: "아직 포장 완료 전인 주문이에요.",
-    Problem.WRONG_FORMAT: "알려진 송장번호 자릿수와 달라요. 맞는 번호인지 확인해 주세요.",
-    Problem.RECIPIENT_MISMATCH: "받는 분이 주문과 달라요.",
-    Problem.SPOKEN_DIGITS: "말로 불러 준 번호라 한 번 확인이 필요해요.",
-    Problem.COLUMNS_SWAPPED: "주문번호와 송장번호 칸이 바뀐 것 같아요.",
-    Problem.UNKNOWN_ORDER: "열린 주문에 없는 번호가 함께 적혀 있어요.",
-    Problem.BANK_LINE: "계좌나 입금 이야기가 함께 있어요. 송장번호가 맞는지 확인해 주세요.",
+    Problem.DUPLICATE_IN_TEXT: "붙여 넣은 글에 같은 송장번호나 주문이 겹쳐요.",
+    Problem.ALREADY_USED: "이 번호는 벌써 다른 주문에 들어가 있어요.",
+    Problem.ALREADY_SHIPPED: "벌써 보낸 택배예요.",
+    Problem.NOT_PACKED: "포장이 아직이라 송장을 못 넣어요.",
+    Problem.WRONG_FORMAT: "보통 송장번호보다 자릿수가 길거나 짧아요. 번호를 한 번 더 봐 주세요.",
+    Problem.RECIPIENT_MISMATCH: "주문서와 받는 분 이름이 달라요.",
+    Problem.SPOKEN_DIGITS: "불러 주신 번호를 받아 적었어요. 맞는지 한 번 봐 주세요.",
+    Problem.COLUMNS_SWAPPED: "두 번호가 칸을 바꿔 들어간 듯해요. 주문번호와 송장번호를 봐 주세요.",
+    Problem.UNKNOWN_ORDER: "지금 받은 주문과 안 맞는 번호도 보여요.",
+    Problem.BANK_LINE: "송장번호 옆에 입금이나 계좌 얘기가 있어요. 번호가 맞는지 봐 주세요.",
 }
 CHECK_LABEL: Final[Mapping[Problem, str]] = {
-    Problem.DUPLICATE_IN_TEXT: "두 번 나온 송장번호나 주문",
-    Problem.ALREADY_USED: "이미 등록된 송장번호",
-    Problem.ALREADY_SHIPPED: "이미 발송한 주문",
-    Problem.NOT_PACKED: "포장이 끝나지 않은 주문",
-    Problem.WRONG_FORMAT: "송장번호 자릿수",
-    Problem.RECIPIENT_MISMATCH: "주문과 다른 받는 분",
-    Problem.SPOKEN_DIGITS: "말로 불러 준 송장번호",
-    Problem.COLUMNS_SWAPPED: "주문번호와 송장번호 칸",
-    Problem.UNKNOWN_ORDER: "열린 주문에 없는 번호",
-    Problem.BANK_LINE: "계좌나 입금 이야기",
+    Problem.DUPLICATE_IN_TEXT: "겹쳐 들어간 번호",
+    Problem.ALREADY_USED: "이미 쓰인 번호",
+    Problem.ALREADY_SHIPPED: "벌써 보낸 택배",
+    Problem.NOT_PACKED: "포장 덜 끝난 주문",
+    Problem.WRONG_FORMAT: "번호 길이",
+    Problem.RECIPIENT_MISMATCH: "받는 분이 다른 주문",
+    Problem.SPOKEN_DIGITS: "불러 주신 번호",
+    Problem.COLUMNS_SWAPPED: "번호 칸 뒤바뀜",
+    Problem.UNKNOWN_ORDER: "주문과 안 맞는 번호",
+    Problem.BANK_LINE: "입금·계좌 얘기",
 }
 CARRIER_LABEL: Final = "택배사"
 BLOCKING: Final = frozenset({

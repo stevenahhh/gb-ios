@@ -59,28 +59,28 @@ extension ConnectionService {
 
     /// Says in Korean what is wrong with a typed value, or nothing when it can be sent.
     func problem(in raw: String) -> String? {
-        guard let format else { return "아직 저장할 수 없는 서비스예요." }
+        guard let format else { return "이 서비스는 아직 저장이 안 돼요." }
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty { return "값을 입력해 주세요." }
-        if value.count > Self.maxLength { return "\(Self.maxLength)자까지 저장할 수 있어요." }
-        if value.contains(where: \.isWhitespace) { return "띄어쓰기 없이 입력해 주세요." }
+        if value.isEmpty { return "빈칸부터 채워 주세요." }
+        if value.count > Self.maxLength { return "\(Self.maxLength)자 넘게는 못 넣어요." }
+        if value.contains(where: \.isWhitespace) { return "띄우지 말고 붙여서 넣어 주세요." }
         guard value.contains("/") else {
-            guard let rule = format.id else { return "https://로 시작하는 주소를 붙여 넣어 주세요." }
+            guard let rule = format.id else { return "주소창 맨 앞이 https://인 링크만 받아요. 복사해서 넣어 보세요." }
             return rule.problem(in: rule.dropsAtSign && value.hasPrefix("@") ? String(value.dropFirst()) : value)
         }
-        guard value.lowercased().hasPrefix("https://") else { return "https://로 시작하는 주소를 붙여 넣어 주세요." }
+        guard value.lowercased().hasPrefix("https://") else { return "주소창 맨 앞이 https://인 링크만 받아요. 복사해서 넣어 보세요." }
         guard let parts = URLComponents(string: value), let host = parts.host?.lowercased() else {
-            return "주소를 다시 확인해 주세요."
+            return "링크에 오타가 없는지 봐 주세요."
         }
         if parts.port != nil || parts.user != nil || parts.password != nil {
-            return "포트 번호나 로그인 정보가 든 주소는 저장할 수 없어요."
+            return "포트 번호나 아이디·비밀번호가 섞인 링크는 보관하지 않아요."
         }
         guard let prefix = format.hosts[host] else {
-            return "\(format.hosts.keys.sorted().joined(separator: ", ")) 주소만 저장할 수 있어요."
+            return "\(format.hosts.keys.sorted().joined(separator: ", ")) 링크만 받아요."
         }
         let path = parts.path
         guard path.hasPrefix(prefix), path.count > prefix.count else {
-            return "주소가 끝까지 입력되지 않았어요. 예: \(format.examples.last ?? "")"
+            return "링크가 다 들어가지 않은 것 같아요. 예시 \(format.examples.last ?? "")"
         }
         guard let rule = format.id else { return nil }
         return rule.problem(in: path.split(separator: "/").first.map(String.init) ?? "")
@@ -90,43 +90,43 @@ extension ConnectionService {
 /// Every service the app names, savable ones first. Sentences state what the server does today; nothing here
 /// promises collection, because only GET /collectors/status can show it.
 enum ConnectionCatalog {
-    private static let untilCollecting = "지금은 값만 저장해요. 수집이 시작되면 수집 중으로 바뀌어요."
-    private static let notBuilt = "아직 만들지 않았어요."
+    private static let untilCollecting = "아직은 입력값만 보관하는 단계예요. 실제로 불러오기 시작하면 상태 표시도 가져오는 중으로 달라져요."
+    private static let notBuilt = "지금은 없는 기능이에요."
 
     static let all: [ConnectionService] = [
         ConnectionService(
             id: "instagram", name: "인스타그램", symbol: "camera",
-            brings: "게시물과 댓글을 모아 문의 답변과 글감 추천에 써요.",
-            needs: "계정 이름", today: untilCollecting, collectorSource: "instagram",
+            brings: "피드 게시물과 댓글을 읽어 뒀다가 손님 질문에 답하거나 글감을 고를 때 참고해요.",
+            needs: "인스타 아이디", today: untilCollecting, collectorSource: "instagram",
             format: ConnectionFormat(
                 hosts: ["www.instagram.com": "/"],
                 id: .init(allowed: "abcdefghijklmnopqrstuvwxyz0123456789._", length: 1...30, dropsAtSign: true,
-                          hint: "영문, 숫자, 마침표, 밑줄로 30자까지 입력해 주세요."),
+                          hint: "영어 글자·숫자·마침표·밑줄로 30자 안에서 넣어 보세요."),
                 placeholder: "my_workshop",
                 examples: ["my_workshop", "https://www.instagram.com/my_workshop/"])),
         ConnectionService(
             id: "naver_smartstore", name: "네이버 스마트스토어", symbol: "bag",
-            brings: "주문과 상품 문의를 주문 관리와 문의로 가져와요.",
-            needs: "스토어 주소", today: untilCollecting, collectorSource: "naver_smartstore",
+            brings: "스마트스토어로 들어온 주문과 상품 질문이 앱 안 주문 관리·문의 목록에 같이 떠요.",
+            needs: "스마트스토어 링크", today: untilCollecting, collectorSource: "naver_smartstore",
             format: ConnectionFormat(
                 hosts: ["smartstore.naver.com": "/", "m.smartstore.naver.com": "/", "brand.naver.com": "/"],
                 id: nil, placeholder: "https://smartstore.naver.com/",
                 examples: ["https://smartstore.naver.com/myworkshop"])),
         ConnectionService(
             id: "naver_blog", name: "네이버 블로그", symbol: "doc.text",
-            brings: "새 글을 읽어 콘텐츠 현황과 글감 추천에 써요.",
+            brings: "블로그 새 글을 읽어 두고 채널 현황과 글감 고를 때 참고해요.",
             needs: "블로그 아이디", today: untilCollecting, collectorSource: "naver_blog",
             format: ConnectionFormat(
                 hosts: ["blog.naver.com": "/", "m.blog.naver.com": "/"],
                 id: .init(allowed: "abcdefghijklmnopqrstuvwxyz0123456789_-", length: 2...40, dropsAtSign: false,
-                          hint: "영문, 숫자, 밑줄, 붙임표로 2자에서 40자까지 입력해 주세요."),
+                          hint: "영어 글자·숫자·밑줄(_)·붙임표(-)로 2~40자 사이로 넣어 보세요."),
                 placeholder: "myworkshop",
                 examples: ["myworkshop", "https://blog.naver.com/myworkshop"])),
         ConnectionService(
             id: "naver_booking", name: "네이버 예약", symbol: "calendar.badge.clock",
-            brings: "예약 페이지 주소를 예약 안내에 쓸 수 있게 보관해요.",
-            needs: "예약 페이지 주소",
-            today: "지금은 주소만 저장해요. 네이버가 예약 내역을 읽는 길을 공개하지 않아 예약은 직접 등록해요.",
+            brings: "손님께 예약 안내할 때 쓰도록 예약 페이지 링크를 보관해 둬요.",
+            needs: "예약 페이지 링크",
+            today: "여기엔 링크만 둬요. 네이버 쪽에서 예약 내역을 바깥 앱에 내주지 않아서 예약은 사장님이 손으로 넣으셔야 해요.",
             collectorSource: "naver_booking",
             format: ConnectionFormat(
                 hosts: ["booking.naver.com": "/", "m.booking.naver.com": "/"],
@@ -134,66 +134,66 @@ enum ConnectionCatalog {
                 examples: ["https://booking.naver.com/booking/6/bizes/123456"])),
         ConnectionService(
             id: "naver_place", name: "네이버 플레이스", symbol: "mappin.and.ellipse",
-            brings: "공방 위치와 영업 정보 페이지를 오시는 길 안내에 쓸 수 있게 보관해요.",
-            needs: "플레이스 주소", today: "지금은 주소만 저장해요. 리뷰는 아직 가져오지 않아요.",
+            brings: "오시는 길 알려 줄 때 쓰려고 공방 위치·영업 정보 페이지를 넣어 둬요.",
+            needs: "플레이스 링크", today: "리뷰 불러오기는 아직 안 돼요. 지금은 플레이스 링크만 갖고 있어요.",
             format: ConnectionFormat(
                 hosts: ["map.naver.com": "/", "m.place.naver.com": "/", "pcmap.place.naver.com": "/", "naver.me": "/"],
                 id: nil, placeholder: "https://naver.me/",
                 examples: ["https://naver.me/abcd1234", "https://m.place.naver.com/place/123456"])),
         ConnectionService(
             id: "kakao_channel", name: "카카오톡 채널", symbol: "message",
-            brings: "채널 채팅 주소를 문의 안내에 쓸 수 있게 보관해요.",
-            needs: "채널 주소",
-            today: "지금은 주소만 저장해요. 카카오가 채널 대화 읽기를 열어 두지 않아 대화는 가져오지 못해요.",
+            brings: "문의 안내에 쓰려고 채널 채팅 주소를 넣어 둬요.",
+            needs: "채널 링크",
+            today: "여기엔 링크만 둬요. 카카오가 바깥 앱에 채널 채팅을 내주지 않아서 대화 내용은 옮겨 올 방법이 없어요.",
             format: ConnectionFormat(
                 hosts: ["pf.kakao.com": "/_"],
                 id: nil, placeholder: "https://pf.kakao.com/_",
                 examples: ["https://pf.kakao.com/_abcde"])),
         ConnectionService(
             id: "google_maps", name: "구글 지도", symbol: "map",
-            brings: "구글 지도 주소를 외국인 손님 길 안내에 쓸 수 있게 보관해요.",
-            needs: "지도 공유 주소", today: "지금은 주소만 저장해요. 리뷰는 아직 가져오지 않아요.",
+            brings: "외국인 손님께 길 알려 줄 때 쓰려고 구글 지도 주소를 넣어 둬요.",
+            needs: "지도 공유 링크", today: "리뷰 불러오기는 아직 안 돼요. 지금은 플레이스 링크만 갖고 있어요.",
             format: ConnectionFormat(
                 hosts: ["maps.app.goo.gl": "/", "maps.google.com": "", "www.google.com": "/maps", "google.com": "/maps"],
                 id: nil, placeholder: "https://maps.app.goo.gl/",
                 examples: ["https://maps.app.goo.gl/AbCdEf123"])),
         ConnectionService(
             id: "naver_talktalk", name: "네이버 톡톡", symbol: "ellipsis.bubble",
-            brings: "톡톡 문의를 문의함으로 모아요.",
-            needs: "톡톡 파트너센터의 챗봇 API 신청",
-            today: "톡톡은 문의가 올 때 서버로 보내 주는 방식인데 받는 창구를 아직 만들지 않았어요.",
+            brings: "톡톡으로 온 손님 질문은 문의함 한곳에 쌓여요.",
+            needs: "준비물: 챗봇 API 신청서 (톡톡 파트너센터에서 접수)",
+            today: "톡톡 문의를 받아 오는 기능은 아직 없어요. 지금은 톡톡 앱에서 봐 주세요.",
             collectorSource: "naver_talktalk"),
         ConnectionService(
-            id: "courier_file", name: "택배사 프로그램 파일", symbol: "shippingbox",
-            brings: "송장 파일을 올리면 배송 관리의 송장 번호를 한 번에 채워요.",
-            needs: "택배사 프로그램에서 내려받은 송장 파일",
-            today: "파일 읽기는 \(notBuilt) 지금은 송장 번호를 붙여 넣거나 바코드로 읽어요."),
+            id: "courier_file", name: "택배사 송장 파일", symbol: "shippingbox",
+            brings: "택배사가 준 엑셀 송장 파일을 올리면 배송 목록 번호 칸이 한꺼번에 채워져요.",
+            needs: "송장 파일 (택배사 프로그램에서 내보낸 것)",
+            today: "파일 읽기는 \(notBuilt) 그때까지는 송장번호를 복사해 붙이시거나 카메라로 바코드를 비추면 돼요."),
         ConnectionService(
             id: "calendar", name: "캘린더", symbol: "calendar",
-            brings: "개인 일정과 수업 일정을 한 화면에서 봐요.",
-            needs: "기기 캘린더 접근 허용",
-            today: "\(notBuilt) 비공개 캘린더 주소는 비밀번호와 같아서 받지 않아요."),
+            brings: "사장님 개인 약속과 수업이 캘린더에 같이 보여요.",
+            needs: "아이폰 캘린더 보기 허용",
+            today: "\(notBuilt) 비공개 캘린더 링크는 알기만 해도 누구나 일정을 볼 수 있어서 안 받을게요."),
         ConnectionService(
-            id: "bank_deposit", name: "계좌 입금 알림", symbol: "wonsign.circle",
-            brings: "입금 알림을 예약금 대기와 맞춰 입금 확인을 제안해요.",
-            needs: "은행 입금 알림",
-            today: "\(notBuilt) 계좌 비밀번호나 인증서는 앞으로도 받지 않아요."),
+            id: "bank_deposit", name: "통장 입금 문자", symbol: "wonsign.circle",
+            brings: "입금 문자가 오면 예약금 기다리는 예약과 대조해 입금 확인 요청을 띄워요.",
+            needs: "통장 입금 알림 문자",
+            today: "\(notBuilt) 앞으로도 통장 비밀번호와 공동인증서는 절대 묻지 않을게요."),
         ConnectionService(
-            id: "kakao_alimtalk", name: "카카오 알림톡", symbol: "bell",
-            brings: "예약 확정과 수업 전날 안내를 알림톡으로 보내요.",
-            needs: "카카오 비즈니스 채널과 발신 프로필", today: notBuilt),
+            id: "kakao_alimtalk", name: "카카오 알림톡 보내기", symbol: "bell",
+            brings: "예약이 확정됐을 때와 수업 하루 전에 손님께 카카오 알림톡이 자동으로 가요.",
+            needs: "준비물: 카카오 비즈니스 채널, 그 채널의 발신 프로필", today: notBuilt),
         ConnectionService(
             id: "idus", name: "아이디어스", symbol: "gift",
-            brings: "작품 주문과 문의를 주문 관리로 모아요.",
-            needs: "작가 스토어 주소", today: notBuilt),
+            brings: "아이디어스 작품 주문과 손님 질문도 주문 관리 탭에서 봐요.",
+            needs: "아이디어스 작가 페이지 링크", today: notBuilt),
         ConnectionService(
-            id: "class_platform", name: "클래스 플랫폼", symbol: "person.2",
-            brings: "솜씨당이나 프립에서 받은 수업 예약을 예약 관리로 모아요.",
-            needs: "플랫폼 예약 내역", today: "\(notBuilt) 지금은 예약을 직접 등록해요."),
+            id: "class_platform", name: "솜씨당·프립 같은 클래스 앱", symbol: "person.2",
+            brings: "솜씨당·프립 같은 클래스 앱에서 들어온 예약도 예약 탭 하나로 모아 볼 수 있어요.",
+            needs: "클래스 앱 예약 내역", today: "\(notBuilt) 그때까지는 예약을 손으로 넣어 주세요."),
         ConnectionService(
             id: "daangn", name: "당근 비즈프로필", symbol: "house",
-            brings: "동네 손님 문의와 소식 글을 모아요.",
-            needs: "비즈프로필 주소", today: notBuilt),
+            brings: "당근에서 동네 손님이 보낸 질문과 소식 글을 한데 모아요.",
+            needs: "당근 비즈프로필 링크", today: notBuilt),
     ]
 
     /// The order for one kind of workshop. `key` is BusinessType's raw value; an unknown or empty key keeps the

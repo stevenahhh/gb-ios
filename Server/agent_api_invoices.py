@@ -39,7 +39,7 @@ from contracts import ApiModel
 from database import transaction
 
 router = APIRouter(prefix="/agent/invoices")
-FILE_STEP: Final = "송장 파일 가져오기"
+FILE_STEP: Final = "송장 파일로 한 번에 넣기"
 PAYLOAD: Final = TypeAdapter(dict[str, JsonValue])
 type FileName = Annotated[str, Query(min_length=1, max_length=200)]
 type AcceptedLines = Annotated[
@@ -136,7 +136,7 @@ async def read_file(request: Request) -> bytes:
     async for chunk in request.stream():
         received.extend(chunk)
         if len(received) > MAX_BYTES:
-            raise HTTPException(413, "파일이 너무 커요. 2MB 이하로 나눠 주세요.")
+            raise HTTPException(413, "한 번에 2MB까지 불러와요. 파일을 쪼개서 다시 올려 주세요.")
     return bytes(received)
 
 
@@ -204,7 +204,7 @@ def confirmed_choices(plan: FilePlan, seed: FileSeed, lines: frozenset[int]) -> 
     accepted = [(line, choice) for line, choice in plan.warned if line in lines]
     expected = tuple(row for row in seed.warned if row.line in lines)
     if shown(plan.clean) != seed.clean or shown(accepted) != expected:
-        raise HTTPException(409, "파일을 올린 뒤에 등록할 송장이 달라졌어요. 다시 가져와 주세요.")
+        raise HTTPException(409, "올리신 뒤 송장 내용이 바뀌었어요. 파일을 새로 불러와 주세요.")
     return tuple(choice for _, choice in (*plan.clean, *accepted))
 
 
@@ -212,7 +212,7 @@ def accepted_lines(text: str) -> frozenset[int]:
     """Read the row numbers the owner accepted despite a length warning."""
     found = [part.strip() for part in text.split(",") if part.strip()]
     if not all(part.isdecimal() for part in found):
-        raise HTTPException(422, "확인한 행 번호를 읽지 못했어요.")
+        raise HTTPException(422, "보내 주신 줄 번호가 알아보기 어려워요.")
     return frozenset(int(part) for part in found)
 
 
@@ -221,7 +221,7 @@ def stored_file(proposal: AgentProposalRow) -> FileSeed:
     try:
         return FileSeed.model_validate(PAYLOAD.validate_python(proposal.args).get("args"))
     except ValidationError:
-        raise HTTPException(409, "이 제안은 파일에서 온 제안이 아니에요.") from None
+        raise HTTPException(409, "이건 파일로 만든 요청이 아니에요.") from None
 
 
 @router.post("/import")
@@ -266,7 +266,7 @@ async def propose_file(
             FILE_STEP,
             {"file": masker.text(filename), "rows": len(plan.rows), "ready": len(plan.clean)},
             "proposed",
-            f"파일에서 읽은 송장 {len(plan.rows)}건 중 {len(plan.clean)}건을 한 번에 등록할 수 있어요.",
+            f"파일 속 송장 {len(plan.rows)}건 중 {len(plan.clean)}건은 바로 한꺼번에 넣어 드릴게요.",
         ),
         now,
     )
@@ -274,14 +274,14 @@ async def propose_file(
         step,
         ProposalSeed(
             TOOLS["register_invoice"],
-            f"승인하시면 송장 {len(plan.clean)}건을 한 번에 등록해요.",
+            f"수락 한 번이면 송장 {len(plan.clean)}건이 한꺼번에 들어가요.",
             plan.seed(data).model_dump(mode="json"),
             None,
             (
                 ("파일", filename),
-                ("등록할 송장", f"{len(plan.clean)}건"),
-                ("길이 확인 필요", f"{confirmable}건"),
-                ("이번에 등록하지 않는 송장", f"{rest}건"),
+                ("넣을 송장", f"{len(plan.clean)}건"),
+                ("번호 길이 봐 주세요", f"{confirmable}건"),
+                ("이번엔 빼 둘 송장", f"{rest}건"),
             ),
             (),
             title=FILE_STEP,
@@ -311,11 +311,11 @@ async def approve_file(
         proposal = await open_proposal(db, proposal_id, now)
         seed = stored_file(proposal)
         if seed.digest != hashlib.sha256(data).hexdigest():
-            raise HTTPException(409, "처음에 올린 파일과 달라요. 같은 파일을 다시 보내 주세요.")
+            raise HTTPException(409, "아까와 다른 파일이에요. 처음에 쓰신 그 파일로 올려 주세요.")
         rows = await rows_of(db, data, filename, now)
         choices = confirmed_choices(plan_of(rows), seed, lines)
         if not choices:
-            raise HTTPException(409, "등록할 수 있는 송장이 없어요. 확인한 행을 알려 주세요.")
+            raise HTTPException(409, "넣을 송장이 하나도 안 남았어요. 어느 줄을 보셨는지 알려 주세요.")
         results = await register_invoices(
             db,
             InvoiceRequest(
@@ -330,9 +330,9 @@ async def approve_file(
         refused = [result for result in results if result.outcome == "refused"]
         if refused:
             reason = refused[0].reason or ""
-            raise HTTPException(409, f"{len(refused)}건을 등록하지 못했어요. {reason}".strip())
+            raise HTTPException(409, f"{len(refused)}건은 실패했어요. {reason}".strip())
         steps = await registered_steps(db, proposal, results, rows, now)
-        text = f"송장 {len(results)}건을 등록했어요."
+        text = f"송장 {len(results)}건, 주문에 넣어 뒀어요."
         group = await db.get_one(AgentStepRow, proposal.step_id, with_for_update=True)
         proposal.state, proposal.decided_at, proposal.result = "approved", now, text
         group.result = text
@@ -364,10 +364,10 @@ async def registered_steps(
                 tool.title,
                 {"tracking_number": result.tracking_number},
                 "proposed",
-                "파일 승인으로 등록했어요.",
+                "파일을 수락하셔서 송장을 넣었어요.",
                 (),
                 TargetRef("shipment", result.shipment_id, label, result.revision_before),
-                result=f"송장을 등록했어요: {label} · {result.tracking_number}",
+                result=f"송장 입력 끝: {label} · {result.tracking_number}",
                 revision_after=result.revision_after,
                 undo=result.undo,
             ),

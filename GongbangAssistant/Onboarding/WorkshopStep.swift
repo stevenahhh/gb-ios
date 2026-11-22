@@ -62,7 +62,7 @@ struct WorkshopStep: View {
 
     private var form: some View {
         List {
-            OnboardingStepTitleRow(title: "공방 정보를 확인해 주세요")
+            OnboardingStepTitleRow(title: "적힌 공방 정보가 맞나요?")
             CardSection("기본 정보") {
                 LabeledContent("공방 이름") {
                     TextField("공방 이름", text: $name)
@@ -109,7 +109,7 @@ struct WorkshopStep: View {
             } header: {
                 Text("하는 일")
             } footer: {
-                Text("여러 개를 고를 수 있어요. 이 선택은 이 기기에만 저장해요.")
+                Text("여러 가지를 함께 골라도 괜찮아요. 고르신 항목은 지금 쓰는 아이폰 안에만 보관해요.")
             }
 
             CardSection {
@@ -117,7 +117,7 @@ struct WorkshopStep: View {
                     isEditingAll = true
                 } label: {
                     HStack {
-                        Label { Text("소개와 지도 위치 입력") } icon: { MenuIcon(systemName: "map") }
+                        Label { Text("소개 글·지도 위치 넣기") } icon: { MenuIcon(systemName: "map") }
                         Spacer(minLength: 8)
                         Image(systemName: "chevron.forward")
                             .font(.footnote.weight(.semibold))
@@ -131,7 +131,7 @@ struct WorkshopStep: View {
             }
         }
         .cardList()
-        .onboardingStepPrimaryButton(title: "저장하고 다음", isBusy: isSaving, isEnabled: canSave,
+        .onboardingStepPrimaryButton(title: "저장하고 넘어가기", isBusy: isSaving, isEnabled: canSave,
                                      identifier: "onboarding.workshop.save", action: save)
     }
 
@@ -194,7 +194,7 @@ struct WorkshopStep: View {
             } catch let error as RoundupAPIError where error.isConflict {
                 // 409: the reload brings a newer revision, which replaces the fields with what is saved now.
                 await load()
-                errorMessage = "다른 곳에서 공방 정보가 먼저 바뀌었어요. 최신 내용을 불러왔으니 확인하고 다시 저장해 주세요."
+                errorMessage = "다른 기기에서 고친 공방 정보가 먼저 저장됐어요. 새 값을 띄워 뒀으니 훑어보시고 저장을 한 번 더 눌러 주세요."
             } catch {
                 errorMessage = error.localizedDescription
             }

@@ -42,22 +42,26 @@ PARCEL: Final = "parcel"
 WORD: Final = re.compile(r"[0-9A-Za-z가-힣]+")
 OBJECT: Final = TypeAdapter(dict[str, JsonValue])
 KNOWN_REFUSALS: Final[Mapping[str, str]] = {
-    "action is not valid for the current state": "지금 상태에서는 할 수 없어요.",
-    "class does not have enough seats": "남은 자리가 모자라요.",
-    "resource not found": "맞는 건을 찾지 못했어요.",
-    "quote not found": "견적을 찾지 못했어요.",
-    "inquiry not found": "문의를 찾지 못했어요.",
-    "the rules leave this to the owner": "규정으로 정하기 어려운 취소예요. 앱에서 직접 결정해 주세요.",
-    "refund must be between zero and the paid amount": "환불 금액은 0원부터 받은 예약금까지 적어 주세요.",
-    "an exception needs a reason": "예외로 처리하는 이유를 알려 주세요.",
-    "final_total_krw is required": "최종 금액을 알려 주세요.",
-    "verify the institution first": "기관 확인을 먼저 해 주세요.",
-    "completed reply cannot be blank": "완료한 답장은 비워 둘 수 없어요.",
+    "action is not valid for the current state": "지금 단계에선 이 일을 못 해요.",
+    "class does not have enough seats": "빈자리가 부족해요.",
+    "resource not found": "딱 맞는 게 안 보여요.",
+    "quote not found": "그 견적이 없어요.",
+    "inquiry not found": "그 문의가 없어요.",
+    "the rules leave this to the owner": (
+        "이 취소는 규정만 보고 정하기 애매해요. 앱에서 사장님이 골라 주세요."
+    ),
+    "refund must be between zero and the paid amount": (
+        "받은 예약금보다 많이 돌려줄 수는 없어요. 0원부터 그 금액 사이로 적어 주세요."
+    ),
+    "an exception needs a reason": "왜 예외로 하시는지 한마디만 남겨 주세요.",
+    "final_total_krw is required": "최종으로 정하신 금액이 얼마예요?",
+    "verify the institution first": "기관이 맞는지부터 봐 주세요.",
+    "completed reply cannot be blank": "끝낸 답장을 빈칸으로 둘 순 없어요.",
 }
 REFUSALS: Final[Mapping[int, str]] = {
-    404: "맞는 건을 찾지 못했어요.",
-    409: "지금 상태에서는 할 수 없어요.",
-    422: "값을 다시 확인해 주세요.",
+    404: "딱 맞는 게 안 보여요.",
+    409: "지금 단계에선 이 일을 못 해요.",
+    422: "적으신 값에 틀린 데가 있어요.",
 }
 
 
@@ -225,7 +229,7 @@ def parcel_ticket(shipment: ShipmentRow) -> UndoTicket:
 
 def refusal_text(error: HTTPException) -> str:
     """Say a service's refusal in Korean, without its internals."""
-    return KNOWN_REFUSALS.get(str(error.detail), REFUSALS.get(error.status_code, "처리하지 못했어요."))
+    return KNOWN_REFUSALS.get(str(error.detail), REFUSALS.get(error.status_code, "못 끝냈어요."))
 
 
 def name_confidence(reference: str, *names: str | None, beside: Sequence[str] = ()) -> float | None:

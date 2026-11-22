@@ -15,7 +15,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         let row = app.buttons["operations.outreach"]
         XCTAssertTrue(scrollTo(row, in: app), "the outreach row is missing")
         row.tap()
-        XCTAssertTrue(app.navigationBars["출강 견적"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["출장 수업 견적"].waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -68,7 +68,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         fill("defaults.minimum", "300000", in: app)
         XCTAssertTrue(scrollTo(app.buttons["outreach.save"], in: app))
         app.buttons["outreach.save"].tap()
-        XCTAssertTrue(app.navigationBars["수업별 원가"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["수업마다 드는 돈"].waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -89,7 +89,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         create.tap()
         let verdict = app.staticTexts["outreach.verdict"]
         XCTAssertTrue(verdict.waitForExistence(timeout: 15) || scrollTo(verdict, in: app))
-        XCTAssertTrue(element(labelled: "왕복 이동 3시간", in: app).exists)
+        XCTAssertTrue(element(labelled: "오가는 시간 3시간", in: app).exists)
         keepScreenshot(of: app, named: "k14-04-detail-warning")
         app.buttons["outreach.makePDF"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["outreach.locked"].waitForExistence(timeout: 10))
@@ -144,7 +144,7 @@ final class OutreachQuoteUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(people, in: app))
         people.buttons.element(boundBy: 1).tap()
         XCTAssertTrue(app.steppers.matching(NSPredicate(format: "label CONTAINS %@", "41")).firstMatch.waitForExistence(timeout: 10)
-            || app.staticTexts["인원 41명"].waitForExistence(timeout: 5))
+            || app.staticTexts["41명이 온다면"].waitForExistence(timeout: 5))
         let remind = app.buttons["outreach.remind"]
         XCTAssertTrue(scrollTo(remind, in: app))
         remind.tap()
@@ -180,14 +180,14 @@ final class OutreachQuoteUITests: RoundupUITestCase {
     func testEmptyServerShowsTheEmptyStates() throws {
         let quotes = try launchEmptyServer()
         openQuotes(in: quotes)
-        XCTAssertTrue(quotes.staticTexts["아직 받은 출강 문의가 없습니다"].waitForExistence(timeout: 10))
+        XCTAssertTrue(quotes.staticTexts["아직 들어온 출장 수업 문의가 없어요"].waitForExistence(timeout: 10))
         keepScreenshot(of: quotes, named: "k14-11-empty-quotes")
         let app = try launchEmptyServer()
         app.tabBars.buttons["설정"].tap()
         let row = app.buttons["settings.classCosts"]
         XCTAssertTrue(scrollTo(row, in: app))
         row.tap()
-        XCTAssertTrue(app.staticTexts["등록된 수업이 없습니다"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["아직 만든 수업이 없어요"].waitForExistence(timeout: 10))
         keepScreenshot(of: app, named: "k14-12-empty-costs")
     }
 }

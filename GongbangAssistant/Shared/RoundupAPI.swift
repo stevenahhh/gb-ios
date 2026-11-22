@@ -29,7 +29,7 @@ enum RoundupConfiguration {
         guard let value = candidates.map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: { !$0.isEmpty }),
               let url = URL(string: value), let host = url.host(),
               url.scheme == "https" || (url.scheme == "http" && loopbackHosts.contains(host)) else {
-            throw RoundupAPIError(message: "서버 주소가 설정되지 않았어요. ROUNDUP_API_URL 또는 RoundupAPIURL을 설정해 주세요.")
+            throw RoundupAPIError(message: "앱이 어디로 이어질지 정해 두지 않았네요. ROUNDUP_API_URL이나 RoundupAPIURL에 주소를 채워야 해요.")
         }
         return url
     }
@@ -42,7 +42,7 @@ enum RoundupConfiguration {
         if let key = ProcessInfo.processInfo.environment["ROUNDUP_API_KEY"], !key.isEmpty { return key }
         #endif
         guard let key = secrets?["APIKey"] as? String, !key.isEmpty else {
-            throw RoundupAPIError(message: "서버 인증 키가 설정되지 않았어요. RoundupSecrets.plist를 확인해 주세요.")
+            throw RoundupAPIError(message: "RoundupSecrets.plist 파일 안의 서버 인증 키가 비어 있어요. 파일을 열어 채워 주세요.")
         }
         return key
     }
@@ -490,15 +490,15 @@ enum RoundupAPI {
         guard let path = request.url?.pathComponents, path.contains("agent") || path.contains("connections") else { return nil }
         guard let detail = (try? JSONDecoder().decode(Refusal.self, from: data))?.detail else { return nil }
         // The server cannot know where this app keeps the switch.
-        return detail == "비서가 꺼져 있어요."
-            ? "\(detail) 설정의 ‘\(AssistantIdentity.name)에게 맡길 일’에서 다시 켤 수 있어요." : detail
+        return detail == "지금 비서는 꺼져 있는 상태예요."
+            ? "\(detail) 다시 켜려면 설정 메뉴 ‘\(AssistantIdentity.name)에게 맡길 일’로 가 보세요." : detail
     }
 
     private static func decode<T: Decodable>(_ data: Data, with decoder: JSONDecoder = JSONDecoder()) throws -> T {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
-            throw RoundupAPIError(message: "서버 응답을 읽지 못했어요. 앱을 최신 버전으로 업데이트해 주세요.")
+            throw RoundupAPIError(message: "지금 버전에서는 읽을 수 없는 내용이에요. 앱을 업데이트해 주세요.")
         }
     }
 
@@ -542,7 +542,7 @@ enum RoundupAPI {
         }
         ServerConnection.shared.requestReachedServer()
         guard let http = response as? HTTPURLResponse else {
-            throw RoundupAPIError(message: "서버가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.")
+            throw RoundupAPIError(message: "공도리 쪽에 문제가 생겼어요. 조금 기다렸다가 다시 시도해 주세요.")
         }
         if request.url?.pathComponents.contains("inquiries") == true {
             switch http.statusCode {
@@ -554,15 +554,15 @@ enum RoundupAPI {
         }
         switch http.statusCode {
         case 200, 201, 204: return data
-        case 401, 403: throw RoundupAPIError(message: "서버 인증을 확인하지 못했어요. 연결 설정을 확인해 주세요.")
+        case 401, 403: throw RoundupAPIError(message: "이 앱의 연결 정보가 맞지 않아요. 연결 설정을 살펴봐 주세요.")
         case 404:
-            throw RoundupAPIError(message: "찾을 수 없는 항목이에요. 목록을 새로 불러와 주세요.", isConflict: true, isMissing: true)
+            throw RoundupAPIError(message: "목록에서 이미 사라진 항목이에요. 화면을 끌어내리면 새로 받아 와요.", isConflict: true, isMissing: true)
         case 409:
             throw RoundupAPIError(message: ownerSentence(in: data, for: request)
-                ?? "다른 곳에서 먼저 바뀌었거나 지금은 할 수 없는 일이에요. 내용을 다시 확인해 주세요.", isConflict: true)
+                ?? "그사이 내용이 달라졌거나 이 단계에선 못 하는 일이에요. 화면을 새로 고쳐서 한 번 봐 주세요.", isConflict: true)
         case 413, 422:
-            throw RoundupAPIError(message: ownerSentence(in: data, for: request) ?? "입력한 내용을 다시 확인해 주세요.")
-        default: throw RoundupAPIError(message: "서버가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.")
+            throw RoundupAPIError(message: ownerSentence(in: data, for: request) ?? "넣으신 값을 한 번 더 살펴봐 주세요.")
+        default: throw RoundupAPIError(message: "공도리 쪽에 문제가 생겼어요. 조금 기다렸다가 다시 시도해 주세요.")
         }
     }
 }

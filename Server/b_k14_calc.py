@@ -154,9 +154,9 @@ class Parts:
 def travel_cost(rates: Rates, distance_km: int | None) -> tuple[int | None, str]:
     """Return the travel cost and its formula; a per-km rate without a distance is unknown."""
     if rates.travel_mode == "flat":
-        return rates.travel_flat_krw, f"고정 출장비 {won(rates.travel_flat_krw)}"
+        return rates.travel_flat_krw, f"정해 둔 출장비 {won(rates.travel_flat_krw)}"
     if distance_km is None:
-        return None, "왕복 거리를 입력하면 계산해요"
+        return None, "왕복 거리를 넣으시면 곧바로 나와요"
     amount = rates.travel_per_km_krw * distance_km * 2
     return amount, f"{won(rates.travel_per_km_krw)} {TIMES} 편도 {distance_km}km {TIMES} 왕복 2"
 
@@ -351,12 +351,12 @@ def span(minutes: int) -> str:
 def outreach_basis(scenario: Scenario, minutes: int) -> str:
     """Say the people and hours behind the outreach numbers."""
     travel = (
-        "왕복 이동은 입력 전이라 0분" if scenario.inputs.travel_minutes is None
-        else f"왕복 이동 {span(scenario.travel_minutes)}"
+        "왕복 이동 시간을 안 넣어서 0분" if scenario.inputs.travel_minutes is None
+        else f"오가는 시간 {span(scenario.travel_minutes)}"
     )
     return (
-        f"출강 {scenario.inputs.headcount}명, {span(minutes)} "
-        f"(수업 {span(scenario.lesson_minutes)}, 준비·정리 {span(scenario.setup_minutes)}, {travel})"
+        f"출장 수업 {scenario.inputs.headcount}명, {span(minutes)} "
+        f"(수업 {span(scenario.lesson_minutes)}, 준비와 정리 {span(scenario.setup_minutes)}, {travel})"
     )
 
 
@@ -365,14 +365,14 @@ def oneday_basis(scenario: Scenario) -> str:
     seats, card = scenario.seats, scenario.card
     if seats.sessions <= 0:
         if scenario.lost_to_conflicts_krw > 0:
-            return "원데이는 비워야 하는 수업의 예약 금액과 비교"
-        return "원데이는 예약 기록이 없어 1인 순수익끼리 비교"
+            return "그 시간 원데이를 못 열 때 놓치는 예약 금액과 비교"
+        return "원데이 예약 기록이 없어요. 그래서 1인당 남는 돈끼리 비교했어요"
     whole, tenth = divmod(seats.booked * 10 // seats.sessions, 10)
     people = f"{whole}.{tenth}" if tenth else f"{whole}"
     hours = span(card.class_minutes + scenario.setup_minutes)
     return (
-        f"원데이 최근 {seats.sessions}회 예약 평균 {people}명, {hours} "
-        f"(수업 {span(card.class_minutes)}, 준비·정리 {span(scenario.setup_minutes)})"
+        f"최근 원데이 {seats.sessions}번 평균 예약 {people}명, {hours} "
+        f"(수업 {span(card.class_minutes)}, 준비와 정리 {span(scenario.setup_minutes)})"
     )
 
 
@@ -415,16 +415,16 @@ def quote_lines(
     inputs, card, rates = scenario.inputs, scenario.card, scenario.rates
     hourly = rates.instructor_hourly_krw
     if fixed_revenue(inputs) is not None:
-        instructor_formula = "받을 금액에서 보조 강사비, 출장비, 재료비를 뺀 금액"
+        instructor_formula = "보조 강사비·출장비·재료비를 빼고 손에 남는 돈"
     elif minimum_applied:
-        instructor_formula = f"출강 최소 금액 {won(rates.minimum_fee_krw)}에 맞춘 금액"
+        instructor_formula = f"출장 수업 최소 금액 {won(rates.minimum_fee_krw)}로 맞춘 금액"
     elif hourly is None:
-        instructor_formula = "시간당 강사비를 입력하면 계산해요"
+        instructor_formula = "강사비를 시간당으로 넣으시면 곧바로 나와요"
     else:
         instructor_formula = f"시간당 {won(hourly)} {TIMES} 수업 {scenario.lesson_minutes}분"
     material = None if card.material_krw is None else card.material_krw * inputs.headcount
     material_formula = (
-        "1인 재료비를 입력하면 계산해요" if card.material_krw is None
+        "재료비를 1인 기준으로 넣으시면 곧바로 나와요" if card.material_krw is None
         else f"1인 {won(card.material_krw)} {TIMES} {inputs.headcount}명"
     )
     return [

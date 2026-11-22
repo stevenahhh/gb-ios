@@ -25,7 +25,7 @@ struct PlanCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var spokenTitle: String {
-        plan.monthlyPriceKRW > 0 ? "\(plan.name), \(plan.priceText), 부가세 포함" : "\(plan.name), \(plan.priceText)"
+        plan.monthlyPriceKRW > 0 ? "\(plan.name), \(plan.priceText) (부가세 포함)" : "\(plan.name), \(plan.priceText)"
     }
 
     var body: some View {

@@ -70,7 +70,7 @@ private struct OnboardingBar: View {
             Button("건너뛰기", systemImage: "xmark") { state.skipAll() }
                 .labelStyle(.iconOnly)
                 .frame(minWidth: 44, minHeight: 44)
-                .accessibilityHint("안내를 닫고 바로 시작해요")
+                .accessibilityHint("안내 건너뛰고 바로 쓰기")
                 .accessibilityIdentifier("onboarding.skipAll")
         }
         .padding(.horizontal, 12)
@@ -87,7 +87,7 @@ private struct OnboardingBar: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement()
-        .accessibilityLabel("\(OnboardingStep.allCases.count)단계 중 \(page)단계")
+        .accessibilityLabel("\(page)/\(OnboardingStep.allCases.count)단계")
         .accessibilityIdentifier("onboarding.progress.\(page)")
     }
 }

@@ -218,7 +218,7 @@ def test_the_wording_rule_checks_meaning_not_a_fixed_sentence() -> None:
     })
     saved = Actual("save_reply_draft", "auto", "inquiry-clay", {})
     assert wording_problems(case, [], "어느 문의에 답할까요?") == []
-    assert wording_problems(case, [saved], "답장 초안을 저장했어요.") == []
+    assert wording_problems(case, [saved], "답장 초안 저장 끝.") == []
     silent = ["the answer does not say only a draft was saved"]
     assert wording_problems(case, [saved], "저장했어요.") == silent
     assert wording_problems(case, [], "답장을 보냈어요.") == ["the answer claims something was sent"]

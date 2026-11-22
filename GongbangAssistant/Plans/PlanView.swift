@@ -24,7 +24,7 @@ struct PlanView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // One box in both states: the title changes, the button keeps its size.
-            PlanChooseBar(title: isStored ? "정해 둔 요금제예요" : "이 요금제로 정해 두기",
+            PlanChooseBar(title: isStored ? "골라 두신 요금제" : "이걸로 할게요",
                           isEnabled: !isStored, action: choose)
         }
         .sensoryFeedback(.success, trigger: storedCount)
@@ -40,7 +40,7 @@ struct PlanView: View {
             if !dynamicTypeSize.isAccessibilitySize {
                 Spacer(minLength: 8)
             }
-            Text(verbatim: selection.chosen?.name ?? "아직 고르지 않았어요")
+            Text(verbatim: selection.chosen?.name ?? "고른 요금제 없음")
                 .font(.body.weight(.semibold))
         }
         .padding(16)
@@ -54,7 +54,7 @@ struct PlanView: View {
         guard let plan = PlanCatalog.options.first(where: { $0.id == pickedID }) else { return }
         selection.choose(plan)
         storedCount += 1
-        AccessibilityNotification.Announcement("\(plan.name) 요금제로 정해 뒀어요. \(PlanCatalog.paymentNotice)").post()
+        AccessibilityNotification.Announcement("지금 고르신 요금제: \(plan.name). \(PlanCatalog.paymentNotice)").post()
     }
 }
 

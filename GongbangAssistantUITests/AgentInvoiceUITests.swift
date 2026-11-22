@@ -252,7 +252,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
 
     @MainActor
     private func dismissFailure(saying sentence: String, in app: XCUIApplication) {
-        let alert = app.alerts["처리하지 못했어요"]
+        let alert = app.alerts["이번엔 마무리하지 못했어요"]
         XCTAssertTrue(alert.waitForExistence(timeout: 20), "a refused change said nothing")
         XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", sentence)).firstMatch.exists,
                       "the alert does not give the reason: \(alert.debugDescription)")
@@ -264,22 +264,22 @@ final class AgentInvoiceUITests: RoundupUITestCase {
 
     /// Every row but the clean ones and those whose only fault is their length: listed with a reason, never approvable.
     private static let held = [
-        5: "짐작했어요", 6: "칸이 바뀐 것 같아요", 7: "이미 발송한 주문이에요", 8: "아직 포장 완료 전인 주문이에요",
-        9: "두 번 나와요", 10: "이미 다른 주문에 등록된 송장번호예요", 11: "받는 분이 주문과 달라요",
-        12: "하나로 정하지 못했어요", 13: "하나로 정하지 못했어요", 14: "택배사를 알 수 없어요",
+        5: "번호 자릿수를 보고 택배사를 추측했어요. 한 번 봐 주세요.", 6: "두 번호가 칸을 바꿔 들어간 듯해요. 주문번호와 송장번호를 봐 주세요.", 7: "벌써 보낸 택배예요.", 8: "포장이 아직이라 송장을 못 넣어요.",
+        9: "겹쳐요", 10: "이 번호는 벌써 다른 주문에 들어가 있어요.", 11: "주문서와 받는 분 이름이 달라요.",
+        12: "이 줄이 어느 주문 건인지 딱 하나로 못 골랐어요.", 13: "이 줄이 어느 주문 건인지 딱 하나로 못 골랐어요.", 14: "어느 택배사 번호인지 모르겠어요.",
     ]
 
     @MainActor
     func testFileRowsAreSortedIntoCleanWarnedAndBlocked() async throws {
         let app = try readFile()
         let summary = named("invoice.import.summary", in: app)
-        XCTAssertTrue(summary.label.contains("송장번호 15개를 읽었어요"), summary.label)
+        XCTAssertTrue(summary.label.contains("파일에서 찾은 송장번호 15개"), summary.label)
         XCTAssertTrue(app.buttons["invoice.import.approve"].exists, "a file with clean rows has no approval")
         try capture(app, "import-read")
         for offset in [3, 4] {
             XCTAssertTrue(scrollTo(app.switches["invoice.import.accept.\(offset + 2)"], in: app), "row \(offset) lost its switch")
         }
-        XCTAssertTrue(element(labelled: "알려진 송장번호 자릿수와 달라요", in: app).exists, "the warning is not stated")
+        XCTAssertTrue(element(labelled: "보통 송장번호보다 자릿수가 길거나 짧아요. 번호를 한 번 더 봐 주세요.", in: app).exists, "the warning is not stated")
         try capture(app, "import-warned")
         for (offset, reason) in Self.held.sorted(by: { $0.key < $1.key }) {
             XCTAssertTrue(scrollTo(element(labelled: reason, in: app), in: app), "row \(offset) does not say ‘\(reason)’")
@@ -294,7 +294,8 @@ final class AgentInvoiceUITests: RoundupUITestCase {
     @MainActor
     private func approve(in app: XCUIApplication) async throws {
         let button = app.buttons["invoice.import.approve"]
-        for _ in 0..<8 where !(button.exists && button.isHittable) { app.swipeDown() }
+        // One that slid under the bar still counts as hittable.
+        for _ in 0..<8 where !(button.exists && button.isHittable && button.frame.minY > 150) { app.swipeDown() }
         button.tap()
         XCTAssertTrue(named("invoice.import.registered", in: app).waitForExistence(timeout: 30), "the approval was not confirmed")
         let sent = try await approvals()
@@ -366,7 +367,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         let app = try readFile()
         try await control("ship", Ship(order: 1044))
         app.buttons["invoice.import.approve"].tap()
-        dismissFailure(saying: "파일을 올린 뒤에 등록할 송장이 달라졌어요", in: app)
+        dismissFailure(saying: "올리신 뒤 송장 내용이 바뀌었어요. 파일을 새로 불러와 주세요.", in: app)
         XCTAssertFalse(named("invoice.import.registered", in: app).exists, "a refused approval is shown as done")
         let after = try await state()
         XCTAssertEqual([after.orders["1045"], after.orders["1046"]], [Self.waiting, Self.waiting], "part of a refused file was registered")
@@ -412,11 +413,11 @@ final class AgentInvoiceUITests: RoundupUITestCase {
 
     @MainActor
     func testFileTheServerCannotReadSaysWhyAndCanBeRetried() async throws {
-        try await fail("POST", "/agent/invoices/import", 422, "수식이 든 파일은 읽지 않아요. 값으로 저장해 주세요.")
+        try await fail("POST", "/agent/invoices/import", 422, "수식이 들어간 칸이 있으면 못 열어요. 수식 대신 결과값만 남겨 올려 주세요.")
         let app = try importFile(try file())
         let retry = app.buttons["screen.retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: 30))
-        XCTAssertTrue(element(labelled: "수식이 든 파일은 읽지 않아요", in: app).exists, "the server's reason is missing")
+        XCTAssertTrue(element(labelled: "수식이 들어간 칸이 있으면 못 열어요. 수식 대신 결과값만 남겨 올려 주세요.", in: app).exists, "the server's reason is missing")
         XCTAssertFalse(app.buttons["invoice.import.approve"].exists)
         try capture(app, "import-unreadable")
 
@@ -427,10 +428,10 @@ final class AgentInvoiceUITests: RoundupUITestCase {
 
     @MainActor
     func testFilesOfAnotherKindOrTooLargeAreNotSent() async throws {
-        let cases = [("송장.pdf", Int?.none, "CSV나 XLSX 파일만 읽을 수 있어요"), ("큰파일.csv", 2 * 1024 * 1024 + 1, "파일이 너무 커요")]
+        let cases = [("송장.pdf", Int?.none, "CSV나 XLSX만 열어 볼 수 있어요"), ("큰파일.csv", 2 * 1024 * 1024 + 1, "한 번에 2MB까지 불러와요")]
         for (name, bytes, reason) in cases {
             let app = try importFile(try file(named: name, bytes: bytes))
-            let alert = app.alerts["파일을 불러오지 못했어요"]
+            let alert = app.alerts["파일을 열어 보지 못했어요"]
             XCTAssertTrue(alert.waitForExistence(timeout: 20), "\(name) was accepted")
             XCTAssertTrue(element(labelled: reason, in: app).exists, "\(name) gives no reason")
             try capture(app, "import-rejected-\(bytes == nil ? "kind" : "size")")
@@ -446,7 +447,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         try await control("reset", Scenario(rows: "none"))
         let app = try readFile()
         let summary = named("invoice.import.summary", in: app)
-        XCTAssertTrue(summary.label.contains("송장번호 0개를 읽었어요"), summary.label)
+        XCTAssertTrue(summary.label.contains("파일에서 찾은 송장번호 0개"), summary.label)
         XCTAssertFalse(app.buttons["invoice.import.approve"].exists)
         try capture(app, "import-empty")
     }
@@ -464,7 +465,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
 
         try await control("down", Scenario(down: true))
         app.buttons["invoice.import.approve"].tap()
-        dismissFailure(saying: "서버에 연결하지 못했어요", in: app)
+        dismissFailure(saying: "지금 연결이 안 돼요", in: app)
         XCTAssertFalse(named("invoice.import.registered", in: app).exists)
         try await control("down", Scenario(down: false))
         let after = try await state()
@@ -490,7 +491,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
     func testEverySettingIsSavedAndReadBack() async throws {
         var app = try open()
         openSettingsRow("settings.delegation", in: app)
-        let mode = app.segmentedControls.buttons["물어보고"]
+        let mode = app.segmentedControls.buttons["물어보고 하기"]
         XCTAssertTrue(mode.waitForExistence(timeout: 30))
         mode.tap()
         try await arrival("PUT", "/agent/settings", count: 1)
@@ -498,7 +499,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(proactive, in: app))
         flip(proactive)
         try await arrival("PUT", "/agent/settings", count: 2)
-        try choose("알아서", for: "complete_task", in: app)
+        try choose("알아서 하기", for: "complete_task", in: app)
         try await arrival("PUT", "/agent/settings", count: 3)
         let fewer = app.steppers["agent.settings.cap"].buttons.element(boundBy: 0)
         XCTAssertTrue(scrollTo(fewer, in: app))
@@ -522,16 +523,16 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         app.terminate()
         app = try open()
         openSettingsRow("settings.delegation", in: app)
-        XCTAssertTrue(app.segmentedControls.buttons["물어보고"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.segmentedControls.buttons["물어보고"].isSelected, "the mode was not read back")
+        XCTAssertTrue(app.segmentedControls.buttons["물어보고 하기"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.segmentedControls.buttons["물어보고 하기"].isSelected, "the mode was not read back")
         let proactiveAgain = app.switches["agent.settings.proactive"]
         XCTAssertTrue(scrollTo(proactiveAgain, in: app))
         XCTAssertEqual(proactiveAgain.value as? String, "0")
         let task = named("agent.settings.tool.complete_task", in: app)
         XCTAssertTrue(scrollTo(task, in: app))
         let shown = "\(task.label) \(task.value as? String ?? "")"
-        XCTAssertTrue(shown.contains("알아서"), shown)
-        XCTAssertTrue(scrollTo(element(labelled: "최대 19건", in: app), in: app))
+        XCTAssertTrue(shown.contains("알아서 하기"), shown)
+        XCTAssertTrue(scrollTo(element(labelled: "하루 19건까지", in: app), in: app))
         let quietAgain = app.switches["agent.settings.quiet"]
         XCTAssertTrue(scrollTo(quietAgain, in: app))
         XCTAssertEqual(quietAgain.value as? String, "0")
@@ -547,14 +548,14 @@ final class AgentInvoiceUITests: RoundupUITestCase {
     func testRefusedSettingIsTakenBackWithTheReason() async throws {
         let app = try open()
         openSettingsRow("settings.delegation", in: app)
-        let ask = app.segmentedControls.buttons["물어보고"]
+        let ask = app.segmentedControls.buttons["물어보고 하기"]
         XCTAssertTrue(ask.waitForExistence(timeout: 30))
-        try await fail("PUT", "/agent/settings", 409, "그사이에 설정이 바뀌었어요. 다시 불러온 뒤 저장해 주세요.")
+        try await fail("PUT", "/agent/settings", 409, "그사이 설정이 달라졌어요. 새로고침한 뒤에 저장해 주세요.")
         ask.tap()
         let warning = named("agent.settings.warning", in: app)
         XCTAssertTrue(warning.waitForExistence(timeout: 20), "a refused change said nothing")
-        XCTAssertTrue(warning.label.contains("그사이에 설정이 바뀌었어요"), warning.label)
-        expect(app.segmentedControls.buttons["알아서"], "isSelected == true", "the refused mode stayed selected")
+        XCTAssertTrue(warning.label.contains("그사이 설정이 달라졌어요"), warning.label)
+        expect(app.segmentedControls.buttons["알아서 하기"], "isSelected == true", "the refused mode stayed selected")
         try capture(app, "settings-refused")
     }
 
@@ -584,7 +585,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         XCTAssertEqual(stopped.orders["1042"], "packing", "the job went on after the stop")
 
         openAssistant(in: app, startingNew: false)
-        let notice = element(labelled: "멈춰서 남은 일은 하지 않았어요", in: app)
+        let notice = element(labelled: "멈추라고 하셔서 남은 건", in: app)
         XCTAssertTrue(notice.waitForExistence(timeout: 30), "the conversation does not say the job was stopped")
         XCTAssertEqual(steps(in: app).count, 1)
         try capture(app, "chat-stopped-job")
@@ -628,7 +629,8 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         } else {
             // A confirmation shown as a popover has no cancel button; a tap outside keeps the memory.
             XCTAssertTrue(app.buttons["지우기"].firstMatch.exists, "forgetting did not ask first")
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+            // It hangs from the top of the list, so the tap lands well below it.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap()
         }
         XCTAssertTrue(app.buttons["지우기"].firstMatch.waitForNonExistence(timeout: 10))
         let kept = try await state()
@@ -657,7 +659,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         let confirm = app.buttons["지우기"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 10))
         confirm.tap()
-        dismissFailure(saying: "서버에 연결하지 못했어요", in: app)
+        dismissFailure(saying: "지금 연결이 안 돼요", in: app)
         XCTAssertTrue(memory.exists, "a memory that was not forgotten left the list")
         try capture(app, "memory-offline")
         try await control("down", Scenario(down: false))
@@ -692,7 +694,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(element(labelled: "1039 포장 끝났어", in: app), in: app))
         XCTAssertFalse(chat.exists, "a chat run stayed under the voice filter")
         try capture(app, "history-voice")
-        app.segmentedControls.buttons["먼저 챙김"].tap()
+        app.segmentedControls.buttons["먼저 챙긴 일"].tap()
         XCTAssertTrue(scrollTo(element(labelled: "오늘 챙길 일이 있는지 확인했어요", in: app), in: app))
         app.segmentedControls.buttons["채팅"].tap()
         XCTAssertTrue(chat.waitForExistence(timeout: 10))
@@ -709,11 +711,11 @@ final class AgentInvoiceUITests: RoundupUITestCase {
     func testUndoTheServerRefusesSaysWhy() async throws {
         let app = try open()
         _ = openHistory(in: app)
-        try await fail("POST", "/agent/steps/", 409, "그사이 바뀌어서 되돌릴 수 없어요.")
+        try await fail("POST", "/agent/steps/", 409, "그동안 달라져서 못 되돌려요.")
         let undo = undoButton(in: app)
         XCTAssertTrue(scrollTo(undo, in: app))
         undo.tap()
-        dismissFailure(saying: "그사이 바뀌어서 되돌릴 수 없어요", in: app)
+        dismissFailure(saying: "그동안 달라져서 못 되돌려요", in: app)
         XCTAssertFalse(element(labelled: "되돌림", in: app).exists, "a refused undo is shown as done")
         try capture(app, "history-undo-refused")
     }
@@ -737,7 +739,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         app.segmentedControls.buttons["음성"].tap()
         XCTAssertTrue(named("activity.filter.empty", in: app).waitForExistence(timeout: 10))
         try capture(app, "history-filter-empty")
-        app.buttons["전체 보기"].firstMatch.tap()
+        app.buttons["다 보기"].firstMatch.tap()
         XCTAssertTrue(chat.waitForExistence(timeout: 10))
     }
 
@@ -761,7 +763,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         XCTAssertTrue(working.waitForExistence(timeout: 30))
         try await arrival("POST", "/agent/run")
         try await control("advance", Scenario())
-        expect(working, "label CONTAINS '1건 끝냈어요'", "the progress line does not count what finished")
+        expect(working, "label CONTAINS '1건 마침'", "the progress line does not count what finished")
         XCTAssertEqual(steps(in: app).count, 1)
         try capture(app, "run-progress")
 
@@ -786,7 +788,7 @@ final class AgentInvoiceUITests: RoundupUITestCase {
         try await control("advance", Scenario())
         XCTAssertTrue(steps(in: app).firstMatch.waitForExistence(timeout: 30))
         try await control("finish", Scenario(status: "failed"))
-        XCTAssertTrue(element(labelled: "끝까지 처리하지 못했어요", in: app).waitForExistence(timeout: 30))
+        XCTAssertTrue(element(labelled: "끝까지 못 갔어요", in: app).waitForExistence(timeout: 30))
         XCTAssertEqual(steps(in: app).count, 1)
         let after = try await state()
         XCTAssertEqual([after.orders["1040"], after.orders["1042"]], [Self.waiting, "packing"])

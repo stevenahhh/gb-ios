@@ -24,9 +24,9 @@ KIND_TOOLS: Final[Mapping[FindingKind, ToolName]] = MappingProxyType({
     "quote_waiting": "record_quote_outcome",
 })
 EVIDENCE_NEEDED: Final[Mapping[FindingKind, tuple[str, ...]]] = MappingProxyType({
-    "parcel_unpacked": ("포장을 마쳤는지",), "invoice_missing": ("송장번호",),
-    "deposit_due": ("입금을 확인했는지",), "class_under_min": (),
-    "order_unconfirmed": (), "inquiry_undrafted": (), "quote_waiting": ("기관의 답",),
+    "parcel_unpacked": ("포장이 끝났는지",), "invoice_missing": ("송장번호",),
+    "deposit_due": ("입금 들어왔는지",), "class_under_min": (),
+    "order_unconfirmed": (), "inquiry_undrafted": (), "quote_waiting": ("기관에서 온 답",),
 })
 
 

@@ -6,23 +6,23 @@ struct WelcomeStep: View {
 
     private let lines = [
         WelcomeLine(symbol: "bubble.left.and.bubble.right",
-                    text: "손님 문의에 답장 초안을 써 둬요. 보낼지는 사장님이 정해요."),
+                    text: "손님 질문이 들어오면 비서가 답장 초안을 미리 마련해요. 보내는 건 사장님이 결정하세요."),
         WelcomeLine(symbol: "checklist",
-                    text: "예약금 확인, 포장, 송장 등록처럼 오늘 처리할 일을 모아서 보여 줘요."),
+                    text: "입금 들어왔는지 보기, 포장하기, 송장 등록하기처럼 그날 챙길 일을 한 화면에 모아 드려요."),
         WelcomeLine(symbol: "wonsign.circle",
-                    text: "취소 문자가 오면 정해 둔 규정으로 환불액을 계산하고 출강 문의에는 견적을 내요."),
+                    text: "손님 취소 문자가 들어오면 미리 정한 규정대로 돌려드릴 금액을 계산하고 출장 수업 문의엔 견적을 뽑아 드려요."),
     ]
 
     var body: some View {
         List {
-            OnboardingStepTitleRow(title: "공도리가 하는 일", showsMark: true)
+            OnboardingStepTitleRow(title: "공도리가 해 드리는 일", showsMark: true)
             CardSection {
                 ForEach(lines) { line in
                     Label { Text(line.text) } icon: { MenuIcon(systemName: line.symbol) }
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("모든 단계는 건너뛸 수 있고 설정에서 다시 볼 수 있어요.")
+                Text("어느 단계든 건너뛰셔도 괜찮아요. 나중에 설정 메뉴에서 언제든 꺼내 볼 수 있어요.")
             }
         }
         .cardList()

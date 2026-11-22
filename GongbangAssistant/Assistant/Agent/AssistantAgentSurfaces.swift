@@ -50,7 +50,7 @@ private struct InvoiceFileButton: View {
 
     var body: some View {
         Button("파일 불러오기", systemImage: "doc.badge.plus") { pickInvoiceFile?(nil) }
-            .accessibilityHint("택배사에서 받은 송장 파일을 읽어요.")
+            .accessibilityHint("택배사가 보내 준 엑셀에서 송장을 가져와요.")
             .accessibilityIdentifier("assistant.import")
     }
 }

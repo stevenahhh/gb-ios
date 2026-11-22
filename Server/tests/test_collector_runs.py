@@ -119,7 +119,7 @@ async def test_store_credentials_without_the_switch_act_like_no_credentials(
     assert (await client.post("/collectors/naver_smartstore/run")).json() == with_keys
     assert (await client.get("/collectors/status")).json()["sources"][1] == shown == with_keys["source"]
     assert (shown["id"], shown["state"]) == ("naver_smartstore", "needs_connection")
-    assert shown["message"] == "스마트스토어 자동 수집은 네이버 심사를 받은 뒤에 연결할 수 있어요."
+    assert shown["message"] == "네이버 심사를 통과해야 스마트스토어 자동 가져오기를 연결할 수 있어요."
     assert net.requests == []
     assert await ids(database, "collector_runs") == set()
 
@@ -133,7 +133,7 @@ async def test_robots_refusal_reaches_the_status_endpoint(
     assert (await client.post("/collectors/naver_blog/run")).json()["error"] == "needs_connection"
     blog = (await client.get("/collectors/status")).json()["sources"][2]
     assert (blog["id"], blog["state"]) == ("naver_blog", "needs_connection")
-    assert "정책" in blog["message"]
+    assert "막아 둬서" in blog["message"]
     assert net.paths == ["/robots.txt"]
     assert (await client.get("/collectors/items")).json()["total"] == 0
 
@@ -155,7 +155,7 @@ async def test_allowed_feed_is_stored_once_and_shown_as_channel_activity(
     cards = (await client.get("/channels?section=channels")).json()["items"]
     card = next(each for each in cards if each["id"] == "channel-naver-blog")
     assert card["status"]["text"] == "연결됨"
-    assert "최근 7일 새 글 1개" in card["lines"]
+    assert "7일 동안 올린 글 1개" in card["lines"]
 
 
 @pytest.mark.usefixtures("store_env")

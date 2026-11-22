@@ -29,7 +29,7 @@ final class ActionFlowUITests: RoundupUITestCase {
         let pack = app.buttons["action.shipment-order-1040"]
         XCTAssertTrue(scrollTo(pack, in: app))
         pack.tap()
-        waitFor(pack, "label == %@", "송장 등록하기")
+        waitFor(pack, "label == %@", "송장 넣기")
 
         goBack(app)
         openArea("orders", in: app)
@@ -45,7 +45,7 @@ final class ActionFlowUITests: RoundupUITestCase {
         undo.tap()
         waitFor(next, "label == %@", "포장 완료하기")
         next.tap()
-        waitFor(next, "label == %@", "송장 등록하기")
+        waitFor(next, "label == %@", "송장 넣기")
     }
 
     @MainActor
@@ -163,7 +163,7 @@ final class ActionFlowUITests: RoundupUITestCase {
         let orders = app.buttons["calendar.orders"]
         XCTAssertTrue(scrollTo(orders, in: app))
         orders.tap()
-        XCTAssertTrue(element(labelled: "새 주문", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "새로 들어온 주문", in: app).waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -247,7 +247,7 @@ final class ActionFlowUITests: RoundupUITestCase {
         let accessory = app.buttons["assistant.accessory"]
         XCTAssertTrue(accessory.waitForExistence(timeout: 5))
         accessory.tap()
-        let suggestion = app.buttons["오늘 발송할 주문 알려줘"]
+        let suggestion = app.buttons["오늘 택배 보낼 주문이 뭐야?"]
         XCTAssertTrue(suggestion.waitForExistence(timeout: 5))
         suggestion.tap()
         XCTAssertTrue(app.descendants(matching: .any)["assistant.generating"].waitForExistence(timeout: 5))

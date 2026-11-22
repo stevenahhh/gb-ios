@@ -55,13 +55,13 @@ struct OutreachInquiryView: View {
             List {
                 inquirySection
                 if isReading {
-                    CardSection { GeneratingIndicator(label: "비서가 문의를 읽고 있어요") }
+                    CardSection { GeneratingIndicator(label: "비서가 꼼꼼히 문의를 훑는 중이에요") }
                 }
                 if form != nil { formSections }
             }
             .cardList()
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("새 견적")
+            .navigationTitle("견적 새로 내기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -77,7 +77,7 @@ struct OutreachInquiryView: View {
         CardSection {
             KoreanTextEditor(text: $text)
                 .frame(minHeight: 120)
-                .accessibilityLabel("받은 문의")
+                .accessibilityLabel("들어온 문의")
                 .accessibilityIdentifier("outreach.text")
             HStack {
                 // The system paste control reads the clipboard only when tapped.
@@ -87,7 +87,7 @@ struct OutreachInquiryView: View {
                 .buttonBorderShape(.capsule)
                 Spacer()
                 if !store.inquiries.isEmpty {
-                    Menu("앱에 온 문의") {
+                    Menu("앱으로 받은 문의") {
                         ForEach(store.inquiries) { inquiry in
                             Button(inquiry.subject) { text = String(inquiry.question.prefix(2000)) }
                         }
@@ -99,16 +99,16 @@ struct OutreachInquiryView: View {
             }
             if form == nil {
                 readButton.buttonStyle(.borderedProminent)
-                Button("비서 없이 직접 입력") { form = OutreachForm() }
+                Button("비서 없이 손으로 채우기") { form = OutreachForm() }
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("outreach.manual")
             } else {
                 readButton.buttonStyle(.bordered)
             }
         } header: {
-            Text("받은 문의")
+            Text("들어온 문의")
         } footer: {
-            Text("문의 원문은 저장하지 않고 전화번호와 이메일은 가린 뒤에 읽어요.")
+            Text("전화번호와 이메일은 가리고 읽어요. 문의 원문은 따로 남기지 않아요.")
         }
     }
 
@@ -131,7 +131,7 @@ struct OutreachInquiryView: View {
         if readFailed {
             CardSection {
                 Label {
-                    Text("문의를 읽지 못했습니다. 직접 입력해 주세요.")
+                    Text("문의 내용을 알아보지 못했어요. 칸을 직접 채워 주세요.")
                 } icon: {
                     Image(systemName: "exclamationmark.circle")
                 }
@@ -160,7 +160,7 @@ struct OutreachInquiryView: View {
         } header: {
             EmptyView()
         } footer: {
-            Text("인원과 수업을 정하면 계산해요.")
+            Text("인원과 수업만 골라 주시면 바로 뽑아 드려요.")
         }
     }
 
@@ -231,7 +231,7 @@ struct OutreachWarningCard: View {
     var body: some View {
         CardSection {
             Label {
-                Text("확인하고 진행하세요").font(.headline)
+                Text("확인하고 다음으로 가 주세요").font(.headline)
             } icon: {
                 Image(systemName: "exclamationmark.shield").foregroundStyle(.primary)
             }
@@ -240,11 +240,11 @@ struct OutreachWarningCard: View {
                 Text(verbatim: signal.text)
             }
             if isVerified {
-                Label("기관 대표번호로 확인했어요", systemImage: "checkmark.circle")
+                Label("대표번호로 전화해서 기관이 맞는지 확인했어요", systemImage: "checkmark.circle")
                     .foregroundStyle(Color.secondaryText)
             } else {
                 Button(action: verify) {
-                    BusyLabel(title: "기관 대표번호로 확인함", isBusy: isBusy)
+                    BusyLabel(title: "대표번호로 확인 끝", isBusy: isBusy)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -263,7 +263,7 @@ private struct FieldNote: View {
 
     var body: some View {
         if isRead {
-            Text("\(AssistantIdentity.name)가 읽은 값")
+            Text("\(AssistantIdentity.name)가 문의에서 찾은 내용")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
         } else if needsCheck {
@@ -278,9 +278,9 @@ struct OutreachFieldsSection: View {
     @Binding var form: OutreachForm
 
     var body: some View {
-        CardSection("문의에서 읽은 내용") {
+        CardSection("문의에 적혀 있던 내용") {
             row("orgType", isEmpty: form.fields.orgType == .unknown) {
-                Picker("기관 유형", selection: edited(\.fields.orgType, "orgType")) {
+                Picker("어떤 기관인가요", selection: edited(\.fields.orgType, "orgType")) {
                     ForEach(OutreachOrgType.allCases) { Text($0.label).tag($0) }
                 }
             }
@@ -304,7 +304,7 @@ struct OutreachFieldsSection: View {
                 textField("장소", edited(\.fields.locationText, "locationText"))
             }
             row("contactKind", isEmpty: form.fields.contactKind == .unknown) {
-                OutreachValueRow(title: "담당자 연락 방식", value: form.fields.contactKind.label)
+                OutreachValueRow(title: "담당자 연락 방법", value: form.fields.contactKind.label)
             }
         }
     }
@@ -343,11 +343,11 @@ struct OutreachFieldsSection: View {
     private var dateField: some View {
         let day = edited(\.fields.date, "date")
         if let value = day.wrappedValue, let moment = OutreachFormat.moment(day: value) {
-            DatePicker("희망 날짜", selection: Binding { moment } set: { day.wrappedValue = $0.dayKey },
+            DatePicker("원하시는 날짜", selection: Binding { moment } set: { day.wrappedValue = $0.dayKey },
                        displayedComponents: .date)
                 .environment(\.timeZone, Calendar.workshop.timeZone)
         } else {
-            LabeledContent("희망 날짜") {
+            LabeledContent("원하시는 날짜") {
                 Button(form.fields.dateText ?? "날짜 고르기") { day.wrappedValue = Date.now.dayKey }
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("outreach.pickDate")
@@ -397,16 +397,16 @@ struct OutreachClassSection: View {
                 NavigationLink {
                     ClassCostEditView(item: chosen)
                 } label: {
-                    Label { Text("원가를 먼저 입력해 주세요") } icon: { MenuIcon(systemName: "square.and.pencil") }
+                    Label { Text("재료비와 시간을 먼저 채워 주세요") } icon: { MenuIcon(systemName: "square.and.pencil") }
                 }
             }
             Stepper("보조 강사 \(form.assistants)명", value: $form.assistants, in: 0...20)
-            OutreachNumberField(title: "편도 이동 시간", value: $form.travelMinutes, unit: "분", identifier: "outreach.travel")
-            OutreachNumberField(title: "편도 거리", value: $form.distanceKm, unit: "km", identifier: "outreach.distance")
+            OutreachNumberField(title: "가는 데 걸리는 시간(편도)", value: $form.travelMinutes, unit: "분", identifier: "outreach.travel")
+            OutreachNumberField(title: "가는 거리(편도)", value: $form.distanceKm, unit: "km", identifier: "outreach.distance")
         } header: {
             Text("수업과 이동")
         } footer: {
-            Text("이동 시간은 직접 입력해 주세요. 비워 두면 0분으로 계산하고 확인 필요로 표시해요.")
+            Text("비워 두시면 0분으로 계산하고 다시 봐야 할 곳으로 표시해 둘게요. 이동 시간 칸은 직접 채워 주세요.")
         }
     }
 }

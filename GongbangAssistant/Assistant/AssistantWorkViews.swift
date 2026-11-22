@@ -60,7 +60,7 @@ private struct ActivityRow: View {
             NavigationLink {
                 ActivityEvidenceView(activity: activity)
             } label: {
-                Text("이유 보기")
+                Text("왜 그랬는지")
                     .font(.subheadline.weight(.semibold))
                     .frame(minHeight: 44, alignment: .leading)
             }
@@ -79,11 +79,11 @@ struct ActivityEvidenceView: View {
             CardSection("\(AssistantIdentity.name)가 한 일") {
                 Text(verbatim: activity.summary)
             }
-            CardSection("이유", footer: "\(AssistantIdentity.name)가 참고한 공방 정보예요.") {
+            CardSection("이유", footer: "일하면서 \(AssistantIdentity.name)가 들여다본 우리 공방 정보예요.") {
                 ForEach(activity.evidence, id: \.self) { Text(verbatim: $0) }
             }
             CardSection {
-                NavigationLink("자세히 보기", value: activity.route)
+                NavigationLink("펼쳐 보기", value: activity.route)
             }
         }
         .cardList()
@@ -111,16 +111,16 @@ struct AssistantDelegationView: View {
     }
 
     static let jobs = [
-        Job(key: "draftReplies", title: "문의 답변 초안 쓰기", defaultLevel: .alone, needsChannel: false),
-        Job(key: "sendReplies", title: "손님에게 답변 보내기", defaultLevel: .ask, needsChannel: true),
-        Job(key: "depositNotices", title: "예약금 안내 보내기", defaultLevel: .ask, needsChannel: true),
+        Job(key: "draftReplies", title: "문의 답장 초안 준비", defaultLevel: .alone, needsChannel: false),
+        Job(key: "sendReplies", title: "손님께 답장 전송", defaultLevel: .ask, needsChannel: true),
+        Job(key: "depositNotices", title: "예약금 안내 문자 전송", defaultLevel: .ask, needsChannel: true),
         Job(key: "invoices", title: "송장 등록", defaultLevel: .ask, needsChannel: false),
-        Job(key: "posts", title: "홍보 글 올리기", defaultLevel: .never, needsChannel: true),
+        Job(key: "posts", title: "홍보 글 게시", defaultLevel: .never, needsChannel: true),
     ]
 
     var body: some View {
         List {
-            CardSection("일마다 맡길 범위", footer: "보내기·결제·전화는 설정과 상관없이 항상 한 번 더 확인받아요.") {
+            CardSection("일마다 어디까지 맡길지", footer: "돈이 오가거나 밖으로 나가는 일, 그러니까 보내기와 결제, 전화는 설정에 상관없이 매번 사장님께 물어봐요.") {
                 ForEach(Self.jobs) { DelegationRow(job: $0) }
             }
         }
@@ -148,7 +148,7 @@ private struct DelegationRow: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("delegation.\(job.key)")
             if job.needsChannel && level != AssistantDelegationView.Level.never.rawValue {
-                Text("채널을 연결하면 적용돼요")
+                Text("채널을 연결해야 실제로 움직여요")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
             }

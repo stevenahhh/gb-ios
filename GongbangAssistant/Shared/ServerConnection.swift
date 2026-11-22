@@ -7,7 +7,7 @@ import os
 /// The server could not be reached, or answered that it is briefly unavailable (502-504).
 /// Screens retry these by themselves; HTTP answers such as 401, 404, 409, or 422 are never retried.
 struct ConnectionError: LocalizedError, TransientFailure {
-    var errorDescription: String? { "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." }
+    var errorDescription: String? { "지금 연결이 안 돼요. 조금 기다렸다가 다시 시도해 주세요." }
 }
 
 /// App-wide connection state: whether the device has a network path, and whether the last request reached the server.
