@@ -78,8 +78,9 @@ struct ProcessStepRow: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(label)
-                        .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
+                        .overdueMark(for: isDone ? nil : due)
+                        .font(.subheadline)
                     if isDone {
                         Label {
                             Text(verbatim: doneText).foregroundStyle(.primary)
@@ -365,8 +366,9 @@ struct OrderSummarySections: View {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
                     Text(verbatim: item.title)
-                        .font(.title3.bold())
                         .multilineTextAlignment(.center)
+                        .overdueMark(for: item.due)
+                        .font(.title3.bold())
                     if let line = item.lines.first {
                         PhraseText(text: line, selectable: true, alignment: .center)
                             .font(.subheadline)

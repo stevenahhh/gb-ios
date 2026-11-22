@@ -187,7 +187,7 @@ struct OperationsView: View {
                 }
                 .buttonStyle(AttentionTileStyle())
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(metric.label) \(metric.display)\(metric.detail.map { ", \($0)" } ?? "")")
+                .accessibilityLabel("\(metric.due?.isOverdue(at: .now) == true ? "기한 지남, " : "")\(metric.label) \(metric.display)\(metric.detail.map { ", \($0)" } ?? "")")
                 .accessibilityHint("목록을 열어요")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("operations.attention.\(metric.key)")
@@ -232,6 +232,12 @@ struct OperationsView: View {
         .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
+        // The corner keeps the mark out of the centered column, so the number stays put when a deadline passes.
+        .overlay(alignment: .topLeading) {
+            DueMark(due: metric.due)
+                .font(.subheadline)
+                .padding(6)
+        }
         .contentShape(.rect)
     }
 
@@ -244,6 +250,7 @@ struct OperationsView: View {
                     .foregroundStyle(Color.secondaryText)
             } label: {
                 Text(metric.label)
+                    .overdueMark(for: metric.due)
                 if let due = metric.due {
                     DueLabel(due: due)
                 } else if let detail = metric.detail {
