@@ -1,17 +1,37 @@
 """A grounded reply is written from the ledger, checked against it, and locked until it agrees."""
 
+from datetime import timedelta
 from typing import Final
 
 import pytest
-from httpx2 import AsyncClient
+from httpx2 import AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from b_k25_engine import arm_for
-from tests.b_k25_support import CONTROL, GROUNDED, ScriptedModel, add_inquiry, scripted
+from common import current_time
+from main import app
+from tests.b_k25_support import (
+    GROUNDED,
+    ONCE_CONTROL,
+    ScriptedModel,
+    add_control_row,
+    add_inquiry,
+    scripted,
+)
+from tests.conftest import NOW
 
 pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
 PLAIN_REPLY: Final = "이서준 님, 문의 주셔서 감사해요. 확인해서 다시 알려드릴게요."
+WRONG_PLAIN_REPLY: Final = "이서준 님, 문의 주셔서 감사해요. 예약금은 30,000원이에요."
+WRONG_SEATS: Final = "○○ 님, 토요일에 네 자리 가능해요."
+WRONG_SEATS_CLAIMS: Final = '[{"kind":"seats","text":"네 자리","value":"4"}]'
+REASON: Final = "손님과 따로 정했어요"
+DATED_DRAFT: Final = "○○ 님, 11월 21일 토요일에 세 자리 남았어요. 예약금은 25,000원이에요."
+DATED_CLAIMS: Final = (
+    '[{"kind":"date","text":"11월 21일","value":"11-21"},'
+    '{"kind":"seats","text":"세 자리 남았어요","value":"3"},'
+    '{"kind":"deposit","text":"예약금은 25,000원","value":"25000"}]'
+)
 WRONG_DRAFT: Final = "○○ 님, 토요일에 네 자리 가능해요. 예약금은 30,000원이에요."
 WRONG_CLAIMS: Final = (
     '[{"kind":"seats","text":"네 자리","value":"4"},'
@@ -38,29 +58,193 @@ async def saved(client: AsyncClient, inquiry_id: str) -> None:
     assert edited.status_code == 200
 
 
-def test_the_arm_of_an_inquiry_never_changes() -> None:
-    assert arm_for(GROUNDED) == "grounded"
-    assert arm_for(CONTROL) == "control"
-    assert arm_for(GROUNDED) == arm_for(GROUNDED)
+async def approve(client: AsyncClient, inquiry_id: str, draft: str, reason: str | None = None) -> Response:
+    """Approve a reply at its first revision, with a reason when it is locked."""
+    return await client.post(f"/grounded-replies/{inquiry_id}/decision", json={
+        "decision": "approve", "draft": draft, "expectedRevision": 0, "overrideReason": reason,
+    })
 
 
-async def test_control_inquiry_gets_the_existing_draft_and_no_lock(
+async def kept(database: AsyncEngine) -> list[tuple[str, str, str | None]]:
+    """Read what is stored about the checked replies."""
+    async with database.connect() as connection:
+        rows = await connection.execute(
+            text("SELECT ab_arm, lock_state, override_reason FROM inquiry_grounding"),
+        )
+        return [(row.ab_arm, row.lock_state, row.override_reason) for row in rows]
+
+
+async def steps(database: AsyncEngine) -> list[tuple[str, str]]:
+    """Read the measured steps in order."""
+    async with database.connect() as connection:
+        rows = await connection.execute(text("SELECT arm, kind FROM grounded_events ORDER BY id"))
+        return [(row.arm, row.kind) for row in rows]
+
+
+@pytest.mark.parametrize("has_control_row", [False, True])
+async def test_the_inquiry_that_hashed_to_control_is_grounded_checked_and_locked(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel, *, has_control_row: bool,
+) -> None:
+    await add_inquiry(database, ONCE_CONTROL)
+    if has_control_row:
+        await add_control_row(database, ONCE_CONTROL, PLAIN_REPLY)
+    model.drafts, model.claims = [WRONG_SEATS], WRONG_SEATS_CLAIMS
+    body = (await client.post(f"/grounded-replies/{ONCE_CONTROL}/draft")).json()
+    assert (body["arm"], body["lock"], body["mismatchCount"]) == ("grounded", "locked", 1)
+    assert model.routes == 1
+    assert "이서준" not in "\n".join(model.prompts)
+    assert (await approve(client, ONCE_CONTROL, body["draft"])).status_code == 409
+    passed = await approve(client, ONCE_CONTROL, body["draft"], REASON)
+    assert passed.json()["status"] == "approved"
+    assert await kept(database) == [("grounded", "overridden", REASON)]
+    assert await steps(database) == [
+        ("grounded", "draft"), ("grounded", "override"), ("grounded", "approved"),
+    ]
+
+
+async def test_a_row_stored_as_control_with_an_old_plain_draft_is_checked_and_locked(
     database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
 ) -> None:
-    await add_inquiry(database, CONTROL)
-    model.drafts = [PLAIN_REPLY]
-    response = await client.post(f"/grounded-replies/{CONTROL}/draft")
-    body = response.json()
-    assert response.status_code == 200
-    assert (body["arm"], body["claims"], body["judgment"]) == ("control", [], None)
-    assert body["draft"] == PLAIN_REPLY
-    assert model.routes == 0
-    prompt = "\n".join(model.prompts)
-    assert "이서준" in prompt
-    decided = await client.post(f"/grounded-replies/{CONTROL}/decision", json={
-        "decision": "approve", "draft": PLAIN_REPLY, "expectedRevision": 0,
+    await add_inquiry(database, ONCE_CONTROL, WRONG_PLAIN_REPLY)
+    await add_control_row(database, ONCE_CONTROL, WRONG_PLAIN_REPLY)
+    state = (await client.get(f"/grounded-replies/{ONCE_CONTROL}")).json()
+    assert (state["arm"], state["lock"], state["mismatchCount"]) == ("grounded", "locked", 1)
+    text_now = {"draft": WRONG_PLAIN_REPLY}
+    verified = (await client.post(f"/grounded-replies/{ONCE_CONTROL}/verify", json=text_now)).json()
+    assert (verified["lock"], verified["checkedKinds"]) == ("locked", ["예약금"])
+    assert (await approve(client, ONCE_CONTROL, WRONG_PLAIN_REPLY)).status_code == 409
+    assert (await approve(client, ONCE_CONTROL, WRONG_PLAIN_REPLY, REASON)).status_code == 200
+    assert await kept(database) == [("grounded", "overridden", REASON)]
+
+
+async def test_a_reply_nobody_drafted_here_is_checked_locked_and_remembered(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, ONCE_CONTROL, WRONG_PLAIN_REPLY)
+    state = (await client.get(f"/grounded-replies/{ONCE_CONTROL}")).json()
+    assert (state["arm"], state["lock"], state["mismatchCount"]) == ("grounded", "locked", 1)
+    assert (await approve(client, ONCE_CONTROL, WRONG_PLAIN_REPLY)).status_code == 409
+    assert await kept(database) == []
+    assert (await approve(client, ONCE_CONTROL, WRONG_PLAIN_REPLY, REASON)).status_code == 200
+    assert await kept(database) == [("grounded", "overridden", REASON)]
+    assert await steps(database) == [("grounded", "override"), ("grounded", "approved")]
+
+
+async def write(client: AsyncClient, model: ScriptedModel, draft: str, claims: str) -> dict[str, object]:
+    """Write one scripted draft and return its check."""
+    model.drafts, model.claims = [draft], claims
+    return (await client.post(f"/grounded-replies/{GROUNDED}/draft")).json()
+
+
+async def read_state(client: AsyncClient, inquiry_id: str = GROUNDED) -> dict[str, object]:
+    """Read what the inquiry screen shows."""
+    return (await client.get(f"/grounded-replies/{inquiry_id}")).json()
+
+
+async def raise_deposit(database: AsyncEngine) -> None:
+    """Change the ledger under a reply that was already completed."""
+    async with database.begin() as connection:
+        _ = await connection.execute(text("UPDATE class_sessions SET deposit_won = 30000"))
+
+
+def shown(body: dict[str, object]) -> list[object]:
+    """Pick the check of a draft or of a state."""
+    return [body[key] for key in ("arm", "lock", "mismatchCount", "checkedKinds", "claims")]
+
+
+async def test_a_reply_completed_as_clear_still_reads_clear_after_its_day(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    written = await write(client, model, DATED_DRAFT, DATED_CLAIMS)
+    assert (written["lock"], written["mismatchCount"]) == ("clear", 0)
+    assert (await approve(client, GROUNDED, str(written["draft"]))).status_code == 200
+    redrafted = await write(client, model, WRONG_DRAFT, WRONG_CLAIMS)
+    assert redrafted["lock"] == "locked"
+    app.dependency_overrides[current_time] = lambda: NOW + timedelta(days=5)
+    assert shown(await read_state(client)) == shown(written)
+
+
+async def test_a_reply_completed_with_a_reason_still_reads_locked_with_it(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    written = await write(client, model, WRONG_DRAFT, WRONG_CLAIMS)
+    assert (written["lock"], written["mismatchCount"]) == ("locked", 2)
+    assert (await approve(client, GROUNDED, str(written["draft"]), REASON)).status_code == 200
+    await raise_deposit(database)
+    state = await read_state(client)
+    assert (shown(state), state["overrideReason"]) == (shown(written), REASON)
+
+
+@pytest.mark.parametrize("has_control_row", [False, True])
+async def test_a_completed_reply_nobody_approved_here_is_unchecked(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel, *, has_control_row: bool,
+) -> None:
+    await add_inquiry(database, ONCE_CONTROL, WRONG_PLAIN_REPLY)
+    if has_control_row:
+        await add_control_row(database, ONCE_CONTROL, WRONG_PLAIN_REPLY)
+    done = await client.post(f"/inquiries/{ONCE_CONTROL}/decision", json={
+        "decision": "approve", "draft": WRONG_PLAIN_REPLY, "expectedRevision": 0,
     })
-    assert decided.json()["status"] == "approved"
+    assert done.status_code == 200
+    state = await read_state(client, ONCE_CONTROL)
+    assert (shown(state), state["overrideReason"]) == (["grounded", "unchecked", 0, [], []], None)
+
+
+async def test_editing_a_completed_reply_is_checked_again(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    written = await write(client, model, RIGHT_DRAFT, RIGHT_CLAIMS)
+    draft = str(written["draft"])
+    assert (await approve(client, GROUNDED, draft)).status_code == 200
+    await raise_deposit(database)
+    assert shown(await read_state(client)) == shown(written)
+    decision = {"decision": "approve", "expectedRevision": 1}
+    for checked in (draft, f"{draft} 편하게 오세요."):
+        verified = await client.post(f"/grounded-replies/{GROUNDED}/verify", json={"draft": checked})
+        assert verified.json()["lock"] == "locked"
+        again = {**decision, "draft": checked}
+        refused = await client.post(f"/grounded-replies/{GROUNDED}/decision", json=again)
+        assert refused.status_code == 409
+    edited = {"draft": f"{draft} 편하게 오세요.", "expectedRevision": 1}
+    assert (await client.patch(f"/inquiries/{GROUNDED}/draft", json=edited)).status_code == 200
+    state = await read_state(client)
+    assert (state["lock"], state["mismatchCount"]) == ("locked", 1)
+
+
+async def test_an_approval_without_a_recorded_text_is_checked_again(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, GROUNDED)
+    written = await write(client, model, RIGHT_DRAFT, RIGHT_CLAIMS)
+    assert (await approve(client, GROUNDED, str(written["draft"]))).status_code == 200
+    async with database.begin() as connection:
+        _ = await connection.execute(text("UPDATE grounded_events SET data = data - 'digest' - 'claims'"))
+    await raise_deposit(database)
+    assert (await read_state(client))["lock"] == "locked"
+
+
+async def test_a_blank_reply_is_grounded_and_has_nothing_to_check(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, ONCE_CONTROL)
+    state = (await client.get(f"/grounded-replies/{ONCE_CONTROL}")).json()
+    assert (state["arm"], state["lock"], state["checkedKinds"]) == ("grounded", "clear", [])
+
+
+async def test_metrics_have_one_entry_without_the_steps_of_unchecked_drafts(
+    database: AsyncEngine, client: AsyncClient, model: ScriptedModel,
+) -> None:
+    await add_inquiry(database, ONCE_CONTROL)
+    async with database.begin() as connection:
+        _ = await connection.execute(
+            text("INSERT INTO grounded_events (inquiry_id, arm, kind) VALUES (:id, 'control', 'draft')"),
+            {"id": ONCE_CONTROL},
+        )
+    report = (await client.get("/grounded-replies/metrics?start=2020-01-01&end=2099-12-31")).json()
+    assert [(row["arm"], row["drafts"], row["deferralRate"]) for row in report] == [("grounded", 0, None)]
 
 
 async def test_grounded_draft_hides_the_customer_and_locks_wrong_numbers(
@@ -137,7 +321,8 @@ async def test_agreeing_numbers_are_clear_and_an_unchanged_approval_is_counted(
     })
     assert approved.status_code == 200
     report = (await client.get("/grounded-replies/metrics")).json()
-    grounded = next(row for row in report if row["arm"] == "grounded")
+    assert [row["arm"] for row in report] == ["grounded"]
+    grounded = report[0]
     assert (grounded["approvals"], grounded["uneditedApprovals"], grounded["uneditedRate"]) == (1, 1, 1.0)
     assert grounded["drafts"] == 1
 

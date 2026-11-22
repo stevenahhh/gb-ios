@@ -1,18 +1,18 @@
-"""Routes of the grounded reply engine (K25): state, draft, recheck, approval, and A/B metrics."""
+"""Routes of the grounded reply engine (K25): state, draft, recheck, approval, and metrics."""
 
+import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Annotated, Final, Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import Field
+from pydantic import BaseModel, Field, JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from b_k25_claims import Claim, Evaluation, Lock, claim_to_json
+from b_k25_claims import Claim, Evaluation, Lock, claim_to_json, claims_from_json
 from b_k25_engine import (
-    Arm,
     check_final,
     close_open_judgments,
     load_context,
@@ -20,12 +20,11 @@ from b_k25_engine import (
     record_event,
     route_inquiry,
     save_draft,
-    save_plain_draft,
+    upsert_grounding,
     write_grounded_draft,
-    write_plain_draft,
 )
 from b_k25_ledger import load_ledger
-from b_k25_tables import GroundedEventRow, GroundingRow, JudgmentRow
+from b_k25_tables import GROUNDED, Arm, GroundedEventRow, GroundingRow, JudgmentRow
 from common import MAX_TEXT, Now, Revision, Session
 from contracts import ApiModel, ApiRequest
 from display import day_start, next_day_start
@@ -68,7 +67,7 @@ class JudgmentView(ApiModel):
 class GroundedDraft(ApiModel):
     """A written draft with its check; a raised judgment has no draft."""
 
-    arm: Arm
+    arm: Arm = GROUNDED
     draft: str
     claims: list[ClaimView]
     lock: Lock
@@ -78,10 +77,10 @@ class GroundedDraft(ApiModel):
 
 
 class ReplyState(ApiModel):
-    """What the inquiry screen shows about the saved draft; no arm means it was never drafted here."""
+    """What the inquiry screen shows about the saved draft."""
 
     inquiry_id: str
-    arm: Arm | None
+    arm: Arm = GROUNDED
     claims: list[ClaimView]
     lock: Lock
     mismatch_count: int
@@ -114,10 +113,19 @@ class GroundedDecision(ApiRequest):
     override_reason: Annotated[str, Field(min_length=1, max_length=MAX_REASON_CHARS)] | None = None
 
 
-class ArmMetrics(ApiModel):
-    """Measured results of one arm; rates are null until there is something to divide."""
+class Approval(BaseModel):
+    """The check an approval recorded with the digest of its text."""
 
-    arm: Arm
+    digest: str
+    lock: Lock
+    claims: list[dict[str, JsonValue]]
+    checked: list[str]
+
+
+class ReplyMetrics(ApiModel):
+    """Measured results of the replies; rates are null until there is something to divide."""
+
+    arm: Arm = GROUNDED
     approvals: int
     unedited_approvals: int
     unedited_rate: float | None
@@ -174,26 +182,58 @@ def verification(evaluation: Evaluation) -> Verification:
     )
 
 
+def digest_of(reply: str) -> str:
+    """Mark a reply, so its approval can tell it again without a second copy of the words."""
+    return hashlib.sha256(reply.strip().encode()).hexdigest()
+
+
+async def completed_check(db: AsyncSession, inquiry: InquiryRow) -> Verification | None:
+    """Return the check a completed reply was approved with, or nothing when its text needs a new one.
+
+    A reply completed without an approval here was never checked, so it stays unchecked. An approval
+    from an earlier release recorded no digest, so nothing tells whether its text was edited since.
+    """
+    if inquiry.status != "approved":
+        return None
+    data = await db.scalar(
+        select(GroundedEventRow.data).where(
+            GroundedEventRow.inquiry_id == inquiry.id, GroundedEventRow.kind == "approved",
+            GroundedEventRow.arm == GROUNDED,
+        ).order_by(GroundedEventRow.id.desc()).limit(1),
+    )
+    if data is None:
+        return Verification(claims=[], lock="unchecked", mismatch_count=0, checked_kinds=[])
+    if data.get("digest") != digest_of(inquiry.draft):
+        return None
+    approval = Approval.model_validate(data)
+    claims = claims_from_json(approval.claims)
+    return Verification(
+        claims=[claim_view(claim) for claim in claims], lock=approval.lock,
+        mismatch_count=mismatches(claims), checked_kinds=approval.checked,
+    )
+
+
 @router.get("/grounded-replies/metrics")
 async def metrics(
     db: Session, now: Now, start: Annotated[date | None, Query()] = None,
     end: Annotated[date | None, Query()] = None,
-) -> list[ArmMetrics]:
-    """Report each arm's results for the given days, by default the last four weeks."""
+) -> list[ReplyMetrics]:
+    """Report the results for the given days, by default the last four weeks, as a list of one entry."""
     first = start or now.date() - DEFAULT_WINDOW
     last = end or now.date()
     events = list(await db.scalars(
         select(GroundedEventRow).where(
+            # An earlier release measured drafts nobody checked under another word.
+            GroundedEventRow.arm == GROUNDED,
             GroundedEventRow.created_at >= day_start(first),
             GroundedEventRow.created_at < next_day_start(last),
         ),
     ))
-    arms: tuple[Arm, ...] = ("control", "grounded")
-    return [arm_metrics(arm, [event for event in events if event.arm == arm]) for arm in arms]
+    return [reply_metrics(events)]
 
 
-def arm_metrics(arm: Arm, events: Sequence[GroundedEventRow]) -> ArmMetrics:
-    """Summarize one arm; an approval without a measured time counts but is left out of the median."""
+def reply_metrics(events: Sequence[GroundedEventRow]) -> ReplyMetrics:
+    """Summarize the steps; an approval without a measured time counts but is left out of the median."""
     approved = [event.data for event in events if event.kind == "approved"]
     drafts = [event.data for event in events if event.kind == "draft"]
     unedited = sum(data.get("unedited") is True for data in approved)
@@ -204,8 +244,8 @@ def arm_metrics(arm: Arm, events: Sequence[GroundedEventRow]) -> ArmMetrics:
     counts = {kind: sum(event.kind == kind for event in events) for kind in (
         "override", "judgment_opened", "judgment_answered", "judgment_dismissed",
     )}
-    return ArmMetrics(
-        arm=arm, approvals=len(approved), unedited_approvals=unedited,
+    return ReplyMetrics(
+        approvals=len(approved), unedited_approvals=unedited,
         unedited_rate=unedited / len(approved) if approved else None,
         median_seconds=seconds[len(seconds) // 2] if seconds else None,
         drafts=len(drafts), deferral_drafts=deferral,
@@ -218,55 +258,43 @@ def arm_metrics(arm: Arm, events: Sequence[GroundedEventRow]) -> ArmMetrics:
 
 @router.get("/grounded-replies/{inquiry_id}")
 async def reply_state(inquiry_id: str, db: Session, now: Now) -> ReplyState:
-    """Check the saved draft again and return the claims the inquiry screen shows."""
+    """Return what the inquiry screen shows: a completed reply as approved, any other checked again."""
     inquiry = await db.get(InquiryRow, inquiry_id)
     if inquiry is None:
         raise HTTPException(404, "inquiry not found")
     stored = await db.get(GroundingRow, inquiry_id)
     judgment = await open_judgment_view(db, inquiry)
-    checked = verification(check_final(inquiry.draft, await load_ledger(db, inquiry, now), stored))
+    checked = await completed_check(db, inquiry) or verification(
+        check_final(inquiry.draft, await load_ledger(db, inquiry, now), stored),
+    )
     return ReplyState(
-        inquiry_id=inquiry_id, arm=None if stored is None else arm_of(stored), claims=checked.claims,
-        lock=checked.lock, mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
+        inquiry_id=inquiry_id, claims=checked.claims, lock=checked.lock,
+        mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
         judgment=judgment, override_reason=None if stored is None else stored.override_reason,
     )
 
 
-def unwritten(arm: Arm, draft: str = "", judgment: JudgmentView | None = None) -> GroundedDraft:
-    """Answer without a check: the control arm's draft, or a question handed to the owner."""
-    return GroundedDraft(
-        arm=arm, draft=draft, claims=[], lock="unchecked", mismatch_count=0, checked_kinds=[],
-        judgment=judgment,
-    )
-
-
-def arm_of(row: GroundingRow) -> Arm:
-    """Read a stored arm."""
-    return "grounded" if row.ab_arm == "grounded" else "control"
-
-
 @router.post("/grounded-replies/{inquiry_id}/draft")
 async def write_draft(inquiry_id: str, now: Now) -> GroundedDraft:
-    """Write a reply draft: the control arm as before, the grounded arm from the ledger and rules.
+    """Write a reply draft from the ledger, the fact cards, and the owner's rules.
 
     The model routes first. A question the facts cannot answer becomes a judgment for the owner
     and no draft is written.
     """
     context = await load_context(inquiry_id, now)
-    if context.arm == "control":
-        plain = await write_plain_draft(context)
-        await save_plain_draft(context, plain)
-        return unwritten("control", draft=plain)
     route = await route_inquiry(context)
     if route.kind == "judgment":
         judgment = await open_judgment(context, route.issue)
-        return unwritten("grounded", judgment=judgment_view(judgment, context.inquiry))
+        return GroundedDraft(
+            draft="", claims=[], lock="unchecked", mismatch_count=0, checked_kinds=[],
+            judgment=judgment_view(judgment, context.inquiry),
+        )
     reply = await write_grounded_draft(context)
     await save_draft(context, reply)
     await close_open_judgments(context)
     checked = verification(reply.evaluation)
     return GroundedDraft(
-        arm="grounded", draft=reply.draft, claims=checked.claims, lock=checked.lock,
+        draft=reply.draft, claims=checked.claims, lock=checked.lock,
         mismatch_count=checked.mismatch_count, checked_kinds=checked.checked_kinds,
     )
 
@@ -288,7 +316,7 @@ async def decide(inquiry_id: InquiryId, body: GroundedDecision, db: Session, now
     text = body.draft.strip()
     if not text:
         raise HTTPException(422, "blank reply cannot be completed")
-    stored = await db.get(GroundingRow, inquiry_id, with_for_update=True)
+    stored = await upsert_grounding(db, inquiry_id)
     evaluation = check_final(text, await load_ledger(db, row, now), stored)
     if evaluation.lock == "locked" and body.override_reason is None:
         raise HTTPException(409, "draft does not match the ledger")
@@ -296,9 +324,8 @@ async def decide(inquiry_id: InquiryId, body: GroundedDecision, db: Session, now
     row.draft = text
     row.revision += 1
     await db.flush()
-    if stored is not None:
-        remember_decision(db, stored, FinalText(text, evaluation, body.override_reason), now)
-        await db.flush()
+    remember_decision(db, stored, FinalText(text, evaluation, body.override_reason), now)
+    await db.flush()
     return Inquiry.model_validate(row)
 
 
@@ -312,7 +339,7 @@ class FinalText:
 
 
 def remember_decision(db: AsyncSession, stored: GroundingRow, final: FinalText, now: datetime) -> None:
-    """Store the final check and record the approval for the A/B test."""
+    """Store the final check and record the approval, with what a completed reply is shown as later."""
     evaluation = final.evaluation
     overridden = evaluation.lock == "locked"
     stored.lock_state = "overridden" if overridden else evaluation.lock
@@ -323,7 +350,10 @@ def remember_decision(db: AsyncSession, stored: GroundingRow, final: FinalText, 
         record_event(db, stored, "override", {
             "reason": final.reason or "", "mismatches": mismatches(evaluation.claims),
         }, now)
+    claims: list[JsonValue] = [*stored.claims_json]
+    checked: list[JsonValue] = [*evaluation.checked]
     record_event(db, stored, "approved", {
         "unedited": final.text == (stored.generated_draft or "").strip(), "seconds": seconds,
         "lock": evaluation.lock, "override": overridden,
+        "digest": digest_of(final.text), "claims": claims, "checked": checked,
     }, now)

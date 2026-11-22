@@ -2,6 +2,7 @@
 
 import hashlib
 from datetime import datetime
+from typing import Final, Literal
 
 from pydantic import JsonValue
 from sqlalchemy import (
@@ -23,6 +24,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
 from models import REVISION_CHECK, Entity, TableArgs
+
+type Arm = Literal["grounded"]
+# Every inquiry is grounded; the app and two columns still carry the word.
+GROUNDED: Final[Arm] = "grounded"
 
 
 def card_id_for(class_name: str) -> str:
@@ -90,7 +95,11 @@ class JudgmentRow(Base):
 
 
 class GroundingRow(Base):
-    """What the engine keeps for one inquiry: its A/B arm, last check, and lock."""
+    """What the engine keeps for one inquiry: its last check and lock.
+
+    A row from an earlier release may hold another word in ab_arm. It is checked like any other,
+    and the next write corrects the word.
+    """
 
     __tablename__: str = "inquiry_grounding"
     __table_args__: TableArgs = (
@@ -114,7 +123,7 @@ class GroundingRow(Base):
 
 
 class GroundedEventRow(Base):
-    """One measured step of the A/B test; the arm is copied so a later change never rewrites history."""
+    """One measured step of a grounded reply; an approval also keeps the check of its text."""
 
     __tablename__: str = "grounded_events"
     __table_args__: TableArgs = (
