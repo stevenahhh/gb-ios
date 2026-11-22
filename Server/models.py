@@ -222,6 +222,17 @@ class TaskRow(Entity, Base):
     completed_at: Mapped[datetime | None] = timestamp(nullable=True)
 
 
+class CarryOverRow(Base):
+    """Overdue work the owner put into one day's list; the work keeps its own deadline."""
+
+    __tablename__: str = "carry_overs"
+    __table_args__: TableArgs = (CheckConstraint("target IN ('task', 'shipment')"),)
+    target: Mapped[str] = mapped_column(Text, primary_key=True)
+    target_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    carried_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CalendarEventRow(Entity, Base):
     """An owner-added schedule entry not derivable from other tables."""
 

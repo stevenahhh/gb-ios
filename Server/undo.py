@@ -1,14 +1,14 @@
 """Revision-checked reversals of owner actions, with no external side effects."""
 
 from fastapi import APIRouter
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bookings import DEPOSIT_WINDOW, ExpectedRevision
 from bookings import card_for as booking_card
 from common import Now, Session, invalid_transition, locked
 from contracts import Card, CardList
-from models import BookingRow, ClassSessionRow, OrderRow, ShipmentRow, TaskRow
+from models import BookingRow, CarryOverRow, ClassSessionRow, OrderRow, ShipmentRow, TaskRow
 from orders import Batch, lock_order
 from orders import card_for as order_card
 from orders import cards_for as order_cards
@@ -47,6 +47,10 @@ async def unconfirm(db: AsyncSession, order_id: str, expected_revision: int) -> 
     order.confirmed_at = None
     order.revision += 1
     await db.delete(shipment)
+    # Confirming again reuses this parcel id, so its carry-over must not outlive it.
+    _ = await db.execute(delete(CarryOverRow).where(
+        CarryOverRow.target == "shipment", CarryOverRow.target_id == shipment.id,
+    ))
 
 
 @router.post("/orders/undo-confirm")

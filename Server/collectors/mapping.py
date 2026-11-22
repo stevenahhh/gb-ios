@@ -16,7 +16,15 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from collectors.base import SourceId
 from display import day_start
-from models import ChannelRow, CollectedItemRow, CustomerRow, InquiryRow, OrderRow, ShipmentRow
+from models import (
+    CarryOverRow,
+    ChannelRow,
+    CollectedItemRow,
+    CustomerRow,
+    InquiryRow,
+    OrderRow,
+    ShipmentRow,
+)
 from seed_data import INSTAGRAM, STORE, build_seed
 
 BLOG: Final = "channel-naver-blog"
@@ -209,14 +217,18 @@ async def retire_seed_rows(db: AsyncConnection | AsyncSession, today: date) -> i
     seed_orders = select(OrderRow.id).where(
         OrderRow.id.in_(ids[OrderRow]), OrderRow.revision == 0, OrderRow.channel_id.in_(real_order),
     )
-    shipments = await db.execute(delete(ShipmentRow).where(
+    shipments = (await db.execute(delete(ShipmentRow).where(
         ShipmentRow.id.in_(ids[ShipmentRow]), ShipmentRow.revision == 0,
         ShipmentRow.order_id.in_(seed_orders),
-    ).returning(ShipmentRow.id))
+    ).returning(ShipmentRow.id))).scalars().all()
+    if shipments:
+        _ = await db.execute(delete(CarryOverRow).where(
+            CarryOverRow.target == "shipment", CarryOverRow.target_id.in_(shipments),
+        ))
     orders = await db.execute(delete(OrderRow).where(
         OrderRow.id.in_(seed_orders), ~exists().where(ShipmentRow.order_id == OrderRow.id),
     ).returning(OrderRow.id))
-    return len(inquiries.all()) + len(shipments.all()) + len(orders.all())
+    return len(inquiries.all()) + len(shipments) + len(orders.all())
 
 
 async def recent_posts(db: AsyncSession, today: date) -> dict[str, int]:
