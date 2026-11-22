@@ -139,6 +139,28 @@ final class TabNavigationUITests: RoundupUITestCase {
     }
 
     @MainActor
+    func testDayWithEventsOffersAddWithoutScrolling() throws {
+        let app = try launch()
+        app.tabBars.buttons["캘린더"].tap()
+        // Today has seeded classes and tasks, so the pinned button shows in place of the empty-day one.
+        let add = app.buttons["calendar.day.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(add.isHittable, "일정 추가 must be in reach before any scrolling")
+        XCTAssertFalse(app.buttons["calendar.empty.add"].exists)
+        XCTAssertTrue(app.buttons["calendar.add"].exists, "the toolbar plus stays")
+        keepScreenshot(of: app, named: "calendar-day-add")
+
+        add.tap()
+        let title = app.textFields["event.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        title.typeText("가마 청소")
+        app.buttons["form.save"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollTo(element(labelled: "가마 청소", in: app), in: app))
+    }
+
+    @MainActor
     func testUnreachableServerShowsRetryInsteadOfData() throws {
         let app = try launch(apiURL: "http://127.0.0.1:9")
         XCTAssertTrue(app.buttons["screen.retry"].waitForExistence(timeout: 30))

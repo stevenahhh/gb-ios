@@ -267,7 +267,9 @@ enum TimelineText {
 
 struct DaySection: View {
     let date: Date
-    let day: CalendarDay?
+    /// Every row the server sent for the day, including its orders and all-day facts.
+    let itemCount: Int
+    let schedule: DaySchedule
     /// Parcels whose pickup was on an earlier day; shown only on today, never carried into past days.
     let overdueShipments: [AgendaItem]
     let now: Date
@@ -289,7 +291,6 @@ struct DaySection: View {
     }
 
     var body: some View {
-        let schedule = DaySchedule(items: day?.items ?? [])
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Self.title(date))
@@ -297,7 +298,7 @@ struct DaySection: View {
                     .foregroundStyle(CalendarTokens.label)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                Text(relation == .today ? "오늘" : isLoading ? "" : "일정 \(day?.items.count ?? 0)건")
+                Text(relation == .today ? "오늘" : isLoading ? "" : "일정 \(itemCount)건")
                     .font(.subheadline)
                     .foregroundStyle(CalendarTokens.secondary)
             }
@@ -338,11 +339,7 @@ struct DaySection: View {
                 .font(.callout)
                 .foregroundStyle(CalendarTokens.secondary)
                 .multilineTextAlignment(.center)
-            Button("일정 추가", action: add)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(CalendarTokens.label)
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("calendar.empty.add")
+            AddEventButton(identifier: "calendar.empty.add", action: add)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
@@ -352,6 +349,38 @@ struct DaySection: View {
         let calendar = Calendar.workshop
         let weekday = ["일", "월", "화", "수", "목", "금", "토"][calendar.component(.weekday, from: date) - 1]
         return "\(calendar.component(.day, from: date))일 \(weekday)요일"
+    }
+}
+
+/// The day's own 일정 추가: under the message on a day with no timeline, and in `DayAddBar` on a day that has one.
+struct AddEventButton: View {
+    let identifier: String
+    var fillsWidth = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("일정 추가")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(CalendarTokens.label)
+                .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// 일정 추가 for a day that has a timeline. It sits in the bottom safe area, so it is in reach without scrolling
+/// and the last row ends above it. The whole bar is the button.
+struct DayAddBar: View {
+    let add: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(CalendarTokens.separator).frame(height: 1)
+            AddEventButton(identifier: "calendar.day.add", fillsWidth: true, action: add)
+        }
+        .background(CalendarTokens.background)
     }
 }
 
