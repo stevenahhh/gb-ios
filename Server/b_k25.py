@@ -23,6 +23,7 @@ from b_k25_prompts import (
     mask_contacts,
     parse_interview,
 )
+from b_k25_replies import router as reply_router
 from b_k25_tables import FactCardRow, OwnerRuleRow
 from bookings import ExpectedRevision
 from common import Now, Session, ShortText, require_revision
@@ -32,6 +33,7 @@ from providers import chat
 
 LOGGER: Final = logging.getLogger("roundup.grounded")
 router = APIRouter()
+router.include_router(reply_router)
 FACT_COLUMNS: Final[tuple[str, ...]] = (
     "duration_minutes", "capacity", "included_materials", "parking", "refund_policy",
 )

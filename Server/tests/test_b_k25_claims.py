@@ -125,6 +125,14 @@ def test_wrong_seats_price_and_deposit_lock_and_show_the_ledger() -> None:
     assert (result.lock, len(result.claims)) == ("locked", 3)
 
 
+def test_a_single_ledger_value_is_offered_as_the_fix() -> None:
+    draft = "토요일에 네 자리 가능하고, 1인 3만 5천 원, 예약금은 30,000원이에요. 수업은 90분 진행해요."
+    claims = check_numbers(draft, ledger())
+    assert [item.replacement for item in claims] == ["3자리", "38,000원", "25,000원", "120분"]
+    two_prices = ledger(cards=(CardFact(WEEKEND, price_won=38_000), CardFact("머그컵", price_won=45_000)))
+    assert check_numbers("1인 35,000원이에요.", two_prices)[0].replacement is None
+
+
 def test_seats_are_checked_for_the_day_the_draft_names() -> None:
     far = ledger(sessions=(
         SessionFact(WEEKEND, SATURDAY, 8, 3, 25_000, 120),

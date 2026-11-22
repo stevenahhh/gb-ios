@@ -191,6 +191,7 @@ class Claim:
     status: ClaimStatus
     ledger_value: str | None = None
     note: str | None = None
+    replacement: str | None = None
 
     @property
     def match(self) -> bool:
@@ -434,6 +435,17 @@ def price_label(amounts: Sequence[int]) -> str:
     return " 또는 ".join(won(amount) for amount in sorted(set(amounts)))
 
 
+def only_won(amounts: Sequence[int]) -> str | None:
+    """Offer the one known price as a fix; several prices leave the choice to the owner."""
+    distinct = set(amounts)
+    return won(distinct.pop()) if len(distinct) == 1 else None
+
+
+def with_number(text: str, value: int) -> str:
+    """Put the ledger's number into the words the draft used."""
+    return re.sub(r"\d+(?:\.\d+)?", str(value), text, count=1)
+
+
 def check_price(span: AmountSpan, draft: str, ledger: Ledger) -> Claim:
     """Compare a price with the class's price list, then with what the owner wrote elsewhere."""
     known = [card.price_won for card in ledger.cards_of(draft) if card.price_won is not None]
@@ -455,7 +467,7 @@ def check_price(span: AmountSpan, draft: str, ledger: Ledger) -> Claim:
             return Claim("price", span.text, value, source, label, "matched")
     if known:
         return Claim("price", span.text, value, "price_list", LABEL_PRICES, "mismatched",
-                     ledger_value=price_label(known))
+                     ledger_value=price_label(known), replacement=only_won(known))
     return Claim("price", span.text, value, "none", LABEL_NONE, "mismatched", note=NOT_IN_LEDGER)
 
 
@@ -472,7 +484,7 @@ def check_deposit(span: AmountSpan, draft: str, ledger: Ledger) -> Claim:
         return Claim("deposit", span.text, value, "fact_card", LABEL_WORKSHOP, "matched")
     if deposits:
         return Claim("deposit", span.text, value, "ledger", LABEL_LEDGER, "mismatched",
-                     ledger_value=price_label(deposits))
+                     ledger_value=price_label(deposits), replacement=only_won(deposits))
     return Claim("deposit", span.text, value, "none", LABEL_NONE, "mismatched", note=NOT_IN_LEDGER)
 
 
@@ -490,7 +502,8 @@ def check_seats(span: NumberSpan, draft: str, ledger: Ledger) -> Claim:
         return Claim("seats", span.text, value, "ledger", LABEL_LEDGER, "matched")
     closest = min(candidates, key=lambda session: abs(session.seats_left - span.value))
     return Claim("seats", span.text, value, "ledger", LABEL_LEDGER, "mismatched",
-                 ledger_value=f"{closest.label} {closest.seats_left}자리")
+                 ledger_value=f"{closest.label} {closest.seats_left}자리",
+                 replacement=f"{closest.seats_left}자리" if len(candidates) == 1 else None)
 
 
 def check_date(span: DateSpan, ledger: Ledger) -> Claim:
@@ -505,10 +518,12 @@ def check_date(span: DateSpan, ledger: Ledger) -> Claim:
         return Claim("date", span.text, value, "owner_rule", LABEL_RULE, "matched")
     if value in {f"{d.month:02d}-{d.day:02d}" for d in date_spans(ledger.question)}:
         return Claim("date", span.text, value, "customer", LABEL_CUSTOMER, "matched")
-    upcoming = min((session.day for session in ledger.sessions), default=None)
+    days = sorted({session.day for session in ledger.sessions})
+    upcoming = days[0] if days else None
     return Claim("date", span.text, value, "ledger", LABEL_LEDGER, "mismatched",
                  ledger_value=month_day_weekday(upcoming) + "요일" if upcoming else None,
-                 note=None if upcoming else NOT_IN_LEDGER)
+                 note=None if upcoming else NOT_IN_LEDGER,
+                 replacement=f"{upcoming.month}월 {upcoming.day}일" if upcoming and len(days) == 1 else None)
 
 
 def check_number(
@@ -523,7 +538,8 @@ def check_number(
     if span.value in known:
         return Claim("fact", span.text, value, source, label, "matched")
     return Claim("fact", span.text, value, source, label, "mismatched",
-                 ledger_value=" 또는 ".join(f"{item}{unit}" for item in sorted(known)))
+                 ledger_value=" 또는 ".join(f"{item}{unit}" for item in sorted(known)),
+                 replacement=with_number(span.text, min(known)) if len(known) == 1 else None)
 
 
 def check_numbers(draft: str, ledger: Ledger) -> list[Claim]:
@@ -641,7 +657,7 @@ def claim_to_json(claim: Claim) -> dict[str, JsonValue]:
     return {
         "kind": claim.kind, "text": claim.text, "value": claim.value, "source": claim.source,
         "sourceLabel": claim.source_label, "status": claim.status, "ledgerValue": claim.ledger_value,
-        "note": claim.note,
+        "note": claim.note, "replacement": claim.replacement,
     }
 
 
@@ -656,6 +672,7 @@ def claims_from_json(items: Sequence[dict[str, JsonValue]]) -> tuple[Claim, ...]
         if not isinstance(kind, str) or kind not in KINDS:
             continue
         ledger_value, note, value = item.get("ledgerValue"), item.get("note"), item.get("value")
+        replacement = item.get("replacement")
         read.append(Claim(
             kind=cast("ClaimKind", kind), text=text, value=value if isinstance(value, str) else "",
             source=cast("ClaimSource", source),
@@ -663,5 +680,6 @@ def claims_from_json(items: Sequence[dict[str, JsonValue]]) -> tuple[Claim, ...]
             status=cast("ClaimStatus", status),
             ledger_value=ledger_value if isinstance(ledger_value, str) else None,
             note=note if isinstance(note, str) else None,
+            replacement=replacement if isinstance(replacement, str) else None,
         ))
     return tuple(read)
