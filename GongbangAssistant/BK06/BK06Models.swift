@@ -312,6 +312,12 @@ enum BK06Format {
 
     static func won(_ amount: Int) -> String { "\(amount.formatted(.number.locale(Locale(identifier: "ko_KR"))))원" }
 
+    /// "45분", "4시간", or "4시간 30분".
+    static func elapsed(_ minutes: Int) -> String {
+        guard minutes >= 60 else { return "\(minutes)분" }
+        return minutes % 60 == 0 ? "\(minutes / 60)시간" : "\(minutes / 60)시간 \(minutes % 60)분"
+    }
+
     static func remaining(_ minutes: Int) -> String {
         if minutes <= 0 { return "지남" }
         if minutes < 60 { return "\(minutes)분 남음" }

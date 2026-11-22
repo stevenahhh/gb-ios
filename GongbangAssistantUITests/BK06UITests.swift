@@ -3,11 +3,18 @@ import XCTest
 
 /// Build B's cancellation and no-show card against the local server seeded with b_k06_seed.py.
 final class BK06UITests: RoundupUITestCase {
+    /// A tap that lands while the push still animates loses its focus, so the covered screen must be gone first.
+    @MainActor
+    private func waitUntilCovered(_ row: XCUIElement) {
+        XCTAssertTrue(row.waitForNonExistence(timeout: 30))
+    }
+
     @MainActor
     private func openPaste(_ message: String, in app: XCUIApplication) {
         let row = app.buttons["k06.paste"]
         XCTAssertTrue(scrollTo(row, in: app))
         row.tap()
+        waitUntilCovered(row)
         let editor = app.descendants(matching: .any)["k06.message"].firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
         editor.tap()
@@ -71,15 +78,18 @@ final class BK06UITests: RoundupUITestCase {
         app.launch()
         let late = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'k06.late.'")).firstMatch
         XCTAssertTrue(scrollTo(late, in: app))
+        XCTAssertTrue(late.label.contains("4시간 30분 지남"), late.label)
         keepScreenshot(of: app, named: "k06-today-cards")
         late.tap()
         XCTAssertTrue(app.buttons["k06.noShow"].waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "4시간 30분 지남", in: app).exists)
         keepScreenshot(of: app, named: "k06-late")
         app.navigationBars.buttons.firstMatch.tap()
         let small = app.buttons["k06.underMin.session-k06-small"]
         XCTAssertTrue(scrollTo(small, in: app))
         small.tap()
         XCTAssertTrue(app.buttons["k06.underMin.decide"].waitForExistence(timeout: 10))
+        XCTAssertTrue(element(labelled: "진행 방식", in: app).exists)
         keepScreenshot(of: app, named: "k06-under-min")
     }
 
@@ -92,7 +102,9 @@ final class BK06UITests: RoundupUITestCase {
         row.tap()
         XCTAssertTrue(element(labelled: "아직 정한 규정이 없어요", in: app).waitForExistence(timeout: 10))
         keepScreenshot(of: app, named: "k06-policy-empty")
-        app.buttons["k06.policy.start"].tap()
+        let start = app.buttons["k06.policy.start"]
+        start.tap()
+        waitUntilCovered(start)
         let editor = app.descendants(matching: .any)["k06.policy.text"].firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
         editor.tap()

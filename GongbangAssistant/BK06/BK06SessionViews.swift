@@ -252,7 +252,7 @@ struct BK06LateView: View {
             CardSection {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(card.customerName) 님이 아직 안 오셨어요").font(.headline)
-                    PhraseText(text: "\(card.classTitle) · 시작 \(card.minutesLate)분 지남")
+                    PhraseText(text: "\(card.classTitle) · 시작 \(BK06Format.elapsed(card.minutesLate)) 지남")
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }
@@ -411,7 +411,7 @@ struct BK06UnderMinView: View {
 
     private var choices: some View {
         CardSection {
-            Picker("결정", selection: $decision) {
+            Picker("진행 방식", selection: $decision) {
                 Text("그대로 진행").tag("run")
                 if !card.mergeCandidates.isEmpty { Text("다른 회차와 합치기").tag("merge") }
                 Text("이번 회차 취소").tag("cancel")

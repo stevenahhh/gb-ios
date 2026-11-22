@@ -52,7 +52,7 @@ struct BK06TodaySection: View {
         }
         ForEach(cards.late) { card in
             NavigationLink { BK06LateView(bookingID: card.bookingId) } label: {
-                row("\(card.customerName) 님이 아직 안 오셨어요", "\(card.classTitle) · 시작 \(card.minutesLate)분 지남",
+                row("\(card.customerName) 님이 아직 안 오셨어요", "\(card.classTitle) · 시작 \(BK06Format.elapsed(card.minutesLate)) 지남",
                     badge: "확인 필요")
             }
             .accessibilityIdentifier("k06.late.\(card.bookingId)")
