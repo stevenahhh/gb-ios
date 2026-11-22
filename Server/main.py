@@ -18,6 +18,7 @@ from activities import router as activity_router
 from ai import router as ai_router
 from b_k06 import router as k06_router
 from b_k14 import router as k14_router
+from b_k25 import router as grounded_router
 from bookings import router as booking_router
 from channels import router as channel_router
 from collectors.routes import router as collector_router
@@ -62,7 +63,7 @@ for router in (
     inquiry_router, today_router, booking_router, order_router, shipment_router, channel_router,
     task_router, recommendation_router, schedule_router, operations_router, workshop_router,
     detail_router, draft_router, undo_router, ai_router, activity_router, speech_router,
-    collector_router, k14_router,
+    collector_router, k14_router, grounded_router,
 ):
     app.include_router(router)
 

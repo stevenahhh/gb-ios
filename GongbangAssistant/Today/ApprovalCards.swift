@@ -242,8 +242,12 @@ struct ApprovalCard: View {
             do {
                 switch item.source {
                 case .inquiry(let inquiry):
+                    #if BUILD_B
+                    try await BK25Approval.approve(inquiry, store: store)
+                    #else
                     let draft = InquiryDraft(draft: inquiry.draft, expectedRevision: inquiry.revision)
                     try await store.decide(id: inquiry.id, decision: InquiryDecision(decision: .approve, draft: draft))
+                    #endif
                 case .draft(let kind, let id):
                     let detail = try await RoundupAPI.assistantDraft(kind: kind, id: id)
                     let draft = InquiryDraft(draft: detail.text, expectedRevision: detail.revision)

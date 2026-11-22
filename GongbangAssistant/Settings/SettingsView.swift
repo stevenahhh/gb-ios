@@ -54,6 +54,12 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.workshop")
                 #if BUILD_B
                 BK06PolicyRow()
+                NavigationLink {
+                    BK25FactCardListView()
+                } label: {
+                    Label { Text("수업 사실 카드") } icon: { MenuIcon(systemName: "list.bullet.rectangle") }
+                }
+                .accessibilityIdentifier("settings.factCards")
                 #endif
                 rows(sections["공방"] ?? [])
                 NavigationLink {

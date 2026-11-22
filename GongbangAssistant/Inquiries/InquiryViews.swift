@@ -35,6 +35,9 @@ struct InquiryDetailView: View {
     @State private var savedDraft = ""
     @State private var completionCount = 0
     @State private var isDraftFresh = false
+    #if BUILD_B
+    @State private var grounding = BK25Grounding()
+    #endif
 
     private var isEditingLocked: Bool {
         isGenerating || store.isInquiryBusy || store.requiresInquiryReload
@@ -69,6 +72,9 @@ struct InquiryDetailView: View {
         }
         .onDisappear(perform: saveUnsavedEdit)
         // This screen reads the inquiry store directly, so a failed load or save gets the shared connection line here.
+        #if BUILD_B
+        .task(id: id) { await grounding.load(id, draft: store.inquiry(id: id)?.draft ?? draft) }
+        #endif
         .safeAreaInset(edge: .top) {
             if store.inquiryLoadError != nil || store.requiresInquiryReload {
                 ConnectionNotice(retry: {}) { store.inquiryLoadError != nil }
@@ -122,6 +128,9 @@ struct InquiryDetailView: View {
                     HStack(spacing: 8) { replyActions(inquiry) }
                     VStack(spacing: 8) { replyActions(inquiry) }
                 }
+                #if BUILD_B
+                BK25LockLine(grounding: grounding)
+                #endif
                 // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
                 if inquiry.status == .approved && draft == inquiry.draft {
                     DraftShareActions(share: .inquiry, text: inquiry.draft)
@@ -131,6 +140,11 @@ struct InquiryDetailView: View {
             } footer: {
                 Text("비서가 틀릴 수 있어요. 답변 완료를 눌러도 손님께 자동으로 보내지지는 않아요. 고친 내용은 화면을 나갈 때 저장해요.")
             }
+
+            #if BUILD_B
+            BK25GroundingSection(grounding: grounding, inquiryID: id, draft: $draft, approve: complete,
+                                 showDraft: show(generated:))
+            #endif
 
             CardSection("답변 근거", footer: "공방에 등록해 둔 안내만 근거로 비서가 써요.") {
                 ForEach(inquiry.facts, id: \.self) { Text($0) }
@@ -183,6 +197,9 @@ struct InquiryDetailView: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(isEditingLocked || isDraftBlank || (inquiry.status == .approved && draft == inquiry.draft))
+        #if BUILD_B
+        .disabled(grounding.blocksApproval(draft))
+        #endif
         .accessibilityIdentifier("inquiry.complete")
     }
 
@@ -199,8 +216,12 @@ struct InquiryDetailView: View {
         isGenerating = true
         defer { isGenerating = false }
         do {
+            #if BUILD_B
+            if let written = try await grounding.generate(inquiry.id) { show(generated: written) }
+            #else
             show(generated: try await RoundupAPI.draft(customer: inquiry.customer, subject: inquiry.subject,
                                                        question: inquiry.question, facts: inquiry.facts))
+            #endif
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -247,10 +268,15 @@ struct InquiryDetailView: View {
 
     private func complete() {
         guard let editorRevision else { return }
-        let value = InquiryDecision(decision: .approve, draft: InquiryDraft(draft: draft, expectedRevision: editorRevision))
         Task {
             do {
+                #if BUILD_B
+                try await grounding.decide(id, draft: draft, expectedRevision: editorRevision)
+                await store.loadInquiries()
+                #else
+                let value = InquiryDecision(decision: .approve, draft: InquiryDraft(draft: draft, expectedRevision: editorRevision))
                 try await store.decide(id: id, decision: value)
+                #endif
                 loadEditorFromStore()
                 errorMessage = nil
                 completionCount += 1
