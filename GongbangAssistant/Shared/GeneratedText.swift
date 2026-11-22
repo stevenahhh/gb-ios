@@ -211,18 +211,13 @@ struct GeneratedText: View {
     }
 }
 
-/// Shown until assistant text arrives: the face and one line with a soft color band drifting across it.
+/// Shown until assistant text arrives: one line with a soft color band drifting across it.
 struct GeneratingIndicator: View {
     let label: String
-    var showsFace = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 8) {
-            if showsFace {
-                AssistantFace(size: .card)
-                    .accessibilityHidden(true)
-            }
             if reduceMotion {
                 Text(label)
                     .foregroundStyle(Color.secondaryText)

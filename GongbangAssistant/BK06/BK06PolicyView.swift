@@ -9,7 +9,12 @@ struct BK06PolicyRow: View {
             LabeledContent {
                 if let version = loader.value?.first?.version { Text("\(version)판") }
             } label: {
-                Label { Text("취소·환불 규정") } icon: { MenuIcon(systemName: "doc.text") }
+                // Named apart from 예약·환불 규정 (what the assistant quotes): this table is what refunds are computed from.
+                Label {
+                    Text("환불 계산표")
+                    Text("취소 문자에서 환불액을 계산해요")
+                        .foregroundStyle(Color.secondaryText)
+                } icon: { MenuIcon(systemName: "doc.text") }
             }
         }
         .accessibilityIdentifier("settings.k06Policy")
@@ -38,7 +43,7 @@ struct BK06PolicyView: View {
                 }
             }
         }
-        .navigationTitle("취소·환불 규정")
+        .navigationTitle("환불 계산표")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: app.dataVersion) { await load() }
         .navigationDestination(isPresented: $isEditing) { BK06PolicyEditor() }

@@ -143,7 +143,7 @@ struct AssistantDelegationView: View {
             }
         }
         .cardList()
-        .navigationTitle("\(AssistantIdentity.name)에게 맡기기")
+        .navigationTitle("\(AssistantIdentity.name)에게 맡길 일")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

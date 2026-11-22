@@ -11,18 +11,14 @@ extension ReplyStatus {
     }
 }
 
-/// The card head: the assistant's face and who wrote this, in clay because it is the assistant's own mark.
+/// Identifies assistant-written content in the draft card header.
 struct AssistantDraftLabel: View {
     let isReply: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            AssistantFace(size: .card)
-                .accessibilityHidden(true)
-            Text(isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.assistantAccent)
-        }
+        Text(isReply ? "\(AssistantIdentity.name)가 쓴 답변" : "\(AssistantIdentity.name)가 쓴 글")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.assistantAccent)
     }
 }
 
@@ -262,7 +258,7 @@ struct AssistantDraftCard: View {
                 Button(action: rewrite) {
                     Group {
                         if isRewriting {
-                            GeneratingIndicator(label: "쓰는 중", showsFace: false)
+                            GeneratingIndicator(label: "쓰는 중")
                         } else {
                             Text("다시 쓰기")
                         }

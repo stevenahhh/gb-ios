@@ -16,7 +16,6 @@ struct OperationsView: View {
                 list(data)
             }
             .navigationTitle("운영")
-            .navigationSubtitle(loader.value.map { "먼저 확인할 일 \($0.attentionCount)건" } ?? "")
             .appDestinations()
             .navigationDestination(for: RemainingWorkRoute.self) { _ in RemainingWorkView() }
             .sheet(isPresented: $isPickingPeriod) {
@@ -44,7 +43,7 @@ struct OperationsView: View {
                 }
             } header: {
                 HStack {
-                    SectionHeader(title: "먼저 확인해주세요")
+                    SectionHeader(title: "먼저 확인해 주세요")
                     Spacer()
                     Text("\(data.attentionCount)건")
                         .font(.subheadline.weight(.semibold))

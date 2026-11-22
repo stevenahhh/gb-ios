@@ -36,7 +36,7 @@ struct BK25GroundingSection: View {
                 VStack(alignment: .leading, spacing: 6) {
                     summary
                     if !grounding.isVerifying && !grounding.checkedKinds.isEmpty {
-                        Text(verbatim: "맞춰 본 숫자: \(grounding.checkedKinds.joined(separator: ", "))")
+                        Text(verbatim: "맞춰 본 종류: \(grounding.checkedKinds.joined(separator: ", "))")
                             .font(.subheadline)
                             .foregroundStyle(Color.secondaryText)
                             .accessibilityIdentifier("bk25.checkedKinds")
@@ -49,7 +49,7 @@ struct BK25GroundingSection: View {
                     }
                 }
             } header: {
-                Text("근거")
+                Text("숫자 확인")
             } footer: {
                 Text("가격, 예약금, 할인, 남은 자리, 날짜, 요일, 시각, 수업 길이, 정원과 주차·환불·재료의 숫자만 맞춰 봐요. 나머지 내용은 확인하지 않으니 보내기 전에 한 번 더 읽어 주세요.")
             }
@@ -126,7 +126,10 @@ struct BK25GroundingSection: View {
                     Text("이유를 남기면 이번 답장만 그대로 보내고, 다음 초안부터는 다시 장부와 맞춰 봐요.")
                 }
             case .unchecked:
-                Label("숫자 확인을 하지 못했어요. 직접 읽고 보내 주세요.", systemImage: "exclamationmark.circle")
+                // Rows below may still show numbers found in the ledger; this says the whole reply was not confirmed.
+                Label(grounding.claims.isEmpty ? "숫자 확인을 하지 못했어요. 직접 읽고 보내 주세요."
+                                               : "아래 숫자만 찾았고 전체는 확인하지 못했어요. 직접 읽고 보내 주세요.",
+                      systemImage: "exclamationmark.circle")
                     .font(.subheadline.weight(.semibold))
                     .accessibilityIdentifier("bk25.unchecked")
             case .clear:

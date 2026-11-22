@@ -12,7 +12,7 @@ struct BK06SessionListView: View {
                     NavigationLink { BK06SessionView(sessionID: item.sessionId) } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(verbatim: item.classTitle).font(.headline)
-                            PhraseText(text: "\(item.schedule) · \(item.booked)/\(item.capacity)명")
+                            PhraseText(text: "\(item.schedule) · 예약 \(item.booked)명 · 정원 \(item.capacity)명")
                                 .font(.subheadline)
                                 .foregroundStyle(Color.secondaryText)
                         }
@@ -41,9 +41,9 @@ struct BK06SessionView: View {
                     if detail.guests.isEmpty { Text("예약한 손님이 없어요").foregroundStyle(Color.secondaryText) }
                     ForEach(detail.guests) { guestRow($0) }
                 } header: {
-                    Text("\(detail.schedule) · \(detail.booked)/\(detail.capacity)명")
+                    Text("\(detail.schedule) · 예약 \(detail.booked)명 · 정원 \(detail.capacity)명")
                 } footer: {
-                    Text("손님이 오시면 행을 눌러 주세요. 길게 누르면 규정 안내를 복사할 수 있어요.")
+                    Text("손님이 오시면 행을 눌러 주세요. 오른쪽 버튼으로 규정 안내를 복사할 수 있어요.")
                 }
                 CardSection("자리를 기다리는 분") {
                     ForEach(detail.targets) { target in
@@ -92,6 +92,18 @@ struct BK06SessionView: View {
     }
 
     private func guestRow(_ guest: BK06Guest) -> some View {
+        HStack(spacing: 12) {
+            attendanceButton(guest)
+            // Visible, not only behind a long press: copying the rule notice is a common next step.
+            Button(guest.noticed ? "규정 안내 다시 복사" : "규정 안내 복사", systemImage: "doc.on.doc") { copyNotice(guest) }
+                .labelStyle(.iconOnly)
+                .frame(minWidth: 44, minHeight: 44)
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("k06.notice.\(guest.bookingId)")
+        }
+    }
+
+    private func attendanceButton(_ guest: BK06Guest) -> some View {
         Button {
             act {
                 if guest.attendedAt == nil && guest.noShowAt == nil {
@@ -113,6 +125,7 @@ struct BK06SessionView: View {
             }
             .contentShape(.rect)
         }
+        .buttonStyle(.borderless)
         .foregroundStyle(Color.primary)
         .contextMenu {
             Button(guest.noticed ? "규정 안내 다시 복사" : "규정 안내 복사", systemImage: "doc.on.doc") { copyNotice(guest) }
@@ -250,8 +263,8 @@ struct BK06LateView: View {
         List {
             CardSection {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(card.customerName) 님이 아직 안 오셨어요").font(.headline)
-                    PhraseText(text: "\(card.classTitle) · 시작 \(BK06Format.elapsed(card.minutesLate)) 지남")
+                    Text(verbatim: card.headline).font(.headline)
+                    PhraseText(text: card.detail)
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }

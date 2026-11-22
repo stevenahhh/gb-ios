@@ -68,7 +68,7 @@ struct SettingsView: View {
                 NavigationLink {
                     AssistantDelegationView()
                 } label: {
-                    Label { Text("\(AssistantIdentity.name)에게 맡기기") } icon: { MenuIcon(systemName: "hand.raised") }
+                    Label { Text("\(AssistantIdentity.name)에게 맡길 일") } icon: { MenuIcon(systemName: "hand.raised") }
                 }
                 .accessibilityIdentifier("settings.delegation")
                 NavigationLink {

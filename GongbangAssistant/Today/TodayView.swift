@@ -33,6 +33,15 @@ struct TodayView: View {
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
             .navigationSubtitle(subtitle)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Image(.brandMark)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .accessibilityLabel("공도리")
+                        .accessibilityIdentifier("today.brand")
+                }
+                .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         AssistantActivityView()

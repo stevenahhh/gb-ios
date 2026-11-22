@@ -187,7 +187,12 @@ struct BK06LateCard: Decodable, Identifiable, Hashable {
     let startsAt: String
     let minutesLate: Int
     let draft: String
+    var ended: Bool? = nil
     var id: String { bookingId }
+
+    /// While the class runs the guest is late; once it ends only the attendance record is missing.
+    var headline: String { ended == true ? "\(customerName) 님 출석 기록이 없어요" : "\(customerName) 님이 아직 안 오셨어요" }
+    var detail: String { ended == true ? "\(classTitle) · 수업이 끝났어요" : "\(classTitle) · 시작 \(BK06Format.elapsed(minutesLate)) 지남" }
 }
 
 struct BK06Reminder: Decodable {

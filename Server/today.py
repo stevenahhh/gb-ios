@@ -275,13 +275,13 @@ async def today_screen(db: Session, now: Now) -> Today:
         RecommendationRow, RecommendationRow.acknowledged_at >= now - RECENT_WINDOW,
     ))) or 0
     summary, detail = transit_text(counts)
-    new_orders = metric("newOrders", "새 주문", counts.orders_today)
+    new_orders = metric("newOrders", "오늘 새 주문", counts.orders_today)
     return Today(
         date=today, generated_at=now, attention_count=counts.attention,
         tasks=TasksSegment(
             metrics=[
                 Metric(
-                    key="bookedPeople", label="예약", value=counts.booked_people_today,
+                    key="bookedPeople", label="오늘 예약", value=counts.booked_people_today,
                     display=people(counts.booked_people_today),
                 ),
                 new_orders, metric("shipToday", "오늘 발송", counts.ship_due_today),

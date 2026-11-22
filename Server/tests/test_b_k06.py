@@ -336,6 +336,11 @@ async def test_late_card_appears_after_the_grace_and_attendance_is_reversible(
     app.dependency_overrides[current_time] = lambda: NOW.replace(hour=15, minute=15)
     late = (await client.get("/k06/cards")).json()["late"]
     assert HAYUN in [card["bookingId"] for card in late]
+    assert next(card for card in late if card["bookingId"] == HAYUN)["ended"] is False
+    app.dependency_overrides[current_time] = lambda: NOW.replace(hour=23, minute=0)
+    ended = (await client.get("/k06/cards")).json()["late"]
+    assert next(card for card in ended if card["bookingId"] == HAYUN)["ended"] is True
+    app.dependency_overrides[current_time] = lambda: NOW.replace(hour=15, minute=15)
     absent = (await client.post(f"/bookings/{HAYUN}/attendance", json={"status": "no_show"})).json()
     assert "15분 넘게 늦으면 노쇼" in absent["draft"]
     assert (await client.post(f"/bookings/{HAYUN}/attendance", json={"status": "arrived"})).status_code == 409
