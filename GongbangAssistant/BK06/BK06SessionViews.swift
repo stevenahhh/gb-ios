@@ -250,8 +250,8 @@ struct BK06LateView: View {
         List {
             CardSection {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(card.customerName) 님이 아직 안 오셨어요").font(.headline)
-                    PhraseText(text: "\(card.classTitle) · 시작 \(BK06Format.elapsed(card.minutesLate)) 지남")
+                    Text(verbatim: card.headline).font(.headline)
+                    PhraseText(text: card.detail)
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }

@@ -70,6 +70,8 @@ class LateCard(ApiModel):
     starts_at: str
     minutes_late: int
     draft: str
+    # After the class ends the card is about a missing attendance record, not a guest still on the way.
+    ended: bool = False
 
 
 class Reminder(ApiModel):
@@ -361,6 +363,7 @@ async def cards(
                 class_title=session.title, starts_at=iso(session.starts_at),
                 minutes_late=int((moment - session.starts_at).total_seconds() // 60),
                 draft=late_draft(customer.name, session),
+                ended=session.starts_at + timedelta(minutes=session.duration_minutes) <= moment,
             )
             for booking, session, customer in today if session.starts_at + grace <= moment
         ],
