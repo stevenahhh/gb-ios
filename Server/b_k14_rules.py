@@ -134,6 +134,9 @@ PRICE_GROUPS: Final = range(2, 14)
 NOT_A_BUDGET: Final = re.compile(r"(?:재료|교재|간식|식비|다과|기념품)(?!.*포함)")
 NOT_A_BUDGET_BEFORE: Final = re.compile(r"(?:재료비?|교재비?|간식비?|식비|다과비?|기념품)[은는이가]?\s*$")
 
+# Each payment wording, and whether it counts without a verb that asks the owner.
+PAY_PATTERNS: Final = ((STRONG_PAY, True), (OWNER_NAMED, True), (UPFRONT, True), (WEAK_PAY, False))
+
 KOREAN_COUNTS: Final = {
     "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10,
 }
@@ -208,7 +211,7 @@ def owner_pays_first(text: str) -> bool:
     return OWNER_PAYS.search(text) is not None or any(
         asks_owner(clause, match, by_default=by_default)
         for clause in CLAUSE.split(text)
-        for pattern, by_default in ((STRONG_PAY, True), (OWNER_NAMED, True), (UPFRONT, True), (WEAK_PAY, False))
+        for pattern, by_default in PAY_PATTERNS
         for match in pattern.finditer(clause)
     )
 
