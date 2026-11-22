@@ -103,13 +103,11 @@ struct OutreachQuoteDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: result.outreachBasis)
-                        Text(verbatim: result.onedayBasis)
+                        PhraseText(text: result.outreachBasis)
+                        PhraseText(text: result.onedayBasis)
                     }
                     .font(.subheadline)
                     .foregroundStyle(Color.secondaryText)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("outreach.basis")
                 }
                 OutreachValueRow(title: "1인 순수익", value: OutreachFormat.won(result.netPerPersonOutreach))
                 OutreachValueRow(title: "원데이 1인 순수익", value: OutreachFormat.won(result.netPerPersonOneday))
