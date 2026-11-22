@@ -71,6 +71,9 @@ struct TodayView: View {
             }
 
             ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
+            #if BUILD_B
+            BK06TodaySection()
+            #endif
 
             Section {
                 Picker("보기", selection: $segment) {
