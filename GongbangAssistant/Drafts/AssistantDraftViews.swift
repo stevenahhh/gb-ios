@@ -97,17 +97,19 @@ struct DraftCardActions {
 
 /// What the owner does by hand after approval or completion, while no channel is connected.
 struct DraftShare {
-    let copyLabel: String
+    /// Nil where only opening the channel is offered.
+    let copyLabel: String?
     let openLabel: String
     let url: URL
 
-    static let inquiry = DraftShare(copyLabel: "답변 복사하기", openLabel: "네이버 스마트스토어 열기",
+    static let inquiry = DraftShare(copyLabel: nil, openLabel: "네이버 스마트스토어 열기",
                                     url: URL(string: "https://sell.smartstore.naver.com/")!)
     static let content = DraftShare(copyLabel: "글 복사하기", openLabel: "Instagram 열기",
                                     url: URL(string: "https://www.instagram.com/")!)
 }
 
-/// After approval with no connected channel: say so, copy the text, and open the channel to send it by hand.
+/// After approval with no connected channel: say so, offer the text where it has a copy label, and open the channel
+/// to send it by hand.
 struct DraftShareActions: View {
     let share: DraftShare
     let text: String
@@ -118,17 +120,19 @@ struct DraftShareActions: View {
             Text("채널이 아직 연결되지 않아 직접 보내야 해요.")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondaryText)
-            Button {
-                UIPasteboard.general.string = text
-                app.showToast("복사했어요")
-            } label: {
-                Text(share.copyLabel)
-                    .foregroundStyle(Color(.systemBackground))
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 30)
+            if let copyLabel = share.copyLabel {
+                Button {
+                    UIPasteboard.general.string = text
+                    app.showToast("복사했어요")
+                } label: {
+                    Text(copyLabel)
+                        .foregroundStyle(Color(.systemBackground))
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("draft.copy")
             }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("draft.copy")
             Link(destination: share.url) {
                 Text(share.openLabel)
                     .font(.subheadline.weight(.semibold))
@@ -443,6 +447,7 @@ struct AssistantDraftDetailView: View {
                 },
                 reopen: { revision in
                     try await RoundupAPI.reopenAssistantDraft(kind: kind, id: id, revision: revision)
+                    ApprovalDecisions.shared.forget(ApprovalItem.id(kind, id))
                     app.dataDidChange()
                 },
                 rewrite: {

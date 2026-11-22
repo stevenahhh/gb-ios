@@ -224,6 +224,17 @@ enum RoundupAPI {
         return saved.revision
     }
 
+    private struct CarryOverBatch: Encodable { let items: [CarryOverTarget] }
+
+    /// Puts overdue work into today's list; its deadline stays as it is.
+    static func carryOver(_ items: [CarryOverTarget]) async throws {
+        _ = try await write(method: "POST", path: "today/carry-overs", body: CarryOverBatch(items: items))
+    }
+
+    static func undoCarryOver(_ items: [CarryOverTarget]) async throws {
+        _ = try await write(method: "POST", path: "today/carry-overs/undo", body: CarryOverBatch(items: items))
+    }
+
     static func createBooking(sessionID: String, customerName: String, phone: String, partySize: Int) async throws {
         struct Body: Encodable { let sessionId, customerName, phone: String; let partySize: Int }
         let _: WorkItem = try await post("bookings", Body(
@@ -356,11 +367,15 @@ enum RoundupAPI {
     }
 
     static func send<T: Decodable, Body: Encodable>(method: String, path: String, body: Body) async throws -> T {
+        try decode(try await write(method: method, path: path, body: body))
+    }
+
+    private static func write<Body: Encodable>(method: String, path: String, body: Body) async throws -> Data {
         var request = try request(path)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        return try decode(try await sendRaw(request))
+        return try await sendRaw(request)
     }
 
     private static func decode<T: Decodable>(_ data: Data, with decoder: JSONDecoder = JSONDecoder()) throws -> T {
@@ -421,13 +436,29 @@ enum RoundupAPI {
             }
         }
         switch http.statusCode {
-        case 200, 201: return data
+        case 200, 201, 204: return data
         case 401, 403: throw RoundupAPIError(message: "서버 인증을 확인하지 못했어요. 연결 설정을 확인해 주세요.")
         case 404: throw RoundupAPIError(message: "찾을 수 없는 항목이에요. 목록을 새로 불러와 주세요.", isConflict: true)
         case 409: throw RoundupAPIError(message: "다른 곳에서 먼저 바뀌었거나 지금은 할 수 없는 작업이에요. 최신 내용을 불러왔어요.", isConflict: true)
         case 413, 422: throw RoundupAPIError(message: "입력한 내용을 다시 확인해 주세요.")
         default: throw RoundupAPIError(message: "서버가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.")
         }
+    }
+}
+
+/// A task or parcel that can be put into today's list; a class cannot.
+struct CarryOverTarget: Encodable, Hashable {
+    enum Kind: String, Encodable { case task, shipment }
+    let target: Kind
+    let id: String
+
+    init?(_ item: TaskItem) {
+        switch item.target {
+        case .task: target = .task
+        case .shipment: target = .shipment
+        case .session: return nil
+        }
+        id = item.id
     }
 }
 

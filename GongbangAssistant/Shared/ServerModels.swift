@@ -264,6 +264,8 @@ struct TaskItem: Decodable, Identifiable, Hashable, HasDue {
     let revision: Int
     let due: CardDue?
     let startsAt: String?
+    /// Overdue work the owner put into today's list; absent from an older server.
+    let carriedOver: Bool?
 
     /// A class can be marked done only once it has started; other rows have no such rule.
     var canComplete: Bool {
@@ -379,29 +381,6 @@ struct CalendarRange: Decodable {
     let overdueShipments: [AgendaItem]?
 }
 
-/// Counts behind the today headline; `TodayHeadline` in RoundupCore picks the words.
-struct HeadlineFacts: Decodable, Hashable {
-    struct Session: Decodable, Hashable {
-        let title: String
-        let startsAt: String
-        let minutes: Int
-        let isDone: Bool
-    }
-
-    let overdueShipments: Int
-    let overdueTasks: Int
-    let sessions: [Session]
-    let pendingInquiries: Int
-    let depositPending: Int
-    let pendingDrafts: Int
-    let openTasksToday: Int
-    let tasksToday: Int
-    let openShipmentsToday: Int
-    let shipmentsToday: Int
-    let tomorrowClasses: Int
-    let weekClassesLeft: Int
-}
-
 struct TodayScreenData: Decodable {
     struct Tasks: Decodable {
         let metrics: [Metric]
@@ -438,7 +417,6 @@ struct TodayScreenData: Decodable {
         tasks.groups.isEmpty && channels.cards.isEmpty && channels.todos.isEmpty
             && delivery.shipToday.isEmpty && delivery.inTransit.isEmpty && suggestions.items.isEmpty
     }
-    let headline: HeadlineFacts?
 }
 
 struct AreaPage: Decodable {

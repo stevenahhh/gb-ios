@@ -120,20 +120,21 @@ struct InquiryDetailView: View {
                     .font(.subheadline.weight(.semibold))
                     .accessibilityIdentifier("inquiry.error")
                 }
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) { replyActions(inquiry) }
-                    VStack(spacing: 8) { replyActions(inquiry) }
-                }
-                BK25LockLine(grounding: grounding)
-                // Hidden while edits are unsaved, so the owner never copies text that differs from the saved reply.
+                // A completed reply offers only its undo and the store; editing the text brings the writing actions back.
                 if inquiry.status == .approved && draft == inquiry.draft {
-                    DraftShareActions(share: .inquiry, text: inquiry.draft)
-                    Button("답변 완료 되돌리기", systemImage: "arrow.uturn.backward") { undoCompletion(inquiry) }
+                    Button("되돌리기", systemImage: "arrow.uturn.backward") { undoCompletion(inquiry) }
                         .buttonStyle(.bordered)
                         .frame(maxWidth: .infinity)
                         .disabled(store.isInquiryBusy)
                         .accessibilityIdentifier("inquiry.undoCompletion")
+                    DraftShareActions(share: .inquiry, text: inquiry.draft)
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { replyActions(inquiry) }
+                        VStack(spacing: 8) { replyActions(inquiry) }
+                    }
                 }
+                BK25LockLine(grounding: grounding)
             } header: {
                 Text("답변 작성")
             } footer: {
@@ -148,7 +149,7 @@ struct InquiryDetailView: View {
             }
         }
         .cardList()
-        // Keeps 답변 복사하기, which appears at the end after completion, clear of the assistant bar.
+        // Keeps 네이버 스마트스토어 열기, which appears after completion, clear of the assistant bar.
         .contentMargins(.bottom, 96, for: .scrollContent)
         // The keyboard would otherwise cover 답변 완료, which sits between the editor and the check below it.
         .scrollDismissesKeyboard(.immediately)
@@ -193,7 +194,7 @@ struct InquiryDetailView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
-        .disabled(isEditingLocked || isDraftBlank || (inquiry.status == .approved && draft == inquiry.draft))
+        .disabled(isEditingLocked || isDraftBlank)
         .disabled(grounding.blocksApproval(draft))
         .accessibilityIdentifier("inquiry.complete")
     }
