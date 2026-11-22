@@ -127,6 +127,9 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `POST /inquiries/{id}/undo-completion` | Return a completed reply to waiting with `{expectedRevision}`; the text stays |
 | `GET /assistant/activities` | The assistant's work from the last seven days, newest first: reply drafts, post drafts, and missed pickups, each with the facts it used |
 | `POST /draft`, `POST /ask`, `POST /rewrite`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
+| `GET /settings/class-costs`, `PUT /settings/class-costs/{classId}`, `PUT /settings/outreach-defaults` | Build B (K14): cost card per class title and the workshop's outreach rates |
+| `POST /outreach/extract` | Build B (K14): `{text}` read once into fields, confidence, risk signals; never stored, contacts masked before the model call; a model failure answers 200 with `error: "extract_failed"` and rule-read fields |
+| `POST /outreach/quotes`, `GET /outreach/quotes`, `GET /outreach/quotes/{id}`, `POST /outreach/quotes/{id}/recalculate`, `/verify-org`, `/sent`, `/outcome` | Build B (K14): quote arithmetic, verdict, reminder task, and recorded answer; no `expectedRevision` |
 | `POST /tts` | `{text}` (1-2000 characters) read aloud by CLOVA Voice Premium as `audio/mpeg`; markdown is stripped first |
 
 `/ask` accepts `{question, history?}`, reads workshop facts from PostgreSQL, and returns
