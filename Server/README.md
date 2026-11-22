@@ -116,6 +116,9 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `GET /content-drafts/{id}`, `POST /content-drafts/{id}/review` | Open a draft; approve `{body}` |
 | `POST /tasks/{id}/completion` | `{done, expectedRevision}` |
 | `POST /tasks/{id}/undo` | Reopen a completed task |
+| `POST /policy/extract`, `GET`/`POST /policy/versions`, `GET /policy/versions/{version}`, `POST /policy/notices` | Build B (K06): refund rules read from owner text, saved versions, and the notice per booking |
+| `POST /cancellations/intake`, `/cancellations/quote`, `/cancellations/{bookingId}/decision`, `/cancellations/cases/{id}/draft`, `/approve`, `/undo`; `GET /cancellations/cases`; `DELETE /bookings/{id}/cancellation-cases` | K06: pasted message, fixed refund calculation, owner decision, reply draft, record removal |
+| `GET /k06/cards?at`, `POST /bookings/{id}/attendance`, `/undo-attendance`, `GET /class-sessions/under-min`, `GET /class-sessions/{id}/refill`, `/k06`, `PUT .../plan`, `POST`/`DELETE .../waitlist`, `POST .../under-min-decision` | K06: late guests, freed seats, and under-filled classes |
 | `GET /assistant-drafts/{kind}/{id}` | Editable text, facts, decision state, and reopening availability; kind is `content` or `recommendation` |
 | `PATCH /assistant-drafts/{kind}/{id}/draft` | Save nonblank pending text with `{draft, expectedRevision}` |
 | `POST /assistant-drafts/{kind}/{id}/decision` | `{decision: "approve" or "reject", draft, expectedRevision}`; content decisions update linked recommendations atomically |
