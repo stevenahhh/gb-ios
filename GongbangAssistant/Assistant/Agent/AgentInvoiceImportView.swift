@@ -44,9 +44,11 @@ private struct InvoiceFilePicking: ViewModifier {
     @State private var failure: String?
 
     func body(content: Content) -> some View {
+        // Read here: the destination is built outside this body, where a change to `replaced` would go unseen.
+        let replaced = replaced
         content
             .environment(\.pickInvoiceFile) { proposal in
-                replaced = proposal
+                self.replaced = proposal
                 choose()
             }
             .navigationDestination(item: $picked) { file in

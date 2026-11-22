@@ -57,6 +57,15 @@ class RoundupUITestCase: XCTestCase {
     }
 }
 
+extension XCTestCase {
+    /// `XCUIDevice.appearance` never reaches the app on the iOS 27.2 simulator and then hangs the runner, so the dark
+    /// tests run on a simulator that is dark before the app starts: `xcrun simctl ui <device> appearance dark`.
+    func requireDarkSimulator() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["ROUNDUP_UITEST_DARK"] == "1", "Set TEST_RUNNER_ROUNDUP_UITEST_DARK=1 on a dark simulator")
+    }
+}
+
 extension XCUIApplication {
     /// Starts on 오늘 instead of the first-launch flow.
     func skipOnboarding() {

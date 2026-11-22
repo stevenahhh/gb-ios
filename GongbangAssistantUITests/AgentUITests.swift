@@ -56,12 +56,6 @@ final class AgentUITests: RoundupUITestCase {
     }
 
     private var stubURL: URL!
-    private var usesDarkAppearance = false
-
-    override func tearDown() async throws {
-        guard usesDarkAppearance else { return }
-        await MainActor.run { XCUIDevice.shared.appearance = .light }
-    }
 
     override func setUp() async throws {
         continueAfterFailure = false
@@ -200,14 +194,24 @@ final class AgentUITests: RoundupUITestCase {
         XCTAssertTrue(named("assistant.writing", in: app).waitForNonExistence(timeout: 30), "the answer never settled")
     }
 
+    /// Pulls across most of the screen, because a swipe on one row is too short, and waits for the request it starts.
+    @MainActor
+    private func pullToRefresh(_ app: XCUIApplication, asking path: String) async throws {
+        let before = try await requests().filter { $0.method == "GET" && $0.path == path }.count
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
+        top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)), withVelocity: 500, thenHoldForDuration: 0.2)
+        try await arrival("GET", path, count: before + 1)
+    }
+
     @MainActor
     private func openSettingsRow(_ identifier: String, in app: XCUIApplication) {
         let settings = app.tabBars.buttons["설정"]
+        // A page scrolled down folds the tab bar to the current tab; scrolling up unfolds it.
+        if !settings.waitForExistence(timeout: 15) { app.swipeDown() }
         XCTAssertTrue(settings.waitForExistence(timeout: 60))
         settings.tap()
         let row = app.buttons[identifier]
-        XCTAssertTrue(row.waitForExistence(timeout: 30), "settings row \(identifier) is missing")
-        XCTAssertTrue(scrollTo(row, in: app))
+        XCTAssertTrue(scrollTo(row, in: app), "settings row \(identifier) is missing")
         row.tap()
     }
 
@@ -486,7 +490,7 @@ final class AgentUITests: RoundupUITestCase {
         row.tap()
 
         XCTAssertTrue(named("agent.proposal.\(expired.id)", in: app).waitForExistence(timeout: 20))
-        XCTAssertTrue(element(labelled: "기한이 지나 닫힌 제안이에요", in: app).exists)
+        XCTAssertTrue(element(labelled: "기한이 지난 제안이에요", in: app).exists)
         XCTAssertFalse(app.buttons["agent.proposal.approve.\(expired.id)"].exists, "an expired proposal can still be approved")
         XCTAssertFalse(app.buttons["agent.proposal.dismiss.\(expired.id)"].exists)
         let open = try await proposal(titled: "주문 1041을 확인할까요?")
@@ -507,7 +511,7 @@ final class AgentUITests: RoundupUITestCase {
         XCTAssertTrue(approve.waitForExistence(timeout: 20))
 
         try await control("down", Scenario(down: true))
-        named("agent.proposal.\(confirm.id)", in: app).swipeDown()
+        try await pullToRefresh(app, asking: "/agent/proposals")
         let notice = named("connection.notice", in: app)
         XCTAssertTrue(notice.waitForExistence(timeout: 30), "a refresh that failed says nothing")
         XCTAssertTrue(approve.exists, "the last proposals were thrown away")
@@ -572,7 +576,7 @@ final class AgentUITests: RoundupUITestCase {
         XCTAssertTrue(run.waitForExistence(timeout: 30))
 
         try await control("down", Scenario(down: true))
-        run.swipeDown()
+        try await pullToRefresh(app, asking: "/agent/runs")
         let notice = named("connection.notice", in: app)
         XCTAssertTrue(notice.waitForExistence(timeout: 30), "a refresh that failed says nothing")
         XCTAssertTrue(run.exists, "the last history was thrown away")
@@ -613,9 +617,9 @@ final class AgentUITests: RoundupUITestCase {
         off.tap()
         try await arrival("PUT", "/agent/settings", count: 2)
 
-        let cap = app.steppers["agent.settings.cap"]
-        XCTAssertTrue(scrollTo(cap, in: app))
-        cap.buttons.element(boundBy: 1).tap()
+        let more = app.steppers["agent.settings.cap"].buttons.element(boundBy: 1)
+        XCTAssertTrue(scrollTo(more, in: app))
+        more.tap()
         try await arrival("PUT", "/agent/settings", count: 3)
 
         let saved = try await state()
@@ -633,7 +637,8 @@ final class AgentUITests: RoundupUITestCase {
         XCTAssertTrue(scrollTo(reopened, in: app))
         let shown = "\(reopened.label) \(reopened.value as? String ?? "")"
         XCTAssertTrue(shown.contains("끔"), "the saved tool choice was not read back: \(shown)")
-        XCTAssertTrue(scrollTo(element(labelled: "최대 21건", in: app), in: app), "the saved daily cap was not read back")
+        XCTAssertTrue(scrollTo(app.steppers["agent.settings.cap"].buttons.element(boundBy: 1), in: app))
+        XCTAssertTrue(element(labelled: "최대 21건", in: app).exists, "the saved daily cap was not read back")
         try capture(app, "settings-read-back")
     }
 
@@ -697,7 +702,10 @@ final class AgentUITests: RoundupUITestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 20), "a card that lacks its number has no place to give it")
         XCTAssertFalse(app.buttons["agent.proposal.approve.\(invoice.id)"].exists, "a plain approve is offered without the number")
         XCTAssertTrue(element(labelled: "송장번호를 알려 주시면 등록할게요", in: app).exists)
-        XCTAssertFalse(element(labelled: "승인하시면 그때 처리해요", in: app).exists, "the card promises what a yes cannot do")
+        // Other cards on the page may say this; this one must not.
+        let card = named("agent.proposal.\(invoice.id)", in: app)
+        XCTAssertFalse(card.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "승인하시면 그때 처리해요")).firstMatch.exists,
+                       "the card promises what a yes cannot do")
         let send = app.buttons["agent.proposal.supply.\(invoice.id)"]
         XCTAssertFalse(send.isEnabled, "nothing was said yet")
         try capture(app, "proposal-needs-number")
@@ -772,7 +780,9 @@ final class AgentUITests: RoundupUITestCase {
         let blocked = named("invoice.import.leftOut.5", in: app)
         XCTAssertTrue(scrollTo(blocked, in: app), "the row that cannot be registered is not listed")
         XCTAssertTrue(blocked.label.contains("이미 발송한 주문이에요"), "a blocked row gives no reason: \(blocked.label)")
-        XCTAssertTrue(named("invoice.import.leftOut.6", in: app).label.contains("어느 주문인지 하나로 정하지 못했어요"))
+        let unclear = named("invoice.import.leftOut.6", in: app)
+        XCTAssertTrue(scrollTo(unclear, in: app), "the row whose order is unclear is not listed")
+        XCTAssertTrue(unclear.label.contains("어느 주문인지 하나로 정하지 못했어요"))
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "invoice.import.approve")).count, 1,
                        "more than the one approval for the file is offered")
         try capture(app, "invoice-file-read")
@@ -780,7 +790,9 @@ final class AgentUITests: RoundupUITestCase {
         // A switch row answers a tap on its own inner switch; the row's middle is its label.
         let inner = accept.switches.firstMatch
         (inner.exists ? inner : accept).tap()
-        XCTAssertTrue(scrollTo(approve, in: app))
+        // The approval sits above the rows just read, and scrollTo only moves down.
+        for _ in 0..<6 where !approve.isHittable { app.swipeDown() }
+        XCTAssertTrue(approve.isHittable)
         expect(approve, "label CONTAINS %@", argument: "3건", "the switched row did not join the one approval")
         try capture(app, "invoice-file-warning-accepted")
         approve.tap()
@@ -852,8 +864,7 @@ final class AgentUITests: RoundupUITestCase {
 
     @MainActor
     func testDarkAppearanceShowsTheSameStates() async throws {
-        usesDarkAppearance = true
-        XCUIDevice.shared.appearance = .dark
+        try requireDarkSimulator()
         let app = try open()
         let header = named("agent.proposals.header", in: app)
         XCTAssertTrue(header.waitForExistence(timeout: 60))

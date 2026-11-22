@@ -349,6 +349,8 @@ struct AgentProposalListView: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
+        // Read here: the content runs in another view's body, where a change to `shown` would redraw nothing.
+        let shown = shown
         LoadableContent(loader: loader, retry: load) { _ in
             if !shown.isEmpty {
                 let primary = shown.first { center.standing(of: $0, at: now) == .open }?.id
@@ -377,12 +379,14 @@ struct AgentProposalListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .invoiceFilePicking(onPage: onPage)
         .task(id: app.dataVersion) { await load() }
-        .onChange(of: center.waiting, initial: true) { _, listed in
-            let new = listed.filter { proposal in !shown.contains { $0.id == proposal.id } }
-            shown = shown.isEmpty
-                ? new.filter { $0.id == first } + new.filter { $0.id != first }
-                : shown + new
-        }
+        .onChange(of: center.waiting, initial: true) { _, listed in include(listed) }
+    }
+
+    private func include(_ listed: [AgentProposal]) {
+        let new = listed.filter { proposal in !shown.contains { $0.id == proposal.id } }
+        shown = shown.isEmpty
+            ? new.filter { $0.id == first } + new.filter { $0.id != first }
+            : shown + new
     }
 
     private func load() async {

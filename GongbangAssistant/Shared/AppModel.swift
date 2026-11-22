@@ -178,6 +178,8 @@ struct ReconnectingView: View {
                 .controlSize(.large)
                 .accessibilityIdentifier("screen.retry")
         }
+        // Without its own container, this identifier would replace the retry button's.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.reconnecting")
         .autoReconnect(screenFailures: screenFailures, retry: retry)
     }

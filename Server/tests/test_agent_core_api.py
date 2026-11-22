@@ -175,7 +175,7 @@ async def test_a_spoken_request_never_moves_a_parcel_by_itself(
     added = await ask(
         client,
         chat_of(wants("add_event", title="재고 확인", day="2026-11-20"), says("네")),
-        "재고 확인 일정 넣어줘",
+        "금요일에 재고 확인 일정 넣어줘",
         source="voice",
     )
     assert added["steps"][0]["decision"] == "auto"

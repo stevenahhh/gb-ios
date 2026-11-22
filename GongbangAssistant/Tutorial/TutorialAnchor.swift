@@ -24,7 +24,8 @@ nonisolated struct TutorialAnchorKey: PreferenceKey {
 }
 
 extension View {
-    /// Marks the element a tutorial stop points at. On a section it marks every row, and the cut-out covers them all.
+    /// Marks the element a tutorial stop points at. Mark rows, never a section: a section would become one row.
+    /// Several rows may share an id, and the cut-out covers them all.
     func tutorialAnchor(_ id: TutorialAnchorID) -> some View {
         modifier(TutorialAnchorModifier(id: id))
     }

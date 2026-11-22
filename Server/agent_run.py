@@ -75,6 +75,11 @@ QUEUED_FOR: Final = timedelta(minutes=10)
 SAY_AGAIN: Final = "시간이 지났거나 비서를 껐다 켜셔서 처리하지 않았어요. 다시 말씀해 주세요."
 UNFINISHED_NOTE: Final = "여기까지만 했고 나머지는 하지 못했어요. 이어서 말씀해 주세요."
 PROPOSALS_NOTE: Final = "확인할 제안이 {count}건 있어요. 제안 목록에서 확인해 주세요."
+NOT_DONE_NOTE: Final = "아직 처리하지 않았어요."
+# An order or booking the model says it took or checked; nothing else in a run without steps can be meant.
+TAKEN: Final = re.compile(
+    r"(?:주문|예약|취소|입금)(?:을|를|은)?\s*(?:확인|접수|확정)?(?:을|를|은)?\s*(?:받았|했어|했습)",
+)
 STOPPED_NOTE: Final = "비서를 꺼 두셔서 여기까지만 했어요."
 REPEAT_NOTE: Final = "이번 요청에서 같은 일을 이미 했어요. 다시 하지 않았어요."
 HANGUL: Final = re.compile(r"[가-힣]")
@@ -330,10 +335,12 @@ def summary_line(item: Performed) -> str:
 
 
 def without_claims(text: str) -> str:
-    """Drop sentences that claim something happened when nothing did."""
+    """Drop sentences that claim something happened when nothing did, and say so before what is left."""
     parts = SENTENCE_BREAK.split(text)
-    kept = [part for part in parts[::2] if not claims_done(part)]
-    return " ".join(part.strip() for part in kept if part.strip())
+    kept = [part for part in parts[::2] if not claims_done(part) and TAKEN.search(part) is None]
+    said = [part.strip() for part in kept if part.strip()]
+    claimed = len(kept) < len(parts[::2])
+    return " ".join([NOT_DONE_NOTE, *said] if claimed and said else said)
 
 
 def readable(text: str) -> str:

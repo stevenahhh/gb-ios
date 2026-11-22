@@ -105,7 +105,7 @@ def order_named(
     named = [
         (score, Claim(label, value if score >= BY_FULL_NAME else reference, "text"))
         for label, value in (("손님", customer), ("상품", product))
-        if (score := name_confidence(reference, value)) is not None
+        if (score := name_confidence(reference, value, beside=(customer, product))) is not None
     ]
     return max(named, key=lambda found: found[0], default=None)
 

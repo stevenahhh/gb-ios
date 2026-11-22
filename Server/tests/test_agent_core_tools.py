@@ -63,6 +63,10 @@ def test_the_registry_covers_every_tool_and_tier() -> None:
         assert isinstance(parameters, dict)
         assert parameters["type"] == "object"
         assert "$defs" not in str(parameters)
+        properties, required = parameters["properties"], parameters["required"]
+        assert isinstance(properties, dict)
+        assert isinstance(required, list)
+        assert set(required) <= set(properties), function["name"]
 
 
 async def test_an_order_is_confirmed_and_put_back(database: AsyncEngine, client: AsyncClient) -> None:
@@ -327,7 +331,7 @@ async def test_the_owners_tasks_and_drafts_move_and_come_back(
 async def test_an_entry_moves_and_comes_back(database: AsyncEngine, client: AsyncClient) -> None:
     added = await done(
         client,
-        "재고 확인 일정 넣어줘",
+        "금요일 3시에 재고 확인 일정 넣어줘",
         wants("add_event", title="재고 확인", day="2026-11-20", time="15:00"),
     )
     moved = await done(

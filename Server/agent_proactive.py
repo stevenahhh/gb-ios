@@ -216,11 +216,11 @@ async def under_min_classes(db: AsyncSession, now: datetime) -> list[Finding]:
     return [
         class_finding(
             card,
-            "재료 주문 마감은 "
-            f"{relative_moment(local(datetime.fromisoformat(card.order_deadline)), today)}이에요.",
+            f"재료 주문 마감은 {due}이에요.",
             now,
         )
         for card in await under_min_cards(db, now)
+        for due in (relative_moment(local(datetime.fromisoformat(card.order_deadline)), today),)
     ]
 
 
@@ -293,6 +293,7 @@ async def waiting_quotes(db: AsyncSession, now: datetime) -> list[Finding]:
         except ValueError as error:
             LOGGER.warning("agent_quote_unreadable", extra={"error_type": type(error).__name__})
             continue
+        days = (now - row.updated_at).days
         findings.append(Finding(
             kind="quote_waiting", day=today,
             target=TargetRef("quote", row.id, view.title, row.revision),
@@ -300,8 +301,7 @@ async def waiting_quotes(db: AsyncSession, now: datetime) -> list[Finding]:
             reason=(
                 "견적을 보낸 뒤 다시 연락하기로 한 때가 지났는데 기관의 답을 아직 기록하지 않았어요."
                 if row.follow_up_at is not None
-                else f"견적을 보낸 지 {(now - row.updated_at).days}일이 넘었는데 "
-                "기관의 답을 아직 기록하지 않았어요."
+                else f"견적을 보낸 지 {days}일이 넘었는데 기관의 답을 아직 기록하지 않았어요."
             ),
             preview=(("내용", view.detail), ("견적", won(view.total_krw))),
             args={"quote": view.title},

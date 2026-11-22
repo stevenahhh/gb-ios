@@ -82,7 +82,8 @@ struct RootTabView: View {
         }
         // Over the assistant bar's own slot, so the notice never hides the row that just changed.
         // The overlay spans the window, so it takes touches only while a toast is on screen.
-        .overlay { ToastHost().allowsHitTesting(app.toast != nil) }
+        // While the first-launch cover is up, it draws the toast itself.
+        .overlay { if !onboarding.isPresented { ToastHost().allowsHitTesting(app.toast != nil) } }
         // Server-phrased dates (오늘, 내일) are rebuilt by reloading once the day turns over.
         // Inquiries load on every tab, so their recovery is the app's "back online" moment.
         .onChange(of: store.inquiryLoadError == nil) { wasOK, isOK in

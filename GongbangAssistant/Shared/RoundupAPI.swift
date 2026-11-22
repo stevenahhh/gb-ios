@@ -484,10 +484,10 @@ enum RoundupAPI {
         return try decode(try await sendRaw(request, timeout: timeout))
     }
 
-    /// The agent routes word each refusal for the owner, so that sentence is shown as it is.
+    /// The agent and connection routes word each refusal for the owner, so that sentence is shown as it is.
     private static func ownerSentence(in data: Data, for request: URLRequest) -> String? {
         struct Refusal: Decodable { let detail: String }
-        guard request.url?.pathComponents.contains("agent") == true else { return nil }
+        guard let path = request.url?.pathComponents, path.contains("agent") || path.contains("connections") else { return nil }
         guard let detail = (try? JSONDecoder().decode(Refusal.self, from: data))?.detail else { return nil }
         // The server cannot know where this app keeps the switch.
         return detail == "비서가 꺼져 있어요."

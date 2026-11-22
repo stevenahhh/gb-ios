@@ -81,12 +81,11 @@ struct TodayView: View {
                 MetricStrip(metrics: metrics(today))
             }
 
-            BK06TodaySection().tutorialAnchor(.cancellations)
+            BK06TodaySection()
             AgentProposalSection()
             BK25JudgmentSection()
 
             ApprovalSection(items: ApprovalItem.collect(inquiries: store.inquiries, today: today))
-                .tutorialAnchor(.approvals)
 
             Section {
                 Picker("보기", selection: $segment) {

@@ -22,6 +22,7 @@ struct BK06TodaySection: View {
                 Label { Text("취소 메시지 붙여넣기") } icon: { MenuIcon(systemName: "doc.on.clipboard") }
             }
             .accessibilityIdentifier("k06.paste")
+            .tutorialAnchor(.cancellations)
             .task(id: app.dataVersion) { await load() }
             .sheet(item: opened) { item in
                 NavigationStack { BK06LateView(bookingID: item.id) }

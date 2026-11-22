@@ -4,7 +4,6 @@ import XCTest
 class AgentFlowCase: RoundupUITestCase {
     var server: URL!
     var apiKey = ""
-    private var usesDarkAppearance = false
 
     static let largestText = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
 
@@ -20,11 +19,7 @@ class AgentFlowCase: RoundupUITestCase {
     }
 
     override func tearDown() async throws {
-        let wasDark = usesDarkAppearance
-        await MainActor.run {
-            XCUIApplication().terminate()
-            if wasDark { XCUIDevice.shared.appearance = .light }
-        }
+        await MainActor.run { XCUIApplication().terminate() }
     }
 
     // MARK: The server's test controls
@@ -48,10 +43,7 @@ class AgentFlowCase: RoundupUITestCase {
 
     @MainActor
     func open(arguments: [String] = [], dark: Bool = false) throws -> XCUIApplication {
-        if dark {
-            usesDarkAppearance = true
-            XCUIDevice.shared.appearance = .dark
-        }
+        if dark { try requireDarkSimulator() }
         let app = XCUIApplication()
         app.launchEnvironment["ROUNDUP_API_URL"] = server.absoluteString
         app.launchEnvironment["ROUNDUP_API_KEY"] = apiKey
@@ -517,7 +509,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         XCTAssertTrue(approve.waitForExistence(timeout: 10), "the proposal was not open to begin with")
         XCTAssertTrue(approve.waitForNonExistence(timeout: 110), "an expired proposal can still be approved")
         XCTAssertFalse(app.buttons["agent.proposal.dismiss.\(id)"].exists)
-        XCTAssertTrue(element(labelled: "기한이 지나 닫힌 제안이에요", in: app).exists)
+        XCTAssertTrue(element(labelled: "기한이 지난 제안이에요", in: app).exists)
         let after = try await state()
         XCTAssertEqual(after.orders["1042"], "packing")
         try capture(app, "proposal-expired-on-screen")
@@ -668,7 +660,7 @@ final class AgentFlowsUITests: AgentFlowCase {
         if arguments.isEmpty { try checkAppearance(of: app, dark: dark) }
         let expired = try await proposal(titled: "주문 1038을 배송 완료로 바꿀까요?")
         openProposal(expired.id, in: app)
-        XCTAssertTrue(scrollTo(element(labelled: "기한이 지나 닫힌 제안이에요", in: app), in: app))
+        XCTAssertTrue(scrollTo(element(labelled: "기한이 지난 제안이에요", in: app), in: app))
         XCTAssertFalse(app.buttons["agent.proposal.approve.\(expired.id)"].exists)
         try capture(app, "\(prefix)-expired")
         app.navigationBars.buttons.element(boundBy: 0).tap()

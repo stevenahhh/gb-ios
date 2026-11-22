@@ -112,7 +112,7 @@ async def locate_deposit(db: AsyncSession, args: DepositArgs, env: ToolEnv) -> L
     deposits: dict[str, int] = {}
     for booking, session, customer, _ in records:
         for label, value in (("손님", customer.name), ("수업", session.title)):
-            score = name_confidence(args.booking, value)
+            score = name_confidence(args.booking, value, beside=(customer.name, session.title))
             if score is not None:
                 claim = Claim(label, value if score >= BY_FULL_NAME else args.booking, "text")
                 matches.append(

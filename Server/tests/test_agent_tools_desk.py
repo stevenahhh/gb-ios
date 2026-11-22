@@ -482,3 +482,18 @@ async def test_one_of_several_rows_needs_its_name(
     before = await snapshot(database)
     assert [step["decision"] for step in (await call(client, case, alone.asked))["steps"]] == ["proposed"]
     assert await snapshot(database) == before
+
+
+@pytest.mark.parametrize(("case", "wrong"), [
+    pytest.param(ADD, {"day": "2026-11-23"}, id="add_event-day"),
+    pytest.param(ADD, {"time": "16:00"}, id="add_event-time"),
+    pytest.param(MOVE, {"day": "2026-11-23"}, id="move_event-day"),
+    pytest.param(MOVE, {"time": "11:00"}, id="move_event-time"),
+])
+async def test_a_day_or_time_the_owner_did_not_say_becomes_a_proposal(
+    database: AsyncEngine, client: AsyncClient, case: Case, wrong: Mapping[str, JsonValue],
+) -> None:
+    before = await snapshot(database, DESK_TABLES)
+    body = await ask(client, chat_of(wants(case.tool, **{**case.args, **wrong}), says("네")), case.turn)
+    assert [step["decision"] for step in body["steps"]] == ["proposed"]
+    assert await snapshot(database, DESK_TABLES) == before

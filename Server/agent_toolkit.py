@@ -1,7 +1,7 @@
 """Build a tool from its argument model, how it finds its target, its evidence rule, and what it does."""
 
 import re
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time
 from typing import ClassVar, Final
@@ -36,6 +36,8 @@ from display import SEOUL, masked
 from models import Entity, ShipmentRow
 
 MIN_PARTIAL: Final = 2
+# Words that say what kind of thing is meant, or that only address a person, name no row.
+KIND_WORDS: Final = frozenset({"님", "씨", "손님", "문의", "예약", "예약금", "주문", "일정"})
 PARCEL: Final = "parcel"
 WORD: Final = re.compile(r"[0-9A-Za-z가-힣]+")
 OBJECT: Final = TypeAdapter(dict[str, JsonValue])
@@ -125,7 +127,15 @@ def inlined(node: JsonValue, definitions: Mapping[str, JsonValue]) -> JsonValue:
             **{key: part for key, part in node.items() if key != "$ref"},
         }
         return inlined(merged, definitions)
-    return {key: inlined(part, definitions) for key, part in node.items() if key not in {"title", "$defs"}}
+    return {
+        key: (
+            {name: inlined(value, definitions) for name, value in part.items()}
+            if key == "properties" and isinstance(part, dict)  # an argument may itself be named title
+            else inlined(part, definitions)
+        )
+        for key, part in node.items()
+        if key not in {"title", "$defs"}
+    }
 
 
 def _definition(definitions: Mapping[str, JsonValue], reference: str) -> dict[str, JsonValue]:
@@ -218,11 +228,12 @@ def refusal_text(error: HTTPException) -> str:
     return KNOWN_REFUSALS.get(str(error.detail), REFUSALS.get(error.status_code, "처리하지 못했어요."))
 
 
-def name_confidence(reference: str, *names: str | None) -> float | None:
+def name_confidence(reference: str, *names: str | None, beside: Sequence[str] = ()) -> float | None:
     """Score how well a reference names one of these values; nothing when it does not.
 
     The reference is tried as written before a trailing particle is dropped, because many names end in
-    a syllable that looks like one.
+    a syllable that looks like one. Several words name a row when it holds every one of them; `beside` is
+    what else the row is called, so a word may name the class while another names the customer.
     """
     wanted = [
         found for found in dict.fromkeys((compact(reference), compact(without_particle(reference)))) if found
@@ -236,7 +247,28 @@ def name_confidence(reference: str, *names: str | None) -> float | None:
             scores.append(BY_FULL_NAME)
         elif any(len(found) >= MIN_PARTIAL and found in whole for found in wanted):
             scores.append(BY_PART_OF_NAME)
-    return max(scores, default=None)
+    return max(scores, default=None) or worded_confidence(reference, names, beside)
+
+
+def holds(word: str, name: str) -> bool:
+    """Tell whether a word is a name, its masked form, or a part of it."""
+    whole = compact(name)
+    return word in {whole, compact(masked(name))} or (len(word) >= MIN_PARTIAL and word in whole)
+
+
+def worded_confidence(
+    reference: str, names: Sequence[str | None], beside: Sequence[str],
+) -> float | None:
+    """Score a reference of several words; a word the row does not hold means another row."""
+    own = [name for name in names if name]
+    words = [compact(without_particle(word)) for word in reference.split()]
+    held = [word for word in words if any(holds(word, name) for name in (*own, *beside))]
+    missed = [word for word in words if word and word not in held]
+    if len(words) < MIN_PARTIAL or not held or any(word not in KIND_WORDS for word in missed):
+        return None
+    if any(word in {compact(name), compact(masked(name))} for word in held for name in own):
+        return BY_FULL_NAME
+    return BY_PART_OF_NAME if any(holds(word, name) for word in held for name in own) else None
 
 
 def order_number_of(reference: str) -> int | None:

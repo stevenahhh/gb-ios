@@ -62,7 +62,7 @@ async def locate_cancel(db: AsyncSession, args: CancelArgs, env: ToolEnv) -> Loc
     matches: list[Match] = []
     for booking, session, customer in await open_bookings(db, env.now):
         for label, value in (("손님", customer.name), ("수업", session.title)):
-            score = name_confidence(args.booking, value)
+            score = name_confidence(args.booking, value, beside=(customer.name, session.title))
             if score is None:
                 continue
             matches.append(

@@ -5,8 +5,7 @@ It extends agent-stub.py beside it: a longer carrier export, requests that fail 
 that end early. Its invoice rows use the problem codes and sentences of Server/agent_invoice_types.py.
 
 Files are approved once: POST /agent/invoices/{proposalId}/approve?filename=<name>&acceptFormat=<lines>, with the
-same bytes, all rows or none, answered {registered, proposal}. With {"serverShapes": true} at reset the run list
-carries no steps and no proposals, as Server/agent_run.recent_runs sends it.
+same bytes, all rows or none, answered {registered, proposal}.
 
 Run: python3 agent-stub-invoice.py --port 18653
 Control, besides agent-stub.py's: POST /__stub/fail, /__stub/mend, /__stub/ship and
@@ -59,7 +58,6 @@ class InvoiceWorkshop(base.Workshop):
     def reset(self, options):
         super().reset(options)
         self.faults = []
-        self.server_shapes = options.get("serverShapes") is True
         self.rows = {"none": (), "blocked": ROWS[7:], "warned": ROWS[3:5]}.get(options.get("rows"), ROWS)
         self.file_proposal = None
         self.shown = []
@@ -180,10 +178,7 @@ class InvoiceHandler(base.Handler):
                 raise Refused(404, "Not Found")
             return workshop.approve_file(parts[2], raw, query.get("filename", ""),
                                          self.headers.get("Content-Type", ""), query)
-        answer = super().route(method, path, query, raw)
-        if workshop.server_shapes and (method, path) == ("GET", "/agent/runs"):
-            return {"items": [{**run, "steps": [], "proposals": []} for run in answer["items"]]}
-        return answer
+        return super().route(method, path, query, raw)
 
 
 def main():

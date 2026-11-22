@@ -176,9 +176,14 @@ struct AgentAutonomyView: View {
             CardSection {
                 ForEach(AgentToolCatalog.neverDelegated, id: \.self) { title in
                     LabeledContent {
-                        Label("맡길 수 없음", systemImage: "lock.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.secondaryText)
+                        // A Label here stretches the row to several times its text.
+                        HStack(spacing: 6) {
+                            Image(systemName: "lock.fill")
+                                .accessibilityHidden(true)
+                            Text("맡길 수 없음")
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondaryText)
                     } label: {
                         Text(title)
                     }

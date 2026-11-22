@@ -93,13 +93,19 @@ Ranked jobs:
 - Under an answer, `AgentRunDetail` shows the run's status, its steps, then its proposal cards. Lookups share one 확인한 것 line. Proposals that aren't in the conversation on screen share one banner at the top, 승인을 기다리는 제안 N건.
 - A run states: 처리 중이에요, or 처리 중 · N건 끝냈어요 once something is done, with 화면을 닫아도 계속 처리해요 under it; stopped; failed, which says whether anything changed. A question over 1,000 characters can't be sent, and the line under the field says so.
 
+### 처음 안내 (onboarding)
+- Primary action: one prominent button per step, at the bottom.
+- Priorities: 1) the step's one question, 2) its rows, 3) the ways out (뒤로, 나중에 하기, 건너뛰기) in the bar with the progress.
+- States: first launch; resumed on the page the owner left; replayed from 설정, which never comes back by itself at launch.
+- Left out on purpose: logins, passwords, system permission prompts, payment. A saved value says 저장됨, never 연결됨; a plan says 아직 결제되지 않아요.
+- Layout: a full-screen cover over the tabs. The cover draws the toast itself while it is up. Coach marks run over the real screens afterwards; mark rows with `tutorialAnchor`, never a section, which would become one row.
+
 ### 비서 제안 (proposal cards)
 - Primary action: 승인하기 on the first open proposal. Only that card is prominent on a screen; in live voice none is.
 - Priorities: 1) the state badge and the deadline, 2) the title and why it was raised, 3) the values it would write and 필요한 것, 4) 승인하기 and 하지 않기.
 - Left out on purpose: approving several proposals at once (invoice files are the one group approval), editing values in the card.
 - States: 승인 대기 says nothing has changed yet; 승인함 shows the step that ran, with undo when the server offers it; 하지 않기로 함; 만료; 닫힘 for one decided elsewhere. A decided card stays in place. The list also has an empty state (기다리는 제안이 없어요) and an error with 다시 시도.
 - Layout: one card per `CardSection`. At accessibility sizes the header, values, and buttons stack. Anti-patterns: a card that looks finished before a yes, a deadline in words the rest of the app doesn't use.
-- TODO: the app looks for an `auto` step after an approval, but the server leaves it `proposed`, so 승인함 has no undo against the real server.
 
 ### 비서 단계 (steps and undo)
 - Primary action: 되돌리기, a bordered circle beside a step the server can still take back; full width at accessibility sizes.
@@ -119,7 +125,6 @@ Ranked jobs:
 - Priorities: 1) the filter (전체, 채팅, 음성, 먼저 챙김), 2) entries by day, newest first, 3) each run's question, source, answer, and steps; drafts and notices with their facts.
 - States: loading, error with retry, empty overall, empty for one filter with 전체 보기; on a run, 처리 중, stopped, and failed.
 - Left out on purpose: runs that found nothing and said nothing.
-- TODO: `GET /agent/runs` sends no steps, so steps and their undo don't appear here against the real server.
 
 ### 비서가 기억하는 것
 - Primary action: forget one memory, after a confirmation.
@@ -133,7 +138,6 @@ Ranked jobs:
 - States: loading; error with retry; approved rows; a format warning whose 이 건만 등록 승인 stays disabled until its switch is on; an alert for a file that is too large, can't be opened, or isn't CSV or XLSX.
 - Left out on purpose: names, phone numbers, and addresses from the file, and any copy of the file on the device.
 - Layout: List pushed inside the assistant sheet. Anti-patterns: approving a warned row with the group, a blocked row with a button.
-- TODO: the approval call doesn't match the server's route or answer yet, so 등록 결과 is only reachable against the test stub.
 
 ### 실시간 음성 (live voice)
 - Primary action: talk; the assistant answers aloud with subtitles.

@@ -6,7 +6,10 @@ from typing import Final
 import pytest
 
 from agent_mask import Masker, unmasked
+from agent_run import without_claims
 from agent_text import clock_times, dates_named, is_negated, is_question, is_unfinished, mentions, same_clock
+from agent_toolkit import name_confidence
+from agent_types import BY_FULL_NAME, BY_PART_OF_NAME
 
 TODAY: Final = date(2026, 11, 18)
 TRACKING: Final = "102345678901"
@@ -155,3 +158,38 @@ def test_step_arguments_are_stored_masked() -> None:
         "party": 2,
         "nested": {"name": "홍*동"},
     }
+
+
+@pytest.mark.parametrize(
+    ("reference", "name", "beside", "expected"),
+    [
+        ("점토 주문", "도자기용 점토 50kg 주문", (), BY_PART_OF_NAME),
+        ("플리마켓 조건 확인", "플리마켓 참가 조건 확인", (), BY_PART_OF_NAME),
+        ("김*연 님 머그컵 2종 세트", "김서연", ("머그컵 2종 세트",), BY_FULL_NAME),
+        ("김*연 님 머그컵 2종 세트", "머그컵 2종 세트", ("김서연",), BY_PART_OF_NAME),
+        ("최*우 님 물레 체험", "최민우", ("주말 도자기 클래스",), None),
+        ("달나라 점토", "도자기용 점토 50kg 주문", (), None),
+        ("예약 문의", "이도윤", ("둘이 참여 가능 여부",), None),
+    ],
+)
+def test_a_reference_of_several_words_names_a_row_only_when_the_row_holds_them_all(
+    reference: str, name: str, beside: tuple[str, ...], expected: float | None,
+) -> None:
+    assert name_confidence(reference, name, beside=beside) == expected
+
+
+@pytest.mark.parametrize(
+    ("words", "left"),
+    [
+        ("알겠어요. 정*우 님 미니 화병 주문을 받았어요.", "아직 처리하지 않았어요. 알겠어요."),
+        ("주문 확인은 완료했는데, 점토 주문은 목록에 없어요.", ""),
+        ("네, 토요일 오후 1시로 단체 수업 준비 일정을 잡았어요.", ""),
+        ("네, #1043번 주문 확인했어요. 28,000원이에요.", "아직 처리하지 않았어요. 28,000원이에요."),
+    ],
+)
+def test_an_answer_without_an_action_never_says_one_happened(words: str, left: str) -> None:
+    assert without_claims(words) == left
+
+
+def test_an_answer_that_claims_nothing_stays_as_written() -> None:
+    assert without_claims("오늘 포장할 주문은 1건이에요.") == "오늘 포장할 주문은 1건이에요."

@@ -76,7 +76,7 @@ struct ApprovalSection: View {
     var body: some View {
         if !shown.isEmpty {
             CardSection {
-                ForEach(shown.prefix(3)) { card($0) }
+                ForEach(shown.prefix(3)) { card($0).tutorialAnchor(.approvals) }
                 if shown.count > 3 {
                     NavigationLink("모두 보기") { ApprovalListView(items: items) }
                         .accessibilityIdentifier("approvals.all")

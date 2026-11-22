@@ -84,6 +84,12 @@ def owner_claims(asks: str, named: Claim, *, only: bool) -> tuple[Claim, ...]:
     return (asked,) if only else (asked, named)
 
 
+def moment_claims(day: str | None, clock: str | None) -> tuple[Claim, ...]:
+    """Require the owner's own day and time; the model may count a weekday wrong."""
+    said_day = (Claim("날짜", day, "date"),) if day else ()
+    return (*said_day, Claim("시각", clock, "time")) if clock else said_day
+
+
 class EventArgs(ToolArgs):
     """A new calendar entry."""
 
@@ -99,7 +105,10 @@ async def locate_new_event(db: AsyncSession, args: EventArgs, env: ToolEnv) -> L
     moment = moment_of(args.day, args.time)
     return Located(
         Resolution((TargetRef("event", NEW, f"{args.title} · {when_text(moment)}"),), BY_IDENTIFIER),
-        claims=owner_claims(ASKS_ADD, named_in("일정", args.title), only=False),
+        claims=(
+            *owner_claims(ASKS_ADD, named_in("일정", args.title), only=False),
+            *moment_claims(args.day, args.time),
+        ),
         preview=(("일정", args.title), ("때", when_text(moment)), ("메모", args.detail)),
     )
 
@@ -179,7 +188,10 @@ async def locate_event(db: AsyncSession, args: EventMoveArgs, env: ToolEnv) -> L
         )
     return Located(
         Resolution(candidates, confidence, "옮길 일정을 찾지 못했어요."),
-        claims=owner_claims(ASKS_MOVE, named_in("일정", args.event), only=len(rows) == 1),
+        claims=(
+            *owner_claims(ASKS_MOVE, named_in("일정", args.event), only=len(rows) == 1),
+            *moment_claims(args.day, args.time),
+        ),
         preview=preview,
     )
 
