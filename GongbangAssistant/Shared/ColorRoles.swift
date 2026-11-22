@@ -9,7 +9,7 @@ extension Color {
     static let secondaryText = dynamic(light: 0x636366, dark: 0xAEAEB2)
     /// The unfilled part of a progress ring.
     static let ringTrack = dynamic(light: 0xE5E5EA, dark: 0x3A3A3C)
-    /// Assistant only: its face, draft marks, and the composer icon.
+    /// Assistant only: the label on what it wrote and the live voice orb. Its face is the brand mark.
     static let assistantAccent = dynamic(light: 0xA84A2A, dark: 0xE08A66)
 
     /// Assistant text while it is being written: a dusty amber on the newest glyphs, then a soft lavender on the
