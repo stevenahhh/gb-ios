@@ -48,6 +48,7 @@ class Inputs:
     assistants: int = 0
     travel_minutes: int | None = None
     distance_km: int | None = None
+    lesson_minutes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +68,21 @@ class Scenario:
     rates: Rates
     seats: SeatHistory
     lost_to_conflicts_krw: int = 0
+
+    @property
+    def lesson_minutes(self) -> int:
+        """Length of the outreach lesson: the inquiry's own time range, else the registered class."""
+        return self.inputs.lesson_minutes or self.card.class_minutes
+
+    @property
+    def setup_minutes(self) -> int:
+        """Preparation and cleanup from the cost card, counted on both sides."""
+        return self.card.prep_minutes + self.card.cleanup_minutes
+
+    @property
+    def travel_minutes(self) -> int:
+        """Round-trip travel; an empty value counts as zero and is flagged on screen."""
+        return 2 * (self.inputs.travel_minutes or 0)
 
 
 class Line(ApiModel):
@@ -107,6 +123,8 @@ class Calculation(ApiModel):
     max_headcount: int | None
     needed_total_krw: int | None
     tier_prices: list[TierPrice]
+    outreach_basis: str
+    oneday_basis: str
 
 
 def ceil_div(numerator: int, denominator: int) -> int:
@@ -149,7 +167,7 @@ def parts_for(scenario: Scenario) -> tuple[Parts, str]:
     hourly = rates.instructor_hourly_krw or 0
     travel, travel_formula = travel_cost(rates, inputs.distance_km)
     parts = Parts(
-        instructor=ceil_div(hourly * card.class_minutes, HOUR),
+        instructor=ceil_div(hourly * scenario.lesson_minutes, HOUR),
         assistant=rates.assistant_daily_krw * inputs.assistants,
         travel=travel,
         material_per_person=card.material_krw,
@@ -198,7 +216,7 @@ def bar_for(scenario: Scenario, outreach_minutes: int) -> Bar:
     if card.oneday_price_krw is None or card.material_krw is None:
         return Bar(0, 0, None, uses_history=False)
     per_person = card.oneday_price_krw - card.material_krw
-    session_minutes = card.class_minutes + card.prep_minutes + card.cleanup_minutes
+    session_minutes = card.class_minutes + scenario.setup_minutes
     if seats.sessions <= 0 or session_minutes <= 0:
         return Bar(scenario.lost_to_conflicts_krw, per_person, None,
                    uses_history=scenario.lost_to_conflicts_krw > 0)
@@ -290,7 +308,7 @@ def calculate(scenario: Scenario) -> Calculation:
     inputs, card, rates = scenario.inputs, scenario.card, scenario.rates
     parts, travel_formula = parts_for(scenario)
     instructor, total, minimum_applied = priced(scenario, parts)
-    minutes = card.class_minutes + card.prep_minutes + card.cleanup_minutes + 2 * (inputs.travel_minutes or 0)
+    minutes = scenario.lesson_minutes + scenario.setup_minutes + scenario.travel_minutes
     verdict = (
         Judgement() if missing_costs(card, rates)
         else judged(scenario, parts, bar_for(scenario, minutes), Priced(total, minutes))
@@ -317,6 +335,43 @@ def calculate(scenario: Scenario) -> Calculation:
         tier_prices=(
             [] if card.material_krw is None else tier_prices(inputs, parts, rates.minimum_fee_krw)
         ),
+        outreach_basis=outreach_basis(scenario, minutes),
+        oneday_basis=oneday_basis(scenario),
+    )
+
+
+def span(minutes: int) -> str:
+    """Say a length in hours and minutes."""
+    hours, rest = divmod(minutes, HOUR)
+    if hours and rest:
+        return f"{hours}시간 {rest}분"
+    return f"{hours}시간" if hours else f"{rest}분"
+
+
+def outreach_basis(scenario: Scenario, minutes: int) -> str:
+    """Say the people and hours behind the outreach numbers."""
+    travel = (
+        "왕복 이동은 입력 전이라 0분" if scenario.inputs.travel_minutes is None
+        else f"왕복 이동 {span(scenario.travel_minutes)}"
+    )
+    return (
+        f"출강 {scenario.inputs.headcount}명, {span(minutes)} "
+        f"(수업 {span(scenario.lesson_minutes)}, 준비·정리 {span(scenario.setup_minutes)}, {travel})"
+    )
+
+
+def oneday_basis(scenario: Scenario) -> str:
+    """Say the really booked people and hours behind the one-day numbers."""
+    seats, card = scenario.seats, scenario.card
+    if seats.sessions <= 0:
+        if scenario.lost_to_conflicts_krw > 0:
+            return "원데이는 비워야 하는 수업의 예약 금액과 비교"
+        return "원데이는 예약 기록이 없어 1인 순수익끼리 비교"
+    whole, tenth = divmod(seats.booked * 10 // seats.sessions, 10)
+    people = f"{whole}.{tenth}" if tenth else f"{whole}"
+    return (
+        f"원데이 평균 {people}명, {span(card.class_minutes + scenario.setup_minutes)} "
+        f"(수업 {span(card.class_minutes)}, 준비·정리 {span(scenario.setup_minutes)})"
     )
 
 
@@ -365,7 +420,7 @@ def quote_lines(
     elif hourly is None:
         instructor_formula = "시간당 강사비를 입력하면 계산해요"
     else:
-        instructor_formula = f"시간당 {won(hourly)} {TIMES} 수업 {card.class_minutes}분"
+        instructor_formula = f"시간당 {won(hourly)} {TIMES} 수업 {scenario.lesson_minutes}분"
     material = None if card.material_krw is None else card.material_krw * inputs.headcount
     material_formula = (
         "1인 재료비를 입력하면 계산해요" if card.material_krw is None

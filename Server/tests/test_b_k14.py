@@ -91,6 +91,29 @@ def test_real_bookings_set_the_bar_and_the_minimum_headcount_meets_it() -> None:
     assert (met.verdict, below.verdict) == ("better", "worse")
 
 
+def test_the_inquiry_hours_change_the_outreach_side_only() -> None:
+    scenario = replace(
+        BUDGETED, seats=SeatHistory(sessions=2, booked=9),
+        inputs=replace(BUDGETED.inputs, lesson_minutes=240, travel_minutes=None),
+    )
+    result = calculate(scenario)
+    assert result.outreach_minutes == 240 + 60
+    # 9 seats over 2 sessions x 21,000 won = 94,500 won per 180-minute one-day class.
+    assert result.net_per_hour_oneday == 31_500
+    assert result.baseline_krw == 94_500 * 300 // 180
+    assert result.net_per_hour_outreach == 1_390_000 * 60 // 300
+    assert result.outreach_basis == (
+        "출강 40명, 5시간 (수업 4시간, 준비·정리 1시간, 왕복 이동은 입력 전이라 0분)"
+    )
+    assert result.oneday_basis == "원데이 평균 4.5명, 3시간 (수업 2시간, 준비·정리 1시간)"
+
+
+def test_prep_and_round_trip_travel_count_in_the_outreach_hours() -> None:
+    result = calculate(BUDGETED)
+    assert result.outreach_basis == "출강 40명, 6시간 (수업 2시간, 준비·정리 1시간, 왕복 이동 3시간)"
+    assert result.oneday_basis == "원데이는 예약 기록이 없어 1인 순수익끼리 비교"
+
+
 def test_price_below_material_has_no_minimum_headcount() -> None:
     cheap = Inputs(headcount=10, per_person_krw=12_000, travel_minutes=0)
     result = calculate(replace(BUDGETED, inputs=cheap))

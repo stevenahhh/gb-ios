@@ -338,14 +338,13 @@ async def scenario_for(
     classes = await known_classes(db)
     if class_id not in classes:
         raise HTTPException(404, "class not found")
-    duration = span_minutes(fields.time_range) or classes[class_id][0]
     cost = await db.get(ClassCostRow, class_id)
     rates = await db.get(OutreachDefaultsRow, 1)
     card = CostCard(
         material_krw=cost.material_per_person_krw if cost else None,
         oneday_price_krw=cost.oneday_price_krw if cost else None,
         prep_minutes=cost.prep_minutes if cost else 0, cleanup_minutes=cost.cleanup_minutes if cost else 0,
-        class_minutes=duration,
+        class_minutes=classes[class_id][0],
     )
     conflicts = await conflicts_on(db, fields, card, inputs.travel_minutes or 0)
     lost = sum(conflict.lost_krw or 0 for conflict in conflicts)
@@ -353,7 +352,7 @@ async def scenario_for(
         inputs=Inputs(
             headcount=inputs.headcount, budget_krw=fields.budget_krw, per_person_krw=inputs.per_person_krw,
             assistants=inputs.assistants, travel_minutes=inputs.travel_minutes,
-            distance_km=inputs.distance_km,
+            distance_km=inputs.distance_km, lesson_minutes=span_minutes(fields.time_range),
         ),
         card=card,
         rates=Rates(
