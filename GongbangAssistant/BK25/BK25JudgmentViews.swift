@@ -198,6 +198,7 @@ struct BK25JudgmentSheet: View {
                 }
             }
             .cardList()
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("판단 필요")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -212,6 +213,8 @@ struct BK25JudgmentSheet: View {
     }
 
     private func previewRule() async {
+        // The keyboard would cover the choice between the two answers.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         await run {
             let shown = try await BK25API.previewRule(judgment.id, answer: text)
             preview = shown

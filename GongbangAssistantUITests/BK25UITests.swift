@@ -33,7 +33,22 @@ final class BK25UITests: RoundupUITestCase {
         all.tap()
         let card = app.buttons["inquiry.\(inquiryID)"]
         XCTAssertTrue(scrollTo(card, in: app), "the inquiry \(inquiryID) is missing")
-        card.tap()
+        tapInTheMiddle(card, in: app)
+        let editor = app.textViews["inquiry.draft"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the inquiry did not open")
+        keepScreenshot(of: app, named: "bk25-inquiry-open")
+    }
+
+    /// A row scrolled under the navigation bar reports itself hittable, so it is moved into the middle of the screen first.
+    @MainActor
+    private func tapInTheMiddle(_ target: XCUIElement, in app: XCUIApplication) {
+        let height = app.frame.height
+        for _ in 0..<8 {
+            let middle = target.frame.midY
+            if middle > height * 0.25 && middle < height * 0.65 { break }
+            if middle <= height * 0.25 { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
+        }
+        target.tap()
     }
 
     /// Waits until the number of matching buttons reaches the expected count, without a fixed sleep.
@@ -47,7 +62,7 @@ final class BK25UITests: RoundupUITestCase {
     func testReplyIsLockedUntilItsNumbersMatchTheLedger() throws {
         let app = try launch()
         openInquiry("inquiry-weekend", in: app)
-        let write = app.buttons["inquiry.generate"]
+        let write = app.descendants(matching: .any)["inquiry.generate"].firstMatch
         XCTAssertTrue(scrollTo(write, in: app))
         write.tap()
         app.buttons["새로 쓰기"].tap()
@@ -106,6 +121,17 @@ final class BK25UITests: RoundupUITestCase {
         let rule = element(labelled: "6명부터", in: app)
         XCTAssertTrue(scrollTo(rule, in: app), "the saved rule is missing from the class card")
         keepScreenshot(of: app, named: "bk25-class-rules")
+    }
+
+    @MainActor
+    func testFactCardListIsEmptyWithoutClasses() throws {
+        let app = try launchEmptyServer()
+        app.tabBars.buttons["설정"].tap()
+        let cards = app.buttons["settings.factCards"]
+        XCTAssertTrue(cards.waitForExistence(timeout: 10))
+        cards.tap()
+        XCTAssertTrue(element(labelled: "캘린더에 수업을 먼저 넣어 주세요", in: app).waitForExistence(timeout: 10))
+        keepScreenshot(of: app, named: "bk25-fact-card-empty")
     }
 
     @MainActor
