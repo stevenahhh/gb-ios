@@ -9,6 +9,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bookings import ExpectedRevision
+from collectors.mapping import recent_posts
 from common import (
     LongText,
     Now,
@@ -91,11 +92,14 @@ async def channel_cards(db: AsyncSession, today: date, text: str = "") -> list[C
     if text:
         statement = statement.where(or_(matches(ChannelRow.name, text), matches(ChannelRow.handle, text)))
     cards: list[Card] = []
+    posts = await recent_posts(db, today)
     for channel, orders, amount, drafts, inquiries in (await db.execute(statement)).tuples():
         connected = channel.connection == "connected"
         lines = [channel.handle or channel.name, f"오늘 주문 {count(orders)} · 결제금액 {won(amount)}"]
         if drafts:
             lines.append(f"게시물 초안 {count(drafts)}")
+        if channel.id in posts:
+            lines.append(f"최근 7일 새 글 {posts[channel.id]:,}개")
         cards.append(
             Card(
                 id=channel.id,

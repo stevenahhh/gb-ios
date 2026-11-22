@@ -107,7 +107,7 @@ struct TodayView: View {
     private func segmentContent(_ today: TodayScreenData) -> some View {
         switch segment {
         case .tasks:
-            // Overdue rows move into one group at the top with a single red title; their own sections drop them.
+            // Overdue rows move into one group at the top, each under its overdue mark; their own sections drop them.
             let overdue = OverdueEntry.collect(today.tasks.groups, now: .now)
             if !overdue.isEmpty {
                 CardSection {
@@ -119,7 +119,7 @@ struct TodayView: View {
                             .accessibilityIdentifier("today.overdue.all")
                     }
                 } header: {
-                    OverdueHeader(count: overdue.count)
+                    SectionHeader(title: "기한 지난 일 \(overdue.count)건")
                 }
             }
             // Waiting inquiry replies live in 확인해 주실 일 above, so this tab does not repeat them.
@@ -245,23 +245,6 @@ struct OverdueEntry: Identifiable {
     }
 }
 
-struct OverdueHeader: View {
-    let count: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "clock")
-                .accessibilityHidden(true)
-            Text("기한 지난 일 \(count)건")
-                .fontWeight(.semibold)
-        }
-        .foregroundStyle(Color.overdueRed)
-        .textCase(nil)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityIdentifier("today.overdue")
-    }
-}
-
 /// Loads its own copy of the today screen, so checks made here show up without leaving the list.
 /// Rows it has shown stay put once finished (the server drops a finished task's deadline), so a check can be undone in place.
 struct OverdueListView: View {
@@ -279,7 +262,7 @@ struct OverdueListView: View {
                 CardSection {
                     ForEach(entries) { TaskRow(item: $0.item, kind: $0.kind, isInOverdueGroup: true) }
                 } header: {
-                    OverdueHeader(count: entries.filter { $0.item.isDone != true }.count)
+                    SectionHeader(title: "기한 지난 일 \(entries.filter { $0.item.isDone != true }.count)건")
                 }
             }
             .cardList()

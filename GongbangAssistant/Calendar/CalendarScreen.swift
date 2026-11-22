@@ -118,6 +118,8 @@ struct CalendarContent: View {
     private var animation: Animation { reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.25) }
 
     var body: some View {
+        let items = days[selectedDay.dayKey]?.items ?? []
+        let schedule = DaySchedule(items: items)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // Seven fixed columns cannot grow with accessibility sizes, so the date controls stop at xxxLarge.
@@ -142,8 +144,9 @@ struct CalendarContent: View {
                     .fill(CalendarTokens.separator)
                     .frame(height: 1)
                     .padding(.top, 12)
-                DaySection(date: selectedDay, day: days[selectedDay.dayKey], overdueShipments: overdueShipments,
-                           now: now, add: add, check: check, isLoading: !isDayLoaded)
+                DaySection(date: selectedDay, itemCount: items.count, schedule: schedule,
+                           overdueShipments: overdueShipments, now: now, add: add, check: check,
+                           isLoading: !isDayLoaded)
                     .padding(.top, 24)
                     .id(selectedDay.dayKey)
                     .transition(.opacity)
@@ -153,7 +156,14 @@ struct CalendarContent: View {
         }
         .contentMargins(.bottom, 32, for: .scrollContent)
         .background(CalendarTokens.background)
-
+        // A day with a timeline keeps 일정 추가 in reach without scrolling. A day without one already shows the
+        // same button under its message.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isDayLoaded && !schedule.entries.isEmpty {
+                DayAddBar(add: add)
+                    .transition(.opacity)
+            }
+        }
         .animation(animation, value: selectedDay)
         .animation(animation, value: mode)
     }

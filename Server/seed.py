@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from collectors.mapping import retire_seed_rows
 from database import DatabaseConfigurationError, get_engine
 from display import SEOUL
 from models import InquiryRow
@@ -17,7 +18,7 @@ from seed_data import build_seed
 
 
 async def apply_seed(connection: AsyncConnection, today: date) -> int:
-    """Insert missing seed rows and link adopted inquiries to their customers."""
+    """Insert missing seed rows, link adopted inquiries, and keep out rows that real data replaced."""
     inserted = 0
     tables = build_seed(today)
     for model, rows in tables:
@@ -31,7 +32,7 @@ async def apply_seed(connection: AsyncConnection, today: date) -> int:
             .where(InquiryRow.id == row["id"], InquiryRow.customer_id.is_(None))
             .values(customer_id=row["customer_id"], channel_id=row["channel_id"]),
         )
-    return inserted
+    return inserted - await retire_seed_rows(connection, today)
 
 
 async def main() -> None:

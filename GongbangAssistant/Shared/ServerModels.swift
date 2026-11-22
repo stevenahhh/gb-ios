@@ -467,8 +467,6 @@ struct OperationsData: Decodable {
         let month: MonthOption
         let handled: Int
         let total: Int
-        let ratePercent: Int?
-        let rateDisplay: String
         let metrics: [Metric]
         let comparisons: [Comparison]
     }
@@ -483,6 +481,21 @@ struct OperationsData: Decodable {
     let period: Period
     let months: [MonthOption]
     let areas: [AreaSummary]
+}
+
+/// What each channel's collector is doing right now, from GET /collectors/status.
+struct CollectorStatus: Decodable {
+    struct Source: Decodable, Identifiable {
+        let id: String
+        let name: String
+        let state: CollectorState
+        let lastCollectedAt: Date?
+        let collectedToday: Int
+        let message: String?
+    }
+
+    let sources: [Source]
+    let updatedAt: Date
 }
 
 struct WorkshopProfile: Decodable, Hashable {

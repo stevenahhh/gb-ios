@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Roundup channel collectors every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=30min
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

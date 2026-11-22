@@ -61,6 +61,10 @@ def http(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         ("POST", "/ask"),
         ("POST", "/draft"),
         ("POST", "/rewrite"),
+        ("GET", "/collectors/status"),
+        ("GET", "/collectors/items"),
+        ("POST", "/collectors/naver_blog/run"),
+        ("PUT", "/collectors/naver_blog/config"),
     ],
 )
 @pytest.mark.parametrize("api_key", ["", "wrong"])

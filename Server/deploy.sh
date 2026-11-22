@@ -53,6 +53,10 @@ run "$dir/.venv/bin/python" seed.py
 
 ln -sfn "$dir" "$root/current"
 install -m 644 "$dir/roundup-api.service" "$unit"
+# Collector units are refreshed only where an operator installed them; a first deploy changes nothing.
+if [ -f /etc/systemd/system/collectors.timer ]; then
+  install -m 644 "$dir/collectors.service" "$dir/collectors.timer" /etc/systemd/system/
+fi
 systemctl daemon-reload
 systemctl restart roundup-api
 

@@ -60,6 +60,9 @@ See [.env.example](.env.example). Keep real values out of version control.
 | `NCP_TTS_CLIENT_ID`, `NCP_TTS_CLIENT_SECRET` | no | CLOVA Voice Premium for `/tts` when it runs on its own NAVER API app |
 | `TTS_SPEAKER` | no | CLOVA Voice Premium speaker, default `vyuna` |
 | `NCP_MAPS_CLIENT_ID`, `NCP_MAPS_CLIENT_SECRET` | for `/geocode`, `/staticmap` | Naver Maps |
+| `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` | no | Instagram collector; a professional account the operator of this server owns |
+| `NAVER_COMMERCE_CLIENT_ID`, `NAVER_COMMERCE_CLIENT_SECRET` | no | Smart Store collector, Naver Commerce API; ignored without the switch below |
+| `NAVER_COMMERCE_SELF_OPERATED` | no | Exactly `true` states that the operator of this server owns that store; see [Collectors](#collectors) |
 
 `allow` and `prefer` SSL modes are rejected, so there is no transport fallback.
 The current private NCP PostgreSQL endpoint requires `disable`.
@@ -77,6 +80,9 @@ Revision `0003` permits rejected content drafts and recommendations. Deploying t
 release applies `0003` through the existing `alembic upgrade head` deployment step;
 readiness requires that revision. Downgrading to `0002` first maps rejected content
 back to `draft` and rejected recommendations back to `open`, preserving their text.
+
+Revision `0005` adds `collector_sources`, `collector_runs`, and `collected_items`, and allows a `naver_blog`
+channel. Downgrading drops collected items but keeps inquiries and orders already mapped from them.
 
 `seed.py` inserts missing rows with `ON CONFLICT DO NOTHING` and links seeded
 inquiries to their customers only while that link is empty. It never changes
@@ -126,6 +132,10 @@ Every route requires `X-Roundup-Key`, including `/health`. JSON uses camelCase.
 | `PATCH /inquiries/{id}/draft`, `POST /inquiries/{id}/decision` | Existing inquiry contract |
 | `POST /inquiries/{id}/undo-completion` | Return a completed reply to waiting with `{expectedRevision}`; the text stays |
 | `GET /assistant/activities` | The assistant's work from the last seven days, newest first: reply drafts, post drafts, and missed pickups, each with the facts it used |
+| `GET /collectors/status` | `{"sources": [{id, name, state, last_collected_at, collected_today, message}], "updated_at"}` for Instagram, Smart Store, blog, booking, and talk-talk; `state` is `collecting`, `idle`, `needs_connection`, or `error` |
+| `GET /collectors/items?source&limit&offset` | Stored items, newest first, without their raw JSON |
+| `POST /collectors/{source}/run` | Collect now; 409 while that source is already collecting |
+| `PUT /collectors/{source}/config` | Owner-visible setup values, validated per source; unknown fields, including secrets, are 422 |
 | `POST /draft`, `POST /ask`, `POST /rewrite`, `POST /stt`, `GET /geocode`, `GET /staticmap` | AI, speech, and map proxies |
 | `POST /tts` | `{text}` (1-2000 characters) read aloud by CLOVA Voice Premium as `audio/mpeg`; markdown is stripped first |
 
@@ -182,5 +192,68 @@ and SQL parameters are not logged; run uvicorn with `--no-access-log` because it
 access log includes query strings. Request bodies are limited to 64 KiB, or 2 MiB on
 `/stt` (413). Unexpected failures return a generic 500, database failures a generic
 503, and provider failures a generic 502.
+
+## Collectors
+
+```sh
+uv run --frozen --no-dev python -m collectors run --source all
+```
+
+Sources are `instagram`, `naver_smartstore`, `naver_blog`, `naver_booking`, `naver_talktalk`, and
+`kakao_channel`. The last three have no pull API this server may use and always report `needs_connection`;
+`collectors/manual.py` documents the path for each. The collector routes use snake_case keys.
+
+* Every request carries the fixed User-Agent `GongdoriCollector/0.1`. Redirects are never followed.
+* Every feed goes through `collectors/feed.py`, which reads the host's `robots.txt` first. The feed is not
+  requested when the path is disallowed, or when `robots.txt` answers anything other than 200, 404, or 410.
+  A refusal is `needs_connection`.
+* `naver_blog` is off until the owner sets `{"blog_id", "enabled": true}`, and the robots check still decides.
+  Research for this release found that Naver may disallow it and that its terms restrict automated access, so
+  check both before turning it on.
+* Instagram and Smart Store use only the official APIs with environment credentials. There is no login
+  automation and no stored login session. Addresses, phone numbers, and payment means of orders are not stored.
+* `naver_smartstore` runs only when `NAVER_COMMERCE_SELF_OPERATED` is exactly `true` and both credentials are
+  set. Without the switch, credentials count as absent: the state is `needs_connection` and no request is made,
+  the token call included. Set it only when the operator of this server is the owner of that store.
+* Instagram is for an account the operator owns. Meta's
+  [app review page](https://developers.facebook.com/documentation/instagram-platform/app-review.md) asks no review
+  of an app that serves only such accounts, while its
+  [webhook setup page](https://developers.facebook.com/documentation/instagram-platform/webhooks/setup.md) lists
+  Advanced Access and a live app for Instagram Login webhooks. Run a trial with a tester account before relying
+  on either. This adapter polls and receives no webhooks.
+* Requests are spaced per source; connection failures, 429, and 5xx are tried three times with backoff; bodies
+  are limited to 4 MiB; text is stored without markup. Runs record short error codes, never response text.
+
+Why the Smart Store switch exists: Commerce API support answered on
+[2026-03-04](https://github.com/commerce-api-naver/api-agency/discussions/809) that providing, transferring, or
+entrusting an own-store application to a third party may breach the service terms. The answer of
+[2026-11-09](https://github.com/commerce-api-naver/commerce-api/discussions/3967) says the same of a seller who puts
+their own key into somebody else's program, because operation is then entrusted to that program. `type=SELF` is
+only for a seller who builds and runs the integration for their own store, and an individual business has no other
+route for now. 공도리 must not take another store owner's key. Its official route is to apply for a Commerce solution
+or API agency, and only a domestic corporation can apply. Both answers were read in the project's research notes
+on 2026-11-22; read them again before changing this rule.
+
+Mapping: an inquiry, or an Instagram comment that asks something, becomes a waiting inquiry with an empty draft.
+A store order becomes an order under a local order number. A collected row is updated only while its revision
+is 0, so owner work is never overwritten. Seed inquiries and seed orders of a channel stay until the first real
+row of that kind arrives for the channel; then seed rows with revision 0 are removed, and `seed.py` keeps them out.
+
+Channel label: `GET /channels` shows the result of the source's last check, not of this moment. A run that collects
+at least one item sets its channel to 연결됨. A run that finds setup missing or switched off, or is refused, sets it
+to 아직 연결 안 됨; a temporary failure leaves it alone. Only the Instagram, Smart Store, and blog channels follow a
+collector, so 네이버 예약 is never changed.
+
+VPC deployment: the collectors run on the API server inside the NCP VPC and need outbound HTTPS only
+(`graph.instagram.com`, `api.commerce.naver.com`, and a feed host if one is turned on). They open no port, so no
+inbound rule changes. Install the timer once, by hand, after a release that contains it:
+
+```sh
+sudo install -m 644 /opt/gongbang/current/collectors.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now collectors.timer
+```
+
+`deploy.sh` refreshes the two unit files only where the timer is installed, and otherwise leaves systemd alone.
 
 For isolated database test details see [tests/README.md](tests/README.md).

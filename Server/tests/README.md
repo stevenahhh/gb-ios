@@ -22,6 +22,10 @@ numbers are deterministic. HTTPX's in-process ASGI transport exercises the real
 application and PostgreSQL. Only the outbound HyperCLOVA call is replaced, in the
 test that inspects the prompt built from database rows.
 
+`test_collectors.py` runs collectors against a scripted HTTP transport with hand-written fixtures, including
+the robots.txt refusal. `test_collector_runs.py` runs storage, mapping, and the API on PostgreSQL the same way.
+No collector test may reach a real host.
+
 `test_undo.py` covers revision-checked reversals, state restoration, and shared
 attention totals. `test_drafts.py` covers local edits, decisions, linked
 recommendations, and reopening. `test_details.py` covers the additive screen
