@@ -105,7 +105,7 @@ def test_the_inquiry_hours_change_the_outreach_side_only() -> None:
     assert result.outreach_basis == (
         "출강 40명, 5시간 (수업 4시간, 준비·정리 1시간, 왕복 이동은 입력 전이라 0분)"
     )
-    assert result.oneday_basis == "원데이 평균 4.5명, 3시간 (수업 2시간, 준비·정리 1시간)"
+    assert result.oneday_basis == "원데이 최근 2회 예약 평균 4.5명, 3시간 (수업 2시간, 준비·정리 1시간)"
 
 
 def test_prep_and_round_trip_travel_count_in_the_outreach_hours() -> None:

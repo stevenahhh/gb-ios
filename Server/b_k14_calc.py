@@ -370,7 +370,7 @@ def oneday_basis(scenario: Scenario) -> str:
     whole, tenth = divmod(seats.booked * 10 // seats.sessions, 10)
     people = f"{whole}.{tenth}" if tenth else f"{whole}"
     return (
-        f"원데이 평균 {people}명, {span(card.class_minutes + scenario.setup_minutes)} "
+        f"원데이 최근 {seats.sessions}회 예약 평균 {people}명, {span(card.class_minutes + scenario.setup_minutes)} "
         f"(수업 {span(card.class_minutes)}, 준비·정리 {span(scenario.setup_minutes)})"
     )
 
