@@ -115,6 +115,15 @@ struct AssistantTranscript: View {
                 AssistantFace(size: .card)
             }
             .labelStyle(TopAlignedIconLabelStyle())
+            // Written posts and replies get pasted elsewhere, so every answer can be copied in one tap.
+            Button("복사하기", systemImage: "doc.on.doc") {
+                UIPasteboard.general.string = turn.text
+                app.showToast("복사했어요", seconds: 2)
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.bordered)
+            .opacity(isFresh.wrappedValue ? 0 : 1)
+            .accessibilityIdentifier("assistant.copy")
             // The items the answer names, each with its one next action. They stay hidden until the text has settled.
             ForEach(turn.items) { item in
                 WorkCard(item: item, isPrimary: false)
