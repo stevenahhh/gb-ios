@@ -322,7 +322,6 @@ class WeekdaySpan(Span):
 
     weekday: str = ""
     when: str = ""
-    denied: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -575,10 +574,7 @@ def weekday_spans(text: str) -> list[WeekdaySpan]:
     """Find weekdays that do not stand beside a written date."""
     dates = date_spans(text)
     return [
-        WeekdaySpan(
-            match.start(), match.end(), match.group(), match["day"], match["when"] or "",
-            denied=is_denied(text, match.start(), match.end()),
-        )
+        WeekdaySpan(match.start(), match.end(), match.group(), match["day"], match["when"] or "")
         for match in WEEKDAY.finditer(text)
         if not any(span.start <= match.start() < span.end for span in dates)
     ]

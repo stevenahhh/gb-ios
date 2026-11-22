@@ -87,10 +87,21 @@ QUOTED: Final = re.compile(
 ACCEPTS: Final = re.compile(r"가능|괜찮|좋아|좋습|맞아|맞습|받아|받고|받습|드릴게|드려|드립|잡아|뵐|뵙|만나")
 CONDITIONAL: Final = re.compile(r"\s*(?:이면|이시면|이라면|라면|정도면)")
 CONTACT: Final = re.compile(
-    r"연락|전화|답장|답변|회신|문의|상담|알려|안내\s*드|입금|이체|송금|카톡|메시지|영업|운영|오픈",
+    r"연락|전화|답장|답변|회신|문의|상담|알려|안내\s*드|문자|입금|이체|송금|카톡|메시지|영업|운영|오픈",
 )
-CLASS_DAY: Final = re.compile(r"수업|클래스|체험|열리|열려|열어|엽니다|진행|시작")
-NO_CLASS: Final = re.compile(r"없(?!이)|휴무|쉬[어는고]|쉽니다|마감|안\s*(?:해|열)")
+CLASS_NOUN: Final = re.compile(
+    r"(?:수업|클래스|체험)(?!료|비|\s*(?:준비|안내|문의|후기|자료|전|후|뒤|중|끝))",
+)
+CLASS_DAY: Final = re.compile(rf"{CLASS_NOUN.pattern}|열리|열려|열어|열지|엽니다|진행|시작")
+HOLDS: Final = re.compile(r"있|없|열|진행|시작|이에요|예요|입니다|해요|합니다")
+NO_CLASS: Final = re.compile(r"없(?!이)|휴무|쉬[어는고]|쉽니다|마감|안\s*(?:해|열)|(?:열|하)지\s*않")
+PLAIN_REFUSAL: Final = re.compile(
+    (
+        r"\s*(?:은|는|에|에는|엔|에도|도|의)?\s*(?:(?:수업|클래스|체험)(?:은|는|이|가|도|을|를)?\s*)?"
+        rf"(?:{NO_CLASS.pattern})"
+    ),
+)
+NOT_HELD: Final = re.compile(rf"{NO_CLASS.pattern}|않|못|어려|어렵|불가|아니|아닌")
 CLASS_TIME: Final = re.compile(r"수업|클래스|체험|시작|진행|오시|오세요|와\s*주|도착|입장|예약|만나|뵐|뵙")
 ARRIVAL: Final = re.compile(r"오시|오세요|오셔|와\s*주|도착|입장|모이|모여")
 RANGE: Final = re.compile(r"부터|[~\u223c\uff5e\u2013-]|에서|끝|마[치친칠]|종료")
@@ -551,7 +562,7 @@ def date_support(span: DateSpan, draft: str, ledger: Ledger) -> tuple[ClaimSourc
     return ("ledger", LABEL_LEDGER) if span.denied else None
 
 
-def refund_deadlines(span: Span, draft: str, ledger: Ledger) -> list[date]:
+def refund_deadlines(span: DateSpan, draft: str, ledger: Ledger) -> list[date]:
     """Return the last refund days, for a date that stands in a sentence about refunds."""
     if "refund" not in topics_at(draft, span.start):
         return []
@@ -600,20 +611,31 @@ def weekday_support(span: WeekdaySpan, draft: str, ledger: Ledger) -> tuple[Clai
     return ("customer", LABEL_CUSTOMER) if says(ledger.question) and quotes_customer(draft, span) else None
 
 
+def said_of_weekday(span: WeekdaySpan, draft: str) -> str | None:
+    """Return what a clause says about holding a class on a weekday, or nothing when it says no such thing."""
+    first, last = around(draft, span.start, span.end, CLAUSE_BREAK)
+    others = [other for other in weekday_spans(draft) if first <= other.start < last]
+    start = max((other.end for other in others if other.end <= span.start), default=first)
+    end = min((other.start for other in others if other.start >= span.end), default=last)
+    before, after = draft[start:span.start], draft[span.end:end]
+    is_class = CLASS_DAY.search(after) or (CLASS_NOUN.search(before) and HOLDS.search(after))
+    return after if is_class and not CONTACT.search(draft, first, last) else None
+
+
 def check_weekday(span: WeekdaySpan, draft: str, ledger: Ledger) -> Claim | None:
     """Compare a weekday with the days the class is held, when the clause says it is or is not held."""
-    clause = clause_of(draft, span)
-    if not CLASS_DAY.search(clause) or CONTACT.search(clause):
+    said = said_of_weekday(span, draft)
+    if said is None:
         return None
+    denied = NOT_HELD.search(said) is not None
     sessions = [item for item in ledger.sessions_of(draft) if held_on(span, item.day, ledger.today)]
-    is_deadline = any(held_on(span, day, ledger.today) for day in refund_deadlines(span, draft, ledger))
-    if span.denied:
-        is_wrong = any(item.seats_left for item in sessions) and NO_CLASS.search(clause) is not None
+    if denied:
+        is_wrong = any(item.seats_left for item in sessions) and PLAIN_REFUSAL.match(said) is not None
     else:
-        is_wrong = not sessions and not is_deadline
+        is_wrong = not sessions
     if not is_wrong:
         return Claim("date", span.text, span.weekday, "ledger", LABEL_LEDGER, "matched")
-    support = None if span.denied else weekday_support(span, draft, ledger)
+    support = None if denied else weekday_support(span, draft, ledger)
     if support is not None:
         return Claim("date", span.text, span.weekday, *support, "matched")
     days = sorted({item.day for item in ledger.sessions_of(draft)})
@@ -621,7 +643,7 @@ def check_weekday(span: WeekdaySpan, draft: str, ledger: Ledger) -> Claim | None
         return Claim("date", span.text, span.weekday, "ledger", LABEL_LEDGER, "mismatched",
                      note=NOT_IN_LEDGER)
     names = {weekday(day) for day in days}
-    can_fix = len(names) == 1 and not span.when and not span.denied
+    can_fix = len(names) == 1 and not span.when and not denied
     return Claim("date", span.text, span.weekday, "ledger", LABEL_LEDGER, "mismatched",
                  ledger_value=f"{month_day_weekday(days[0])}요일",
                  replacement=f"{next(iter(names))}요일" if can_fix else None)
