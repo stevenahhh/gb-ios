@@ -168,6 +168,8 @@ struct OutreachInquiryView: View {
 
     private func read() {
         let source = String(text.prefix(2000))
+        // The keyboard would cover the warning card that arrives below the text.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         Task {
             isReading = true
             defer { isReading = false }
@@ -301,7 +303,7 @@ struct OutreachFieldsSection: View {
                 textField("장소", edited(\.fields.locationText, "locationText"))
             }
             row("contactKind", isEmpty: form.fields.contactKind == .unknown) {
-                LabeledContent("담당자 연락 방식", value: form.fields.contactKind.label)
+                OutreachValueRow(title: "담당자 연락 방식", value: form.fields.contactKind.label)
             }
         }
     }

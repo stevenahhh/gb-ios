@@ -103,20 +103,20 @@ struct OutreachQuoteDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.secondaryText)
                 }
-                LabeledContent("1인 순수익", value: OutreachFormat.won(result.netPerPersonOutreach))
-                LabeledContent("원데이 1인 순수익", value: OutreachFormat.won(result.netPerPersonOneday))
+                OutreachValueRow(title: "1인 순수익", value: OutreachFormat.won(result.netPerPersonOutreach))
+                OutreachValueRow(title: "원데이 1인 순수익", value: OutreachFormat.won(result.netPerPersonOneday))
                 if let outreach = result.netPerHourOutreach, let oneday = result.netPerHourOneday {
-                    LabeledContent("시간당 순수익", value: OutreachFormat.won(outreach))
-                    LabeledContent("원데이 시간당 순수익", value: OutreachFormat.won(oneday))
+                    OutreachValueRow(title: "시간당 순수익", value: OutreachFormat.won(outreach))
+                    OutreachValueRow(title: "원데이 시간당 순수익", value: OutreachFormat.won(oneday))
                 }
                 if let minimum = result.breakEvenHeadcount {
-                    LabeledContent("최소 인원", value: "1인 \(OutreachFormat.won(result.perPersonKrw))이면 \(minimum)명부터")
+                    OutreachValueRow(title: "최소 인원", value: "1인 \(OutreachFormat.won(result.perPersonKrw))이면 \(minimum)명부터")
                 }
                 if let limit = result.maxHeadcount, let budget = quote.fields.budgetKrw {
-                    LabeledContent("예산 기준 인원", value: "\(OutreachFormat.won(budget))이면 \(limit)명까지")
+                    OutreachValueRow(title: "예산 기준 인원", value: "\(OutreachFormat.won(budget))이면 \(limit)명까지")
                 }
                 if result.verdict == .worse, let needed = result.neededTotalKrw {
-                    LabeledContent("이 인원에 필요한 총액", value: OutreachFormat.won(needed))
+                    OutreachValueRow(title: "이 인원에 필요한 총액", value: OutreachFormat.won(needed))
                 }
             }
         }
@@ -193,7 +193,7 @@ struct OutreachQuoteDetailView: View {
             LabeledContent("합계") {
                 Text(OutreachFormat.won(result.totalKrw)).font(.headline).monospacedDigit()
             }
-            LabeledContent("1인 단가", value: OutreachFormat.won(result.perPersonKrw))
+            OutreachValueRow(title: "1인 단가", value: OutreachFormat.won(result.perPersonKrw))
             if result.instructorGapKrw < 0 {
                 Text("기준 강사비보다 \(OutreachFormat.won(-result.instructorGapKrw)) 적어요.")
                     .font(.subheadline)
@@ -221,7 +221,7 @@ struct OutreachQuoteDetailView: View {
     private func replySection(_ quote: OutreachQuote) -> some View {
         CardSection {
             KoreanTextEditor(text: Binding { reply } set: { reply = $0; replyIsEdited = true })
-                .frame(minHeight: 160)
+                .frame(minHeight: 240)
                 .accessibilityLabel("회신 초안")
                 .accessibilityIdentifier("outreach.reply")
             Button("회신 복사하기") {

@@ -7,21 +7,45 @@ struct OutreachNumberField: View {
     @Binding var value: Int?
     let unit: String
     let identifier: String
+    /// Shown under the field while the value cannot be saved.
+    var problem: String?
 
     var body: some View {
-        LabeledContent {
-            HStack(spacing: 4) {
-                TextField("입력", value: $value, format: .number)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .monospacedDigit()
-                    .accessibilityLabel(title)
-                    .accessibilityIdentifier(identifier)
-                Text(unit)
-                    .foregroundStyle(Color.secondaryText)
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent {
+                HStack(spacing: 4) {
+                    TextField("입력", value: $value, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .accessibilityLabel(title)
+                        .accessibilityIdentifier(identifier)
+                    Text(unit)
+                        .foregroundStyle(Color.secondaryText)
+                }
+            } label: {
+                Text(title)
             }
-        } label: {
-            Text(title)
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.circle")
+                    .font(.subheadline)
+                    .accessibilityIdentifier("\(identifier).problem")
+            }
+        }
+    }
+}
+
+/// A name and its value at the app's readable secondary gray; LabeledContent's own gray is too light.
+struct OutreachValueRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        LabeledContent(title) {
+            Text(verbatim: value)
+                .monospacedDigit()
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(Color.secondaryText)
         }
     }
 }
@@ -65,12 +89,15 @@ struct ClassCostListView: View {
                     OutreachDefaultsView(saved: data.defaults)
                 } label: {
                     Label {
-                        Text("강사비와 출장비")
-                        if let defaults = data.defaults {
-                            Text("시간당 강사비 \(OutreachFormat.won(defaults.instructorHourlyKrw))")
-                                .foregroundStyle(Color.secondaryText)
-                        } else {
-                            StatusBadge(Status(text: "입력 필요", tone: .attention))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("강사비와 출장비")
+                            if let defaults = data.defaults {
+                                Text("시간당 강사비 \(OutreachFormat.won(defaults.instructorHourlyKrw))")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.secondaryText)
+                            } else {
+                                StatusBadge(Status(text: "입력 필요", tone: .attention))
+                            }
                         }
                     } icon: {
                         MenuIcon(systemName: "car")
@@ -119,19 +146,39 @@ struct ClassCostEditView: View {
     }
 
     private var isComplete: Bool {
-        material.map { $0 >= 0 } == true && price.map { $0 > 0 } == true && headcount.map { $0 > 0 } == true
+        material != nil && price != nil && headcount != nil
+            && [moneyProblem(material, minimum: 0), moneyProblem(price, minimum: 1), minuteProblem(prep),
+                minuteProblem(cleanup), headcountProblem].allSatisfy { $0 == nil }
+    }
+
+    // The server refuses the same ranges; checking here puts the reason under the field that caused it.
+    private func moneyProblem(_ value: Int?, minimum: Int) -> String? {
+        value.flatMap { (minimum...1_000_000_000).contains($0) ? nil : "\(minimum)원부터 10억 원까지 넣을 수 있어요." }
+    }
+
+    private func minuteProblem(_ value: Int?) -> String? {
+        value.flatMap { (0...1440).contains($0) ? nil : "하루(1,440분)를 넘을 수 없어요." }
+    }
+
+    private var headcountProblem: String? {
+        headcount.flatMap { (1...1000).contains($0) ? nil : "1명부터 1,000명까지 넣을 수 있어요." }
     }
 
     var body: some View {
         List {
             CardSection("한 사람 기준") {
-                OutreachNumberField(title: "1인 재료비", value: $material, unit: "원", identifier: "classCost.material")
-                OutreachNumberField(title: "원데이 1인 가격", value: $price, unit: "원", identifier: "classCost.price")
+                OutreachNumberField(title: "1인 재료비", value: $material, unit: "원", identifier: "classCost.material",
+                                    problem: moneyProblem(material, minimum: 0))
+                OutreachNumberField(title: "원데이 1인 가격", value: $price, unit: "원", identifier: "classCost.price",
+                                    problem: moneyProblem(price, minimum: 1))
             }
             CardSection("시간과 정원", footer: "수업 시간은 등록한 수업의 \(item.classMinutes)분을 써요.") {
-                OutreachNumberField(title: "준비 시간", value: $prep, unit: "분", identifier: "classCost.prep")
-                OutreachNumberField(title: "뒷정리 시간", value: $cleanup, unit: "분", identifier: "classCost.cleanup")
-                OutreachNumberField(title: "최대 인원", value: $headcount, unit: "명", identifier: "classCost.headcount")
+                OutreachNumberField(title: "준비 시간", value: $prep, unit: "분", identifier: "classCost.prep",
+                                    problem: minuteProblem(prep))
+                OutreachNumberField(title: "뒷정리 시간", value: $cleanup, unit: "분", identifier: "classCost.cleanup",
+                                    problem: minuteProblem(cleanup))
+                OutreachNumberField(title: "최대 인원", value: $headcount, unit: "명", identifier: "classCost.headcount",
+                                    problem: headcountProblem)
             }
             OutreachSaveSection(errorMessage: errorMessage, isBusy: isSaving, isEnabled: isComplete, save: save)
         }
