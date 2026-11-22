@@ -94,6 +94,9 @@ struct OperationsView: View {
                     }
                 }
                 .accessibilityIdentifier("operations.opportunities")
+                #if BUILD_B
+                OutreachQuoteLink()
+                #endif
             }
         }
         .cardList(separators: .hidden)
